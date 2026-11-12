@@ -1320,8 +1320,12 @@ class BotSession {
                             }
                         }
 
-                        const isPairCmd = isCommand && (commandName === 'pair' || commandName === 'pairing' || commandName === 'code');
-                        if (!this.isPublic && !isOwner && !isPairCmd) return;
+                        // Strict Private Mode Guard:
+                        // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
+                        // Any command from any other user or group member is completely ignored.
+                        if (!this.isPublic && !isOwner) {
+                            return;
+                        }
 
                         if (isCommand) {
                             (async () => {
@@ -1429,16 +1433,64 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'kick': await commands.kick(this.sock, from, msg, isAdmin); break;
                                         case 'private':
-                                            await commands.private(this.sock, from, msg, isAdmin, this);
+                                            if (!isAdmin && !isOwner) {
+                                                await this.sock.sendMessage(from, { text: "❌ Sirf Bot Owner hi mode change kar sakta hai." }, { quoted: msg });
+                                                break;
+                                            }
+                                            this.isPublic = false;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = false;
                                             saveBotData();
+                                            await this.sock.sendMessage(from, {
+                                                text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ke liye commands band hain."
+                                            }, { quoted: msg });
                                             break;
                                         case 'public':
-                                            await commands.public(this.sock, from, msg, isAdmin, this);
+                                            if (!isAdmin && !isOwner) {
+                                                await this.sock.sendMessage(from, { text: "❌ Sirf Bot Owner hi mode change kar sakta hai." }, { quoted: msg });
+                                                break;
+                                            }
+                                            this.isPublic = true;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = true;
                                             saveBotData();
+                                            await this.sock.sendMessage(from, {
+                                                text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members commands (.menu, .play, .ping, etc.) use kar sakte hain."
+                                            }, { quoted: msg });
+                                            break;
+                                        case 'mode': case 'worktype':
+                                            if (!isAdmin && !isOwner) {
+                                                await this.sock.sendMessage(from, { text: "❌ Sirf Bot Owner hi mode check ya change kar sakta hai." }, { quoted: msg });
+                                                break;
+                                            }
+                                            const subMode = (args[0] || '').toLowerCase();
+                                            if (subMode === 'private' || subMode === 'priv' || subMode === 'off') {
+                                                this.isPublic = false;
+                                                if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
+                                                botData.statusSettings[this.userId].isPublic = false;
+                                                saveBotData();
+                                                await this.sock.sendMessage(from, {
+                                                    text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ke liye commands band hain."
+                                                }, { quoted: msg });
+                                            } else if (subMode === 'public' || subMode === 'pub' || subMode === 'on') {
+                                                this.isPublic = true;
+                                                if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
+                                                botData.statusSettings[this.userId].isPublic = true;
+                                                saveBotData();
+                                                await this.sock.sendMessage(from, {
+                                                    text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members commands use kar sakte hain."
+                                                }, { quoted: msg });
+                                            } else {
+                                                const currentModeStr = this.isPublic ? "🌍 PUBLIC (Sabhi Ke Liye Open)" : "🔒 PRIVATE (Sirf Owner & Bot User)";
+                                                await this.sock.sendMessage(from, {
+                                                    text: `╭━━━〔 🛡️ *BOT WORK MODE* 〕━━━┈⊷\n` +
+                                                          `┃ ⚙️ *Current Mode:* ${currentModeStr}\n` +
+                                                          `┃\n` +
+                                                          `┃ 👉 *.mode public* — Sabhi users ke liye open\n` +
+                                                          `┃ 👉 *.mode private* — Sirf Owner aur Bot User ke liye\n` +
+                                                          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                                }, { quoted: msg });
+                                            }
                                             break;
                                         case 'hidetag': await commands.hidetag(this.sock, from, msg, isAdmin, q); break;
                                         case 'tagall': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
