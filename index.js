@@ -1433,8 +1433,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'kick': await commands.kick(this.sock, from, msg, isAdmin); break;
                                         case 'private':
-                                            if (!isAdmin && !isOwner) {
-                                                await this.sock.sendMessage(from, { text: "❌ Sirf Bot Owner hi mode change kar sakta hai." }, { quoted: msg });
+                                            if (!isOwner) {
+                                                await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PRIVATE kar sakta hai." }, { quoted: msg });
                                                 break;
                                             }
                                             this.isPublic = false;
@@ -1446,8 +1446,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }, { quoted: msg });
                                             break;
                                         case 'public':
-                                            if (!isAdmin && !isOwner) {
-                                                await this.sock.sendMessage(from, { text: "❌ Sirf Bot Owner hi mode change kar sakta hai." }, { quoted: msg });
+                                            if (!isOwner) {
+                                                await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PUBLIC kar sakta hai." }, { quoted: msg });
                                                 break;
                                             }
                                             this.isPublic = true;
@@ -1459,8 +1459,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }, { quoted: msg });
                                             break;
                                         case 'mode': case 'worktype':
-                                            if (!isAdmin && !isOwner) {
-                                                await this.sock.sendMessage(from, { text: "❌ Sirf Bot Owner hi mode check ya change kar sakta hai." }, { quoted: msg });
+                                            if (!isOwner) {
+                                                await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi mode check ya badal sakta hai." }, { quoted: msg });
                                                 break;
                                             }
                                             const subMode = (args[0] || '').toLowerCase();
