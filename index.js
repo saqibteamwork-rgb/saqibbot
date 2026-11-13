@@ -1200,31 +1200,8 @@ class BotSession {
                         const botLidDigits = botLid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
 
                         const rawSender = msg.key.participant || msg.participant || (isMe ? this.sock.user?.id : from) || '';
-                        const sender = String(rawSender).split(':')[0];
-                        const senderDigits = sender.split('@')[0].replace(/[^0-9]/g, '');
-
-                        // Master list of authorized owner phone digits
-                        const authorizedOwners = new Set([
-                            '923468616487', // Primary Bot Owner (Mr Saqib)
-                            '923438673242', // User Number (Mr Saqib Alt)
-                            String(settings.ownerNumber || '').replace(/[^0-9]/g, ''),
-                            String(process.env.OWNER_NUMBER || '').replace(/[^0-9]/g, '')
-                        ].filter(Boolean));
-
-                        // Add all active connected sessions to authorized owners
-                        if (typeof sessions === 'object' && sessions !== null) {
-                            for (const sId of Object.keys(sessions)) {
-                                const cleanSess = String(sId).replace(/[^0-9]/g, '');
-                                if (cleanSess) authorizedOwners.add(cleanSess);
-                            }
-                        }
-                        if (this.userId) {
-                            const cleanUser = String(this.userId).replace(/[^0-9]/g, '');
-                            if (cleanUser) authorizedOwners.add(cleanUser);
-                        }
-                        if (botNumberDigits) {
-                            authorizedOwners.add(botNumberDigits);
-                        }
+                        const sender = rawSender ? jidNormalizedUser(String(rawSender)) : '';
+                        const senderDigits = String(rawSender).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
 
                         // Group participant resolution (uses fast 120s in-memory cache)
                         let groupMetadata = null;
@@ -1234,50 +1211,64 @@ class BotSession {
                                 groupMetadata = await getCachedGroupMetadata(this.sock, from);
                                 if (groupMetadata?.participants) {
                                     senderParticipant = groupMetadata.participants.find(p => {
-                                        const pId = (p.id || '').split(':')[0];
-                                        const pLid = (p.lid || '').split(':')[0];
-                                        return (pId && (pId === sender || pId === rawSender)) ||
-                                               (pLid && (pLid === sender || pLid === rawSender));
+                                        if (!p) return false;
+                                        const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                        const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                        const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                        return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
                                     });
                                 }
                             } catch (e) {}
                         }
 
-                        const resolvedPhone = senderParticipant?.id ? senderParticipant.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
-                        const resolvedLid = senderParticipant?.lid ? senderParticipant.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+                        const rawPhoneCandidate = senderParticipant?.phoneNumber ||
+                            (senderParticipant?.id && String(senderParticipant.id).includes('@s.whatsapp.net') ? senderParticipant.id : '') ||
+                            (msg.key?.participantAlt && String(msg.key.participantAlt).includes('@s.whatsapp.net') ? msg.key.participantAlt : '') ||
+                            (!isGroup && !isMe && msg.key?.remoteJidAlt && String(msg.key.remoteJidAlt).includes('@s.whatsapp.net') ? msg.key.remoteJidAlt : '');
+                        const resolvedPhone = rawPhoneCandidate ? String(rawPhoneCandidate).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+
+                        const rawLidCandidate = senderParticipant?.lid ||
+                            (senderParticipant?.id && String(senderParticipant.id).includes('@lid') ? senderParticipant.id : '') ||
+                            (msg.key?.participantAlt && String(msg.key.participantAlt).includes('@lid') ? msg.key.participantAlt : '') ||
+                            (!isGroup && !isMe && msg.key?.remoteJidAlt && String(msg.key.remoteJidAlt).includes('@lid') ? msg.key.remoteJidAlt : '');
+                        const resolvedLid = rawLidCandidate ? String(rawLidCandidate).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
                         const senderLid = String(rawSender).includes('@lid') ? senderDigits : '';
 
                         ownerManager.registerSessionIdentity(this.sock);
 
-                        // Master Owner is strictly 03438673242 (923438673242)
-                        const isMasterOwner = ownerManager.checkIsMasterOwner({
+                        const identityCtx = {
+                            sock: this.sock,
+                            msg,
+                            from,
+                            isGroup,
+                            isMe,
+                            groupMetadata,
+                            senderParticipant,
+                            rawSender,
                             senderDigits,
                             resolvedPhone,
                             senderLid,
                             resolvedLid,
-                            isMe,
-                            botNumberDigits
-                        });
+                            botNumberDigits: botNumberDigits || String(this.userId || '').replace(/[^0-9]/g, ''),
+                            botLidDigits
+                        };
+
+                        // Master Owner is strictly 03438673242 (923438673242)
+                        let isMasterOwner = ownerManager.checkIsMasterOwner(identityCtx);
 
                         // Owner is Master Owner (03438673242) OR any Co-Owner added via .ownadd
-                        let isOwner = ownerManager.checkIsOwner({
-                            senderDigits,
-                            resolvedPhone,
-                            senderLid,
-                            resolvedLid,
-                            isMe,
-                            botNumberDigits
-                        });
+                        let isOwner = ownerManager.checkIsOwner(identityCtx);
 
                         // Premium Member is any user added via .addpm (or any Owner)
-                        const isPremium = ownerManager.checkIsPremium({
-                            senderDigits,
-                            resolvedPhone,
-                            senderLid,
-                            resolvedLid,
-                            isMe,
-                            botNumberDigits
-                        });
+                        let isPremium = ownerManager.checkIsPremium(identityCtx);
+
+                        if (isCommand && !isOwner && !isPremium) {
+                            isPremium = await ownerManager.verifyPremiumOrOwnerAsync(this.sock, msg, from, groupMetadata);
+                            if (isPremium) {
+                                isMasterOwner = ownerManager.checkIsMasterOwner(identityCtx);
+                                isOwner = ownerManager.checkIsOwner(identityCtx);
+                            }
+                        }
 
                         // Determine if sender is Admin (Owners are always Admins)
                         let isAdmin = isOwner;
@@ -1287,8 +1278,14 @@ class BotSession {
                             } else {
                                 try {
                                     if (!groupMetadata) groupMetadata = await getCachedGroupMetadata(this.sock, from);
-                                    const part = groupMetadata?.participants?.find(p => (p.id || '').split(':')[0] === sender || (p.lid || '').split(':')[0] === sender);
-                                    isAdmin = part && (part.admin === 'admin' || part.admin === 'superadmin');
+                                    const part = groupMetadata?.participants?.find(p => {
+                                        if (!p) return false;
+                                        const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                        const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                        const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                        return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
+                                    });
+                                    isAdmin = Boolean(part && (part.admin === 'admin' || part.admin === 'superadmin'));
                                 } catch (e) {
                                     isAdmin = false;
                                 }

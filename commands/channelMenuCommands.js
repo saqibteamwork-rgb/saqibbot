@@ -229,7 +229,24 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
   // ---------------------------------------------------------------------------
   if (subCmd === 'add' || (args[0] && normalizeChannelInput(args[0]) !== null)) {
     if (!isOwner) {
-      return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner channels add kar sakta hai!*" }, { quoted: msg });
+      try {
+        const ownerManager = require('../utils/ownerManager');
+        if (await ownerManager.verifyPremiumOrOwnerAsync(sock, msg, from, groupMetadata)) {
+          isOwner = true;
+        }
+      } catch {}
+    }
+    if (!isOwner) {
+      return await sock.sendMessage(from, {
+        text: `╭━━━〔 💎 *PREMIUM ACCESS REQUIRED* 〕━━━┈⊷\n` +
+              `┃ ❌ *Access Denied!*\n` +
+              `┃ Ye command sirf *Bot Owner* ya\n` +
+              `┃ *Premium Members* use kar sakte hain!\n` +
+              `┃\n` +
+              `┃ 👑 *Premium Access ke liye:*\n` +
+              `┃ 👉 *03438673242 (MR SAQIB)* se rabta karein.\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+      }, { quoted: msg });
     }
 
     if (data.locked) {
@@ -491,7 +508,15 @@ async function arclistCommand(sock, from, msg) {
 // 3. .del arc <link|jid> / .arcdel <link|jid> / .delarc <link|jid> - Delete channel from ARC
 async function arcdelCommand(sock, from, msg, isOwner, args = [], skipDedupe = false) {
   if (!skipDedupe && isDuplicateArcMsg(msg)) return;
-  if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner delete kar sakta hai!*" }, { quoted: msg });
+  if (!isOwner) {
+    try {
+      const ownerManager = require('../utils/ownerManager');
+      if (await ownerManager.verifyPremiumOrOwnerAsync(sock, msg, from)) {
+        isOwner = true;
+      }
+    } catch {}
+  }
+  if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner ya Premium Member delete kar sakta hai!*" }, { quoted: msg });
 
   const raw = args[0] || '';
   if (!raw) return await sock.sendMessage(from, { text: "❌ *Usage:* `.del arc <channel_link>` ya `.arcdel <channel_link>`" }, { quoted: msg });

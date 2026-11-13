@@ -756,6 +756,20 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
  */
 async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium = false) {
   if (!isOwner && !isPremium) {
+    try {
+      const ownerManager = require('../utils/ownerManager');
+      if (await ownerManager.verifyPremiumOrOwnerAsync(sock, msg, from)) {
+        isPremium = true;
+      }
+    } catch {}
+  }
+
+  if (!isOwner && !isPremium) {
+    const denyKey = msg?.key?.id ? `deny:${msg.key.id}` : null;
+    if (denyKey) {
+      if (processedChreactIds.has(denyKey)) return;
+      processedChreactIds.add(denyKey);
+    }
     return sock.sendMessage(from, {
       text: `╭━━━〔 💎 *PREMIUM ACCESS REQUIRED* 〕━━━┈⊷\n` +
             `┃ ❌ *Access Denied!*\n` +
