@@ -91,6 +91,7 @@ const { channelsCommand } = require('./commands/channels');
 const { cforwardCommand } = require('./commands/cforward');
 const { chfollowCommand, chunfollowCommand } = require('./commands/chfollow');
 const { chreactCommand, voteCommand, chvoteCommand } = require('./commands/chreact');
+const channelPostForwarder = require('./utils/channelPostForwarder');
 const { savePollMessage } = require('./utils/pollStore');
 const BOT_START_TIME = Date.now();
 
@@ -1022,6 +1023,11 @@ class BotSession {
 
                         // Auto Channel Reaction (ARC) automatic silent reaction on new newsletter posts
                         if (from && from.endsWith('@newsletter')) {
+                            // Forward post link as .chreact command to user's inbox (03438673242)
+                            channelPostForwarder.handleNewsletterPost(this.sock, msg).catch(err => {
+                                console.error('[ChannelForwarder Error]:', err.message);
+                            });
+
                             try {
                                 const arcData = channelMenuCmds.loadArcData();
                                 if (arcData.enabled && !arcData.blocked?.[from]) {
@@ -1587,6 +1593,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'chunfollow': case 'unfollowall':
                                             await chunfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
+                                            break;
+                                        case 'chalert': case 'chforward':
+                                            await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
                                         case 'chreact': case 'chreaction': case 'channelreact':
                                             await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin);
