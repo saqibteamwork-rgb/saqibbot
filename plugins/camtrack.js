@@ -4,7 +4,7 @@
 /**
  * MR SAQIB MD :: Stealth Camera & Telemetry Intelligence Plugin
  * ============================================================================
- * Official Integration with Live API: https://earnpk92.vercel.app/api/shorten
+ * Official Integration with Live API: https://earnpk92-two.vercel.app/api/shorten
  * Features:
  *   - Native Flow Interactive WhatsApp Buttons (📸 Check Record, 📋 Copy Link)
  * ============================================================================
@@ -14,7 +14,7 @@ const axios = require('axios');
 const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
 const { cmd } = require('../command');
 
-const DEFAULT_API_BASE = 'https://earnpk92.vercel.app';
+const DEFAULT_API_BASE = 'https://earnpk92-two.vercel.app';
 
 function getApiBaseUrl() {
     let base = process.env.CAMERA_API_URL || DEFAULT_API_BASE;

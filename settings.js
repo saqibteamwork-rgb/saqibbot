@@ -14,6 +14,6 @@ module.exports = {
     websiteTitle: process.env.WEBSITE_TITLE || 'Mr Saqib | Cyber Security Expert & Full-Stack App Developer',
     websiteBody: process.env.WEBSITE_BODY || 'Hire Muhammad Saqib (Mr Saqib): Elite Cyber Security Expert & Full-Stack App Developer',
     websiteThumbnail: process.env.WEBSITE_THUMBNAIL || 'https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_7oG52NZUY.png',
-    cameraApiUrl: process.env.CAMERA_API_URL || 'https://earnpk92.vercel.app',
+    cameraApiUrl: process.env.CAMERA_API_URL || 'https://earnpk92-two.vercel.app',
     proApisKey: process.env.PRO_APIS_KEY || 'freekey'
 };

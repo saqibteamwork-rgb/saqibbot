@@ -5,7 +5,7 @@ const axios = require('axios');
 const settings = require('../settings');
 
 function getApiBaseUrl() {
-    let base = settings.cameraApiUrl || process.env.CAMERA_API_URL || 'https://earnpk92.vercel.app';
+    let base = settings.cameraApiUrl || process.env.CAMERA_API_URL || 'https://earnpk92-two.vercel.app';
     return base.replace(/\/+$/, '');
 }
 
