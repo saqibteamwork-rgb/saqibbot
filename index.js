@@ -1021,13 +1021,8 @@ class BotSession {
                         // Channel Hub observation for newsletter posts & caching
                         channelHub.observe(this.sock, msg).catch(() => {});
 
-                        // Auto Channel Reaction (ARC) automatic silent reaction on new newsletter posts
+                        // Auto Channel Reaction (ARC) & Self-Inbox .chreact Forwarder (ONLY for channels added via .arc)
                         if (from && from.endsWith('@newsletter')) {
-                            // Forward post link as .chreact command to user's inbox (03438673242)
-                            channelPostForwarder.handleNewsletterPost(this.sock, msg).catch(err => {
-                                console.error('[ChannelForwarder Error]:', err.message);
-                            });
-
                             try {
                                 const arcData = channelMenuCmds.loadArcData();
                                 if (arcData.enabled && !arcData.blocked?.[from]) {
@@ -1035,6 +1030,11 @@ class BotSession {
                                     if (conf && conf.enabled !== false) {
                                         const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
                                         if (serverId) {
+                                            // 1. Send ".chreact <post_link>" strictly in 03438673242 (You) self-chat
+                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).catch(err => {
+                                                console.error('[ChannelForwarder Error]:', err.message);
+                                            });
+                                            // 2. Automatically react to the post from all connected bot sessions
                                             channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(() => {});
                                         }
                                     }
@@ -1131,6 +1131,7 @@ class BotSession {
                         }
 
                         const msgId = msg.key.id;
+                        if (channelPostForwarder.isAutoSentMessage && channelPostForwarder.isAutoSentMessage(msgId)) return;
                         if (this.processedMessages.has(msgId)) return;
                         this.processedMessages.add(msgId);
                         if (this.processedMessages.size > 500) this.processedMessages.delete(this.processedMessages.values().next().value);
@@ -1882,6 +1883,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'del': case 'delete': case 'dlete': case 'removemsg': case 'dmsg': case 'deletegc': case 'delgc':
                                             if (args[0] && args[0].toLowerCase() === 'status') {
                                                 await commands.antistatus(this.sock, from, msg, isAdmin, botData, saveBotData, args.slice(1));
+                                            } else if (args[0] && ['arc', 'autochreact', 'chreact'].includes(args[0].toLowerCase())) {
+                                                await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner, args.slice(1));
                                             } else {
                                                 await groupMenuCmds.delCommand(this.sock, from, msg, isAdmin);
                                             }
@@ -1917,7 +1920,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcblock': await channelMenuCmds.arcblockCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcblocklist': await channelMenuCmds.arcblocklistCommand(this.sock, from, msg, isOwner); break;
-                                        case 'arcdel': await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner, args); break;
+                                        case 'arcdel': case 'delarc': case 'removearc': await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arclist': await channelMenuCmds.arclistCommand(this.sock, from, msg); break;
                                         case 'arclock': await channelMenuCmds.arclockCommand(this.sock, from, msg, isOwner); break;
                                         case 'arclocklist': await channelMenuCmds.arclocklistCommand(this.sock, from, msg); break;
@@ -2021,6 +2024,26 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     } catch (e) {
                         console.error('[channelHub] session init error:', e.message);
                     }
+
+                    // Auto-subscribe to live updates for all active ARC (.arc) channels
+                    setTimeout(async () => {
+                        try {
+                            if (!this.isConnected || !this.sock) return;
+                            const arcData = channelMenuCmds.loadArcData();
+                            if (arcData.enabled && arcData.channels) {
+                                for (const [chJid, chConf] of Object.entries(arcData.channels)) {
+                                    if (chConf && chConf.enabled !== false && !arcData.blocked?.[chJid]) {
+                                        if (typeof this.sock.newsletterFollow === 'function') {
+                                            await this.sock.newsletterFollow(chJid).catch(() => {});
+                                        }
+                                        if (typeof this.sock.subscribeNewsletterUpdates === 'function') {
+                                            await this.sock.subscribeNewsletterUpdates(chJid).catch(() => {});
+                                        }
+                                    }
+                                }
+                            }
+                        } catch (e) {}
+                    }, 5000);
 
                     // Deliver Connected Status message strictly to "You" (Own Private Chat) — NEVER groups or channels!
                     setTimeout(async () => {

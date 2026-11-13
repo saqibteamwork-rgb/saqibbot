@@ -149,6 +149,9 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
     const s = uniqueSocks[i];
     const emoji = emojis[i % emojis.length];
     try {
+      if (typeof s.newsletterFollow === 'function') {
+        await s.newsletterFollow(channelJid).catch(() => {});
+      }
       if (typeof s.newsletterReactMessage === 'function') {
         await s.newsletterReactMessage(channelJid, String(serverId), emoji);
         successCount++;
@@ -202,9 +205,9 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
   }
 
   // ---------------------------------------------------------------------------
-  // .arc add <link> [emojis] [count] [delay=5s] <passcode>
+  // .arc <link> OR .arc add <link> [emojis] [count] [delay=3s]
   // ---------------------------------------------------------------------------
-  if (subCmd === 'add' || (args[0] && (args[0].includes('whatsapp.com/channel') || args[0].includes('@newsletter')))) {
+  if (subCmd === 'add' || (args[0] && normalizeChannelInput(args[0]) !== null)) {
     if (!isOwner) {
       return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner channels add kar sakta hai!*" }, { quoted: msg });
     }
@@ -221,18 +224,12 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
       return await sock.sendMessage(from, {
         text:
 `╭━━━〔 📌 *ARC USAGE GUIDE* 〕━━━┈⊷
-┃ 👉 *.arc add <link> [emojis] [count] [delay=5s] <passcode>*
-┃
-┃ 📝 *Parameters:*
-┃ 🔗 *link:* WhatsApp channel link ya JID
-┃ ✨ *emojis:* Reaction emojis (e.g. ❤️,🔥,⚡ ya 'all')
-┃ 🔢 *count:* Kitne reactions lagane hain (e.g. 3, 5, all)
-┃ ⏳ *delay:* Har post ke reaction ka delay (default: 5s)
-┃ 🔑 *passcode:* Owner confirmation code (e.g. arc123)
+┃ 👉 *.arc <channel_link>*
+┃ 👉 *.del arc <channel_link>*
 ┃
 ┃ 📋 *Examples:*
-┃ • \`.arc add https://whatsapp.com/channel/0029Va... ❤️,🔥 3 5s arc123\`
-┃ • \`.arc add https://whatsapp.com/channel/0029Va... 🔥\`
+┃ • \`.arc https://whatsapp.com/channel/0029Va...\`
+┃ • \`.del arc https://whatsapp.com/channel/0029Va...\`
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       }, { quoted: msg });
     }
@@ -248,57 +245,83 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
     let channelName = 'WhatsApp Channel';
     let inviteCode = norm.code || null;
 
-    // Resolve invite code to JID and Name via Baileys
+    // Resolve invite code to JID and Name via Baileys (try across active sockets for reliability)
+    const activeSocks = getActiveSockets(sock);
     if (norm.code) {
-      try {
-        const metadata = await sock.newsletterMetadata('invite', norm.code);
-        targetJid = metadata.id;
-        channelName = metadata.name || channelName;
-      } catch (e) {
-        return await sock.sendMessage(from, { text: `❌ *Channel link resolve nahi hua:* ${e.message}` }, { quoted: msg });
+      let resolvedMeta = null;
+      for (const s of activeSocks) {
+        try {
+          if (typeof s.newsletterMetadata === 'function') {
+            resolvedMeta = await s.newsletterMetadata('invite', norm.code);
+            if (resolvedMeta?.id) break;
+          }
+        } catch {}
+      }
+      if (resolvedMeta?.id) {
+        targetJid = resolvedMeta.id;
+        channelName = resolvedMeta.name || resolvedMeta.thread_metadata?.name?.text || channelName;
+        inviteCode = resolvedMeta.invite || resolvedMeta.code || resolvedMeta.thread_metadata?.invite || inviteCode;
+      } else {
+        try {
+          const fallbackTarget = await hub.resolveTarget(sock, rawLink);
+          if (fallbackTarget?.jid) {
+            targetJid = fallbackTarget.jid;
+            channelName = fallbackTarget.channelName || channelName;
+          }
+        } catch {}
+      }
+      if (!targetJid) {
+        return await sock.sendMessage(from, { text: `❌ *Channel link resolve nahi ho saka! Link check karein.*` }, { quoted: msg });
       }
     } else if (targetJid) {
-      try {
-        const metadata = await sock.newsletterMetadata('jid', targetJid);
-        channelName = metadata.name || channelName;
-      } catch {}
+      for (const s of activeSocks) {
+        try {
+          if (typeof s.newsletterMetadata === 'function') {
+            const metadata = await s.newsletterMetadata('jid', targetJid);
+            if (metadata) {
+              channelName = metadata.name || metadata.thread_metadata?.name?.text || channelName;
+              inviteCode = metadata.invite || metadata.code || metadata.thread_metadata?.invite || inviteCode;
+              break;
+            }
+          }
+        } catch {}
+      }
     }
 
     if (!targetJid) {
       return await sock.sendMessage(from, { text: "❌ *Channel resolve nahi ho saka!*" }, { quoted: msg });
     }
 
-    // Parse options: emojis, count, delay, passcode
-    let emojisArg = rawParams[1] || '❤️,🔥,👍';
+    // Parse options: emojis, count, delay
+    let emojisArg = rawParams[1] || '❤️,🔥,👍,😍,👏';
     let countArg = rawParams[2] || 'all';
-    let delayArg = rawParams[3] || '5s';
-    let passArg = rawParams[4] || '';
+    let delayArg = rawParams[3] || '3s';
 
     // Handle shifting if a param was skipped
     if (emojisArg && (emojisArg.endsWith('s') || /^[0-9]+$/.test(emojisArg))) {
-      // User passed count or delay as 2nd arg
       countArg = emojisArg;
-      emojisArg = '❤️,🔥';
+      emojisArg = '❤️,🔥,👍,😍,👏';
     }
 
     const emojisList = emojisArg.split(/[\s,]+/).filter(Boolean);
     const delayMs = parseDelay(delayArg);
     const count = (countArg.toLowerCase() === 'all' || isNaN(parseInt(countArg, 10))) ? 0 : parseInt(countArg, 10);
 
-    // Verify passcode if set and provided
-    if (data.passcode && passArg && passArg !== data.passcode) {
-      return await sock.sendMessage(from, { text: "❌ *Invalid Passcode!* Please check your ARC passcode." }, { quoted: msg });
-    }
-
     // Auto Follow/Join across ALL connected bot accounts
     const joinResult = await joinChannelAcrossAllSessions(sock, targetJid, inviteCode);
 
+    data.enabled = true;
+    if (data.blocked && data.blocked[targetJid]) {
+      delete data.blocked[targetJid];
+    }
     if (!data.channels) data.channels = {};
+    const canonicalLink = inviteCode ? `https://whatsapp.com/channel/${inviteCode}` : rawLink;
     data.channels[targetJid] = {
       jid: targetJid,
       name: channelName,
-      link: rawLink,
-      emojis: emojisList.length > 0 ? emojisList : ['❤️'],
+      invite: inviteCode,
+      link: canonicalLink,
+      emojis: emojisList.length > 0 ? emojisList : ['❤️', '🔥', '👍', '😍', '👏'],
       count: count,
       delayMs: delayMs,
       delayStr: `${Math.round(delayMs / 1000)}s`,
@@ -320,15 +343,17 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
 ┃ 📢 *Channel:* *${channelName}*
 ┃ 🆔 *JID:* \`${targetJid}\`
 ┃ ✨ *Emojis:* ${emojisList.join(' ')}
-┃ 🔢 *Reaction Count:* ${count === 0 ? `All (${totalSessions} Sessions)` : count}
-┃ ⏳ *Reaction Delay:* ${Math.round(delayMs / 1000)}s
 ┃ 👥 *Auto-Followed:* ${joinedCount}/${totalSessions} Bot Accounts
-┃ 🟢 *Auto React:* Active & Monitoring
+┃ 📲 *Self-Inbox (.chreact):* 03438673242 (You)
+┃ 🟢 *Status:* Active & Monitoring
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
-💡 *Ab is channel par aane wali har post par auto reaction lagta rahega!*
-👉 List dekhne ke liye: *.arclist*
-👉 Stop karne ke liye: *.arcstop ${targetJid}*`
+💡 *Ab is channel me jab bhi koi post hogi:*
+1️⃣ Ye bot khud bhi auto-react karega
+2️⃣ *03438673242 (You)* inbox me \`.chreact <post_link>\` send hoga taake dusre bots se bhi auto reacts jayein!
+
+🗑️ *Remove karne ke liye:*
+👉 \`.del arc ${canonicalLink}\``
     }, { quoted: msg });
   }
 
@@ -344,9 +369,9 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
 📌 *Usage:*
-👉 *.arc add <link> [emojis] [count] [delay=5s] <passcode>*
-👉 *.arclist*  |  *.arcdel <link>*  |  *.arcstop <link|all>*
-👉 *.chautojoin <link>* ➔ Tamam bot accounts se follow karein`;
+👉 *.arc <channel_link>* ➔ Channel auto-react me add karein
+👉 *.del arc <channel_link>* ➔ Channel auto-react se remove karein
+👉 *.arclist* ➔ Added channels ki list dekhein`;
 
   await sock.sendMessage(from, { text }, { quoted: msg });
 }
@@ -386,33 +411,57 @@ async function arclistCommand(sock, from, msg) {
   await sock.sendMessage(from, { text }, { quoted: msg });
 }
 
-// 3. .arcdel <link|jid> - Delete channel from ARC
+// 3. .del arc <link|jid> / .arcdel <link|jid> / .delarc <link|jid> - Delete channel from ARC
 async function arcdelCommand(sock, from, msg, isOwner, args = []) {
   if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner delete kar sakta hai!*" }, { quoted: msg });
 
   const raw = args[0] || '';
-  if (!raw) return await sock.sendMessage(from, { text: "❌ *Usage:* `.arcdel <channel_link|jid>`" }, { quoted: msg });
+  if (!raw) return await sock.sendMessage(from, { text: "❌ *Usage:* `.del arc <channel_link>` ya `.arcdel <channel_link>`" }, { quoted: msg });
 
   const norm = normalizeChannelInput(raw);
   const data = loadArcData();
   let targetJid = norm?.jid;
 
-  if (norm?.code) {
-    try {
-      const meta = await sock.newsletterMetadata('invite', norm.code);
-      targetJid = meta.id;
-    } catch {}
+  // 1. Direct match by saved invite code or link in data.channels
+  if (!targetJid && norm?.code && data.channels) {
+    const byInvite = Object.keys(data.channels).find(k => {
+      const c = data.channels[k];
+      return c && (c.invite === norm.code || (c.link && c.link.includes(norm.code)));
+    });
+    if (byInvite) targetJid = byInvite;
+  }
+
+  // 2. Fallback: resolve via newsletterMetadata across active sockets
+  if (!targetJid && norm?.code) {
+    const activeSocks = getActiveSockets(sock);
+    for (const s of activeSocks) {
+      try {
+        if (typeof s.newsletterMetadata === 'function') {
+          const meta = await s.newsletterMetadata('invite', norm.code);
+          if (meta?.id) {
+            targetJid = meta.id;
+            break;
+          }
+        }
+      } catch {}
+    }
   }
   if (!targetJid) targetJid = raw;
 
   if (!data.channels?.[targetJid]) {
-    // Try search by name or partial jid
-    const foundKey = Object.keys(data.channels || {}).find(k => k.includes(targetJid) || (data.channels[k].name && data.channels[k].name.toLowerCase().includes(raw.toLowerCase())));
+    // Try search by name, link, invite, or partial jid
+    const foundKey = Object.keys(data.channels || {}).find(k => {
+      const c = data.channels[k] || {};
+      return k.includes(targetJid) ||
+        (norm?.code && (c.invite === norm.code || (c.link && c.link.includes(norm.code)))) ||
+        (c.link && c.link.toLowerCase().includes(raw.toLowerCase())) ||
+        (c.name && c.name.toLowerCase().includes(raw.toLowerCase()));
+    });
     if (foundKey) targetJid = foundKey;
   }
 
   if (!data.channels?.[targetJid]) {
-    return await sock.sendMessage(from, { text: `ℹ️ *Channel \`${targetJid}\` ARC list mein nahi mila!*` }, { quoted: msg });
+    return await sock.sendMessage(from, { text: `ℹ️ *Ye channel ARC (Auto-React) list mein nahi mila!*` }, { quoted: msg });
   }
 
   const name = data.channels[targetJid].name || targetJid;
@@ -420,7 +469,7 @@ async function arcdelCommand(sock, from, msg, isOwner, args = []) {
   saveArcData(data);
 
   await sock.sendMessage(from, {
-    text: `✅ *Channel "${name}" successfully ARC list se delete kar diya gaya!*`
+    text: `✅ *Channel "${name}" successfully Auto-React (.arc) list se remove kar diya gaya hai!*\n\n🛑 Ab is channel ki posts par auto-react ya .chreact link send nahi hoga.`
   }, { quoted: msg });
 }
 

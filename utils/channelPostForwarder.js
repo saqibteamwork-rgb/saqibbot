@@ -1,13 +1,14 @@
 'use strict';
 
 /**
- * WhatsApp Channel Auto Post Link Forwarder
- * ==========================================
- * Automatically detects any new post published in your WhatsApp Channel,
- * constructs the official post link (https://whatsapp.com/channel/<invite>/<serverId>),
- * and instantly sends ".chreact <post_link>" to your inbox (03438673242 / 923438673242@s.whatsapp.net).
- *
- * This allows other bots in your inbox/group to trigger automatic reactions instantly!
+ * WhatsApp Channel Auto Post Link Forwarder (.arc Integrated)
+ * ============================================================
+ * Strictly monitors ONLY channels added via `.arc <channel_link>`.
+ * When a new post arrives in an ARC-monitored channel:
+ *   1. Constructs the official post link: https://whatsapp.com/channel/<invite>/<serverId>
+ *   2. Uses the 03438673242 (923438673242) bot session itself to send
+ *      ".chreact <post_link>" strictly into its own "You" (Self-Chat) inbox!
+ *   3. Never triggers on random admin channels or sends from secondary numbers.
  */
 
 const fs = require('fs-extra');
@@ -15,11 +16,19 @@ const path = require('path');
 const hub = require('./channelHub');
 
 const CONFIG_FILE = path.join(__dirname, '..', 'data', 'channel_forwarder.json');
+const ARC_FILE = path.join(__dirname, '..', 'data', 'channel_arc.json');
 
-// In-memory set to prevent duplicate forwards (per session)
+// Global in-memory set to prevent duplicate forwards across all connected sessions
 const sentPosts = new Set();
+// Track message IDs sent by this forwarder so our own bot doesn't loop on them
+const autoSentMsgIds = new Set();
 // Cache for channel invite codes: jid -> inviteCode
 const inviteCache = new Map();
+
+function isAutoSentMessage(msgId) {
+    if (!msgId) return false;
+    return autoSentMsgIds.has(msgId);
+}
 
 function loadConfig() {
     try {
@@ -28,7 +37,8 @@ function loadConfig() {
             if (typeof data.enabled !== 'boolean') data.enabled = true;
             if (!data.targetJid) data.targetJid = '923438673242@s.whatsapp.net';
             if (!data.command) data.command = '.chreact';
-            if (!data.channels) data.channels = {};
+            // Strictly disable autoAllAdminChannels so random admin channels never trigger
+            data.autoAllAdminChannels = false;
             return data;
         }
     } catch (e) {
@@ -38,13 +48,13 @@ function loadConfig() {
         enabled: true,
         targetJid: '923438673242@s.whatsapp.net',
         command: '.chreact',
-        autoAllAdminChannels: true, // Forwards posts from all channels where bot/user is Admin/Owner
-        channels: {}               // Optional specific channels: { [jid]: { name, invite, enabled: true } }
+        autoAllAdminChannels: false
     };
 }
 
 function saveConfig(cfg) {
     try {
+        cfg.autoAllAdminChannels = false;
         fs.ensureDirSync(path.dirname(CONFIG_FILE));
         fs.writeJsonSync(CONFIG_FILE, cfg, { spaces: 2 });
     } catch (e) {
@@ -52,10 +62,66 @@ function saveConfig(cfg) {
     }
 }
 
+function loadArcChannelConf(channelJid) {
+    try {
+        if (fs.existsSync(ARC_FILE)) {
+            const arcData = fs.readJsonSync(ARC_FILE) || {};
+            if (arcData.enabled === false) return null;
+            if (arcData.blocked && arcData.blocked[channelJid]) return null;
+            const conf = arcData.channels && arcData.channels[channelJid];
+            if (conf && conf.enabled !== false) return conf;
+        }
+    } catch {}
+    return null;
+}
+
 /**
- * Main listener called on every newsletter message in messages.upsert
+ * Finds the active Baileys socket belonging to the target number (e.g. 923438673242)
+ * so the message is sent strictly from 923438673242 into its own "You" self-chat.
  */
-async function handleNewsletterPost(sock, msg) {
+function findTargetSelfSocket(primarySock, targetDigits) {
+    const cleanTarget = String(targetDigits || '923438673242').replace(/[^0-9]/g, '');
+    const last10 = cleanTarget.slice(-10);
+
+    const allSocks = [];
+    const addSock = (s) => {
+        if (s && !allSocks.includes(s)) allSocks.push(s);
+    };
+
+    addSock(primarySock);
+    try {
+        if (typeof globalThis.ProBoySessionManager?.getActiveSocks === 'function') {
+            const list = globalThis.ProBoySessionManager.getActiveSocks() || [];
+            list.forEach(addSock);
+        }
+        if (typeof globalThis.ProBoySessionManager?.getSessions === 'function') {
+            const sessObj = globalThis.ProBoySessionManager.getSessions() || {};
+            for (const sVal of Object.values(sessObj)) {
+                if (sVal?.sock) addSock(sVal.sock);
+            }
+        }
+    } catch {}
+
+    const getDigits = (s) => {
+        const raw = s?.user?.id || s?.userId || hub.accountOf(s) || '';
+        return String(raw).split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+    };
+
+    for (const s of allSocks) {
+        const d = getDigits(s);
+        if (!d) continue;
+        if (d === cleanTarget || (last10.length === 10 && d.endsWith(last10))) {
+            return s;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Main listener called when a new post arrives in an .arc monitored channel
+ */
+async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     const config = loadConfig();
     if (!config.enabled || !config.targetJid) return;
 
@@ -65,6 +131,11 @@ async function handleNewsletterPost(sock, msg) {
     const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
     if (!serverId) return;
 
+    // Strictly verify this channel was added via .arc
+    const arcConf = passedArcConf || loadArcChannelConf(from);
+    if (!arcConf || arcConf.enabled === false) return;
+
+    // Global synchronous deduplication so multiple sessions never send duplicate .chreact commands
     const postKey = `${from}:${serverId}`;
     if (sentPosts.has(postKey)) return;
     sentPosts.add(postKey);
@@ -72,21 +143,28 @@ async function handleNewsletterPost(sock, msg) {
         sentPosts.delete(sentPosts.values().next().value);
     }
 
-    let isAllowed = Boolean(config.channels && config.channels[from] && config.channels[from].enabled !== false);
-    let inviteCode = inviteCache.get(from) || config.channels?.[from]?.invite || null;
-    let channelName = config.channels?.[from]?.name || 'WhatsApp Channel';
+    let inviteCode = arcConf.invite || inviteCache.get(from) || null;
+    let channelName = arcConf.name || 'WhatsApp Channel';
 
-    // 1. Try resolving invite code from channelHub cache first
-    try {
-        if (typeof hub.ensureChannel === 'function') {
-            const rec = hub.ensureChannel(from, 'observed');
-            if (rec && rec.invite) inviteCode = rec.invite;
-            if (rec && rec.name) channelName = rec.name;
-        }
-    } catch {}
+    // Extract invite code from saved link if present
+    if (!inviteCode && arcConf.link) {
+        const linkMatch = String(arcConf.link).match(/whatsapp\.com\/channel\/([0-9A-Za-z_-]+)/i);
+        if (linkMatch) inviteCode = linkMatch[1];
+    }
 
-    // 2. If invite code or admin status is unknown, query newsletter metadata
-    if (!inviteCode || (!isAllowed && config.autoAllAdminChannels !== false)) {
+    // Try resolving invite code from channelHub cache
+    if (!inviteCode) {
+        try {
+            if (typeof hub.ensureChannel === 'function') {
+                const rec = hub.ensureChannel(from, 'observed');
+                if (rec && rec.invite) inviteCode = rec.invite;
+                if (rec && rec.name) channelName = rec.name;
+            }
+        } catch {}
+    }
+
+    // Fallback: query newsletterMetadata if invite code is still missing
+    if (!inviteCode) {
         try {
             if (typeof sock.newsletterMetadata === 'function') {
                 const meta = await sock.newsletterMetadata('jid', from).catch(() => null);
@@ -94,12 +172,6 @@ async function handleNewsletterPost(sock, msg) {
                     inviteCode = meta.invite || meta.code || (meta.thread_metadata?.invite) || inviteCode;
                     channelName = meta.name || channelName;
                     if (inviteCode) inviteCache.set(from, inviteCode);
-
-                    // Check role (Only admin/owner channels auto-forward by default)
-                    const role = meta.viewer_metadata?.role;
-                    if (role === 'ADMIN' || role === 'OWNER') {
-                        isAllowed = true;
-                    }
                 }
             }
         } catch (mErr) {
@@ -107,24 +179,33 @@ async function handleNewsletterPost(sock, msg) {
         }
     }
 
-    // Fallback: If autoAllAdminChannels is true and not explicitly blocked, allow
-    if (config.autoAllAdminChannels && isAllowed !== false) {
-        isAllowed = true;
-    }
-
-    if (!isAllowed) return;
-
     if (!inviteCode) {
-        console.warn(`[ChannelForwarder] Could not resolve invite code for channel ${from} (serverId: ${serverId})`);
+        console.warn(`[ChannelForwarder] Could not resolve invite code for ARC channel ${from} (serverId: ${serverId})`);
         return;
     }
 
     const postLink = `https://whatsapp.com/channel/${inviteCode}/${serverId}`;
     const cmdText = `${config.command || '.chreact'} ${postLink}`;
 
+    const targetDigits = String(config.targetJid).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || '923438673242';
+    const targetSelfJid = `${targetDigits}@s.whatsapp.net`;
+
+    // Strictly use 03438673242's own socket so the message lands in 03438673242's "You" (Self-Chat)
+    const selfSock = findTargetSelfSocket(sock, targetDigits);
+    if (!selfSock) {
+        console.log(`[ChannelForwarder] ℹ️ Session ${targetDigits} is not connected; skipping self-chat .chreact send to avoid messaging from secondary numbers.`);
+        return;
+    }
+
     try {
-        console.log(`[ChannelForwarder] 📢 New post in "${channelName}"! Forwarding command to ${config.targetJid}: ${cmdText}`);
-        await sock.sendMessage(config.targetJid, { text: cmdText });
+        console.log(`[ChannelForwarder] 📢 ARC Channel Post in "${channelName}"! Sending to ${targetDigits} (You): ${cmdText}`);
+        const sentMsg = await selfSock.sendMessage(targetSelfJid, { text: cmdText });
+        if (sentMsg?.key?.id) {
+            autoSentMsgIds.add(sentMsg.key.id);
+            if (autoSentMsgIds.size > 1000) {
+                autoSentMsgIds.delete(autoSentMsgIds.values().next().value);
+            }
+        }
     } catch (sendErr) {
         console.error('[ChannelForwarder Send Error]:', sendErr.message);
     }
@@ -146,7 +227,7 @@ async function chalertCommand(sock, from, msg, isOwner, args = []) {
         config.enabled = true;
         saveConfig(config);
         return await sock.sendMessage(from, {
-            text: `✅ *Channel Post Auto-Forwarder: ON*\n\nAb aapke channel me nayi post aate hi foran *${config.targetJid.replace('@s.whatsapp.net', '')}* ko \`${config.command} <link>\` chala jayega.`
+            text: `✅ *Channel Post Self-Inbox (.chreact): ON*\n\nAb \`.arc <link>\` me add kiye gaye channels me nayi post aate hi *${config.targetJid.replace('@s.whatsapp.net', '')} (You)* me \`${config.command} <link>\` send ho jayega.`
         }, { quoted: msg });
     }
 
@@ -154,7 +235,7 @@ async function chalertCommand(sock, from, msg, isOwner, args = []) {
         config.enabled = false;
         saveConfig(config);
         return await sock.sendMessage(from, {
-            text: '🛑 *Channel Post Auto-Forwarder: OFF*\n\nAb channel posts ka auto-forward band kar diya gaya hai.'
+            text: '🛑 *Channel Post Self-Inbox (.chreact): OFF*'
         }, { quoted: msg });
     }
 
@@ -165,7 +246,7 @@ async function chalertCommand(sock, from, msg, isOwner, args = []) {
         config.targetJid = num;
         saveConfig(config);
         return await sock.sendMessage(from, {
-            text: `✅ *Target Number Updated:*\n👉 \`${num.replace('@s.whatsapp.net', '')}\``
+            text: `✅ *Target Self-Chat Number Updated:*\n👉 \`${num.replace('@s.whatsapp.net', '')}\``
         }, { quoted: msg });
     }
 
@@ -177,29 +258,18 @@ async function chalertCommand(sock, from, msg, isOwner, args = []) {
         }, { quoted: msg });
     }
 
-    if (sub === 'test') {
-        const testText = `${config.command || '.chreact'} https://whatsapp.com/channel/test/123`;
-        await sock.sendMessage(config.targetJid, { text: testText });
-        return await sock.sendMessage(from, {
-            text: `✅ *Test message sent to ${config.targetJid.replace('@s.whatsapp.net', '')}!*`
-        }, { quoted: msg });
-    }
-
-    // Default status help
     const targetDisplay = config.targetJid.replace('@s.whatsapp.net', '');
     const statusText =
-`╭━━━〔 📢 *CHANNEL POST AUTO-FORWARDER* 〕━━━┈⊷
+`╭━━━〔 📢 *ARC SELF-INBOX FORWARDER* 〕━━━┈⊷
 ┃ ⚡ *Status:* ${config.enabled ? '🟢 ON' : '🔴 OFF'}
-┃ 📱 *Target Number:* ${targetDisplay}
+┃ 📱 *Self-Chat (You):* ${targetDisplay}
 ┃ ⌨️ *Command Format:* \`${config.command} <post_link>\`
-┃ 👑 *Auto Admin Channels:* ${config.autoAllAdminChannels ? 'Yes' : 'No'}
+┃ 🎯 *Mode:* Only \`.arc\` Added Channels
 ┃
 ┃ 📌 *Commands:*
-┃ 👉 *.chalert on* ➔ Forwarder ON karein
-┃ 👉 *.chalert off* ➔ Forwarder OFF karein
-┃ 👉 *.chalert set <number>* ➔ Target number badlein
-┃ 👉 *.chalert cmd <.chreact>* ➔ Command badlein
-┃ 👉 *.chalert test* ➔ Test message bhejein
+┃ 👉 *.arc <channel_link>* ➔ Channel add karein
+┃ 👉 *.del arc <channel_link>* ➔ Channel remove karein
+┃ 👉 *.chalert on / off* ➔ Forwarder toggle karein
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
     return await sock.sendMessage(from, { text: statusText }, { quoted: msg });
@@ -208,6 +278,7 @@ async function chalertCommand(sock, from, msg, isOwner, args = []) {
 module.exports = {
     handleNewsletterPost,
     chalertCommand,
+    isAutoSentMessage,
     loadConfig,
     saveConfig
 };
