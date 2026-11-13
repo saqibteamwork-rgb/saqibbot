@@ -1269,6 +1269,16 @@ class BotSession {
                             botNumberDigits
                         });
 
+                        // Premium Member is any user added via .addpm (or any Owner)
+                        const isPremium = ownerManager.checkIsPremium({
+                            senderDigits,
+                            resolvedPhone,
+                            senderLid,
+                            resolvedLid,
+                            isMe,
+                            botNumberDigits
+                        });
+
                         // Determine if sender is Admin (Owners are always Admins)
                         let isAdmin = isOwner;
                         if (!isAdmin && isGroup) {
@@ -1370,7 +1380,7 @@ class BotSession {
                         // Strict Private Mode Guard:
                         // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
                         // Any command from any other user or group member is completely ignored.
-                        if (!this.isPublic && !isOwner) {
+                        if (!this.isPublic && !isOwner && !isPremium) {
                             return;
                         }
 
@@ -1639,7 +1649,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
                                         case 'chreact': case 'chreaction': case 'channelreact':
-                                            await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin);
+                                            await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium);
                                             break;
                                         case 'vote1': case 'v1':
                                             await voteCommand(this.sock, from, msg, args, isOwner, isAdmin, 1);
@@ -1924,7 +1934,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             if (args[0] && args[0].toLowerCase() === 'status') {
                                                 await commands.antistatus(this.sock, from, msg, isAdmin, botData, saveBotData, args.slice(1));
                                             } else if (args[0] && ['arc', 'autochreact', 'chreact'].includes(args[0].toLowerCase())) {
-                                                await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner, args.slice(1));
+                                                await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner || isPremium, args.slice(1));
                                             } else {
                                                 await groupMenuCmds.delCommand(this.sock, from, msg, isAdmin);
                                             }
@@ -1976,10 +1986,19 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'ownlist': case 'listown': case 'owners':
                                             await ownerManager.ownlistCommand(this.sock, from, msg, isOwner);
                                             break;
-                                        case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner, args, groupMetadata); break;
+                                        case 'addpm': case 'pmadd': case 'addprem': case 'premadd':
+                                            await ownerManager.addpmCommand(this.sock, from, msg, isOwner, args, groupMetadata);
+                                            break;
+                                        case 'delpm': case 'pmdel': case 'rmpm': case 'delprem':
+                                            await ownerManager.delpmCommand(this.sock, from, msg, isOwner, args, groupMetadata);
+                                            break;
+                                        case 'pmlist': case 'listpm': case 'premlist':
+                                            await ownerManager.pmlistCommand(this.sock, from, msg, isOwner);
+                                            break;
+                                        case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner || isPremium, args, groupMetadata); break;
                                         case 'arcblock': await channelMenuCmds.arcblockCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcblocklist': await channelMenuCmds.arcblocklistCommand(this.sock, from, msg, isOwner); break;
-                                        case 'arcdel': case 'delarc': case 'removearc': await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner, args); break;
+                                        case 'arcdel': case 'delarc': case 'removearc': await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner || isPremium, args); break;
                                         case 'arclist': await channelMenuCmds.arclistCommand(this.sock, from, msg); break;
                                         case 'arclock': await channelMenuCmds.arclockCommand(this.sock, from, msg, isOwner); break;
                                         case 'arclocklist': await channelMenuCmds.arclocklistCommand(this.sock, from, msg); break;

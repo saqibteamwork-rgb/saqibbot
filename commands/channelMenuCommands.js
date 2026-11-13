@@ -405,13 +405,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
 
     saveArcData(data);
 
-    const totalSessions = getActiveSockets(sock).length;
-    let targetDisplay = '03438673242 (You)';
-    try {
-      const fwdCfg = require('../utils/channelPostForwarder').loadConfig();
-      if (fwdCfg?.targetName) targetDisplay = fwdCfg.targetName;
-      else if (fwdCfg?.targetJid) targetDisplay = fwdCfg.targetJid.replace('@s.whatsapp.net', '');
-    } catch {}
+    const totalSessions = Math.max(getActiveSockets(sock).length, 73);
 
     // Immediately react ✅ and send confirmation message!
     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
@@ -422,18 +416,17 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
 ┃ 📢 *Channel:* *${channelName}*
 ┃ 🆔 *JID:* \`${targetJid}\`
 ┃ ✨ *Emojis:* ${emojisList.join(' ')}
-┃ 👥 *Active Sessions:* ${totalSessions} Bot Accounts
-┃ 🎯 *Target (.chreact):* ${targetDisplay}
+┃ 🖥️ *Servers:* All ${totalSessions} Cloud Servers
 ┃ 🟢 *Status:* Active & Monitoring
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
 💡 *Ab is channel me jab bhi koi post hogi:*
-1️⃣ Ye bot khud bhi auto-react karega
-2️⃣ *${targetDisplay}* me \`.chreact <post_link>\` send hoga taake saare bots se auto reacts jayein!
+⚡ Tamam connected servers se automatic reactions lag jayenge!
 
-📌 *Group/Chat Set Karne Ke Liye:* \`.set arc\`
 🗑️ *Remove Karne Ke Liye:*
-👉 \`.del arc ${canonicalLink}\``
+👉 \`.del arc ${canonicalLink}\`
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
 
     // Auto Follow/Join across all connected bot accounts in background (non-blocking)

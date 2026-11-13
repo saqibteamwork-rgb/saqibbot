@@ -53,6 +53,7 @@ function loadOwnersData() {
         if (fs.existsSync(OWNERS_FILE)) {
             const data = fs.readJsonSync(OWNERS_FILE) || {};
             if (!Array.isArray(data.owners)) data.owners = [];
+            if (!Array.isArray(data.premium)) data.premium = [];
             if (!Array.isArray(data.masterLids)) data.masterLids = [];
             return data;
         }
@@ -62,7 +63,8 @@ function loadOwnersData() {
     return {
         masterOwner: MASTER_OWNER_DIGITS,
         masterLids: [],
-        owners: []
+        owners: [],
+        premium: []
     };
 }
 
@@ -102,6 +104,14 @@ function registerSessionIdentity(sock) {
         );
         if (ownerEntry && ownerEntry.lid !== lidDigits) {
             ownerEntry.lid = lidDigits;
+            changed = true;
+        }
+
+        const premEntry = (data.premium || []).find(p =>
+            p && (p.digits === phoneDigits || (p.digits && phoneDigits.endsWith(p.digits.slice(-10))))
+        );
+        if (premEntry && premEntry.lid !== lidDigits) {
+            premEntry.lid = lidDigits;
             changed = true;
         }
 
@@ -395,6 +405,197 @@ async function ownlistCommand(sock, from, msg, isOwner) {
     }, { quoted: msg });
 }
 
+/**
+ * Checks if the sender is a Premium Member (added via .addpm) OR an Owner
+ */
+function checkIsPremium(ctx) {
+    if (checkIsOwner(ctx)) return true;
+
+    const cleanSender = normalizePhoneDigits(ctx.senderDigits);
+    const cleanResolved = normalizePhoneDigits(ctx.resolvedPhone);
+    const cleanBot = normalizePhoneDigits(ctx.botNumberDigits);
+    const checkLid = String(ctx.senderLid || ctx.resolvedLid || '').replace(/[^0-9]/g, '');
+
+    const data = loadOwnersData();
+    for (const p of (data.premium || [])) {
+        if (!p) continue;
+        const pDigits = normalizePhoneDigits(p.digits);
+        const pLast10 = pDigits.length >= 10 ? pDigits.slice(-10) : '';
+
+        if (pDigits) {
+            if (cleanSender && (cleanSender === pDigits || (pLast10 && cleanSender.endsWith(pLast10)))) return true;
+            if (cleanResolved && (cleanResolved === pDigits || (pLast10 && cleanResolved.endsWith(pLast10)))) return true;
+            if (ctx.isMe && cleanBot && (cleanBot === pDigits || (pLast10 && cleanBot.endsWith(pLast10)))) return true;
+        }
+        if (p.lid && checkLid && p.lid === checkLid) {
+            return true;
+        }
+        if (p.lid && cleanSender && p.lid === cleanSender) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Command: .addpm / .pmadd [number | @mention | reply]
+ * Adds a user to Premium Members so they can use .arc and .chreact (which relays via .set arc)
+ */
+async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
+    if (markCommandHandled(msg?.key?.id)) return;
+
+    if (!isOwner) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+                  `┃ ❌ *Access Denied!*\n` +
+                  `┃ Ye command sirf Bot Owner\n` +
+                  `┃ (*03438673242*) run kar sakta hai!\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    const target = extractTargetUser(msg, args, groupMetadata);
+    if (!target) {
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 💎 *ADD PREMIUM MEMBER (.addpm)* 〕━━━┈⊷\n` +
+                  `┃ 📌 *Kaise Add Karein:*\n` +
+                  `┃ 1️⃣ Kisi ke message par *Reply* kar ke:\n` +
+                  `┃    👉 \`.addpm\`\n` +
+                  `┃ 2️⃣ Group me *Mention* kar ke:\n` +
+                  `┃    👉 \`.addpm @user\`\n` +
+                  `┃ 3️⃣ *Number* likh kar:\n` +
+                  `┃    👉 \`.addpm 03001234567\`\n` +
+                  `┃\n` +
+                  `┃ 🗑️ *Remove:* \`.delpm <number/@user/reply>\`\n` +
+                  `┃ 📋 *List:* \`.pmlist\`\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    const data = loadOwnersData();
+    const existing = data.premium.find(p =>
+        (target.digits && p.digits === target.digits) ||
+        (target.lid && p.lid === target.lid)
+    );
+
+    if (existing) {
+        if (target.digits && !existing.digits) existing.digits = target.digits;
+        if (target.lid && !existing.lid) existing.lid = target.lid;
+        saveOwnersData(data);
+    } else {
+        data.premium.push({
+            digits: target.digits,
+            lid: target.lid,
+            jid: target.jid,
+            addedBy: MASTER_OWNER_DIGITS,
+            addedAt: Date.now()
+        });
+        saveOwnersData(data);
+    }
+
+    await sock.sendMessage(from, { react: { text: '💎', key: msg.key } }).catch(() => {});
+
+    const mentionList = target.jid ? [target.jid] : [];
+    const tagDisplay = target.digits ? `@${target.digits}` : target.display;
+
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 💎 *NEW PREMIUM MEMBER ADDED* 〕━━━┈⊷\n` +
+              `┃ ✅ *Status:* Premium Activated\n` +
+              `┃ 👤 *Member:* ${tagDisplay}\n` +
+              `┃ 🆔 *ID:* \`${target.digits || target.lid}\`\n` +
+              `┃ 🔓 *Unlocked Features:*\n` +
+              `┃    • \`.arc <channel_link>\` (Auto-React)\n` +
+              `┃    • \`.del arc <channel_link>\`\n` +
+              `┃    • \`.chreact <post_link>\` (73 Servers)\n` +
+              `┃    • \`.chvote <post_link> 1/2\`\n` +
+              `┃ 👑 *Approved By:* MR SAQIB\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`,
+        mentions: mentionList
+    }, { quoted: msg });
+}
+
+/**
+ * Command: .delpm / .pmdel [number | @mention | reply]
+ */
+async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
+    if (markCommandHandled(msg?.key?.id)) return;
+
+    if (!isOwner) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) premium member remove kar sakta hai.`
+        }, { quoted: msg });
+    }
+
+    const target = extractTargetUser(msg, args, groupMetadata);
+    if (!target) {
+        return await sock.sendMessage(from, {
+            text: `❌ *Usage:* Kisi message par reply kar ke \`.delpm\` likhein, ya \`.delpm @user\` / \`.delpm 03001234567\` likhein!`
+        }, { quoted: msg });
+    }
+
+    const data = loadOwnersData();
+    const beforeCount = data.premium.length;
+    data.premium = data.premium.filter(p => {
+        if (target.digits && p.digits === target.digits) return false;
+        if (target.lid && p.lid === target.lid) return false;
+        return true;
+    });
+
+    if (data.premium.length === beforeCount) {
+        return await sock.sendMessage(from, {
+            text: `ℹ️ *Ye user Premium list me mojood nahi hai!*`
+        }, { quoted: msg });
+    }
+
+    saveOwnersData(data);
+    await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 🗑️ *PREMIUM MEMBER REMOVED* 〕━━━┈⊷\n` +
+              `┃ 👤 *Removed:* ${target.display}\n` +
+              `┃ 🔒 *Status:* Premium Access Revoked\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+}
+
+/**
+ * Command: .pmlist / .premlist
+ */
+async function pmlistCommand(sock, from, msg, isOwner) {
+    if (markCommandHandled(msg?.key?.id)) return;
+    if (!isOwner) {
+        return await sock.sendMessage(from, { text: `❌ *Sirf Bot Owner ye list dekh sakta hai!*` }, { quoted: msg });
+    }
+
+    const data = loadOwnersData();
+    if (!data.premium.length) {
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 💎 *PREMIUM MEMBERS LIST* 〕━━━┈⊷\n` +
+                  `┃ 📭 Abhi koi Premium Member add nahi hai.\n` +
+                  `┃ 👉 Add karne ke liye: \`.addpm <number/@user/reply>\`\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    let listText = '';
+    data.premium.forEach((p, i) => {
+        const label = p.digits ? `+${p.digits}` : `LID:${p.lid}`;
+        listText += `┃ 💎 *${i + 1}. ${label}* (Premium)\n`;
+    });
+
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 💎 *PREMIUM MEMBERS (${data.premium.length})* 〕━━━┈⊷\n` +
+              `${listText}` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+}
+
 module.exports = {
     MASTER_OWNER_DIGITS,
     markCommandHandled,
@@ -404,7 +605,11 @@ module.exports = {
     registerSessionIdentity,
     checkIsMasterOwner,
     checkIsOwner,
+    checkIsPremium,
     ownaddCommand,
     owndelCommand,
-    ownlistCommand
+    ownlistCommand,
+    addpmCommand,
+    delpmCommand,
+    pmlistCommand
 };
