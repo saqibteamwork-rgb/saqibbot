@@ -1,0 +1,77 @@
+{
+  "enabled": true,
+  "locked": false,
+  "passcode": "arc123",
+  "defaultEmoji": "❤️",
+  "channels": {
+    "120363421389121979@newsletter": {
+      "jid": "120363421389121979@newsletter",
+      "name": "Mr SAQIB",
+      "invite": "0029VbBTSK1EquiWrUt5uV1I",
+      "link": "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I",
+      "emojis": [
+        "❤️",
+        "🔥",
+        "👍",
+        "😍",
+        "👏"
+      ],
+      "count": 0,
+      "delayMs": 2000,
+      "delayStr": "2s",
+      "enabled": true,
+      "addedAt": 1794563468419,
+      "lastPostId": null
+    },
+    "120363426969260431@newsletter": {
+      "jid": "120363426969260431@newsletter",
+      "name": "SAQIB 2",
+      "invite": "0029Vb7iqdQF6smpgcWp6x0P",
+      "link": "https://whatsapp.com/channel/0029Vb7iqdQF6smpgcWp6x0P",
+      "emojis": [
+        "❤️",
+        "🔥",
+        "✨"
+      ],
+      "count": 0,
+      "delayMs": 3000,
+      "delayStr": "3s",
+      "enabled": true,
+      "addedAt": 1794400000000,
+      "lastPostId": null
+    },
+    "120363412259265847@newsletter": {
+      "jid": "120363412259265847@newsletter",
+      "name": "Mr SAQIB 2",
+      "invite": "0029VbDq09h6mYPPGlVMOT2c",
+      "link": "https://whatsapp.com/channel/0029VbDq09h6mYPPGlVMOT2c",
+      "emojis": [
+        "❤️",
+        "🔥"
+      ],
+      "count": 0,
+      "delayMs": 3000,
+      "delayStr": "3s",
+      "enabled": true,
+      "addedAt": 1794400000000,
+      "lastPostId": null
+    },
+    "120363431124302760@newsletter": {
+      "jid": "120363431124302760@newsletter",
+      "name": "Mr SAQIB 3",
+      "invite": "0029VbD8T4Q7dmeWEJNRCT0y",
+      "link": "https://whatsapp.com/channel/0029VbD8T4Q7dmeWEJNRCT0y",
+      "emojis": [
+        "❤️",
+        "🔥"
+      ],
+      "count": 0,
+      "delayMs": 3000,
+      "delayStr": "3s",
+      "enabled": true,
+      "addedAt": 1794400000000,
+      "lastPostId": null
+    }
+  },
+  "blocked": {}
+}
