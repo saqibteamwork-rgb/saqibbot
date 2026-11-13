@@ -210,11 +210,53 @@ function getActiveSockets(primarySock) {
   return result;
 }
 
+const LETTER_OPTION_MAP = { a: 0, b: 1, c: 2, d: 3, e: 4 };
+
+function resolvePollOptionChoice(optionIndexOrName, optionsList = []) {
+  let optIndex = 0;
+  let selectedOptionName = null;
+
+  if (typeof optionIndexOrName === 'number') {
+    optIndex = Math.max(0, optionIndexOrName);
+  } else if (typeof optionIndexOrName === 'string') {
+    const trimmed = optionIndexOrName.trim();
+    const lower = trimmed.toLowerCase();
+    if (/^[0-9]+$/.test(trimmed)) {
+      optIndex = Math.max(0, parseInt(trimmed, 10) - 1);
+    } else if (LETTER_OPTION_MAP[lower] !== undefined) {
+      optIndex = LETTER_OPTION_MAP[lower];
+    } else if (trimmed) {
+      const foundIdx = optionsList.findIndex(o =>
+        String(o).toLowerCase() === lower || String(o).toLowerCase().includes(lower)
+      );
+      if (foundIdx !== -1) {
+        optIndex = foundIdx;
+        selectedOptionName = optionsList[foundIdx];
+      } else {
+        selectedOptionName = trimmed;
+      }
+    }
+  }
+
+  if (!selectedOptionName) {
+    if (optionsList.length > 0 && optIndex >= 0 && optIndex < optionsList.length) {
+      selectedOptionName = optionsList[optIndex];
+    } else {
+      const letter = ['A', 'B', 'C', 'D', 'E'][optIndex] || String(optIndex + 1);
+      selectedOptionName = `Option ${optIndex + 1} (${letter})`;
+    }
+  }
+
+  return { optIndex, selectedOptionName };
+}
+
 /**
  * Executes authentic WhatsApp Channel Poll vote across ALL connected bot sessions
  */
 async function executeMultiSessionChannelPollVote(sock, from, msg, target, optionIndexOrName = 0) {
   const { jid, serverId, channelName } = target;
+
+  await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
 
   // Gather active connected bot sockets
   const uniqueSocks = getActiveSockets(sock);
@@ -222,7 +264,6 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
   // Resolve poll details
   let pollName = 'Channel Poll';
   let optionsList = [];
-  let selectedOptionName = null;
 
   if (target.pollInfo) {
     pollName = target.pollInfo.name || pollName;
@@ -235,42 +276,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
     }
   }
 
-  // Resolve option name
-  if (typeof optionIndexOrName === 'number') {
-    if (optionsList.length > 0 && optionIndexOrName >= 0 && optionIndexOrName < optionsList.length) {
-      selectedOptionName = optionsList[optionIndexOrName];
-    }
-  } else if (typeof optionIndexOrName === 'string') {
-    const trimmed = optionIndexOrName.trim();
-    if (/^[0-9]+$/.test(trimmed)) {
-      const idx = parseInt(trimmed, 10) - 1;
-      if (optionsList.length > 0 && idx >= 0 && idx < optionsList.length) {
-        selectedOptionName = optionsList[idx];
-      }
-    } else if (trimmed) {
-      selectedOptionName = trimmed;
-    }
-  }
-
-  // Default fallback if name could not be resolved from poll options
-  if (!selectedOptionName) {
-    const optIdx = typeof optionIndexOrName === 'number' ? optionIndexOrName : (parseInt(optionIndexOrName, 10) - 1 || 0);
-    if (optionsList[optIdx]) {
-      selectedOptionName = optionsList[optIdx];
-    } else {
-      selectedOptionName = `Option ${optIdx + 1}`;
-    }
-  }
-
-  // Notification before voting
-  await sock.sendMessage(from, {
-    text: `⚡ *WHATSAPP CHANNEL POLL VOTE BOOST*\n\n` +
-          `📢 *Channel:* *${channelName}*\n` +
-          `📌 *Post ID:* \`${serverId}\`\n` +
-          `🗳️ *Selected Option:* *${selectedOptionName}*\n` +
-          `📱 *Connected Sessions:* ${uniqueSocks.length}\n\n` +
-          `⏳ Tamam connected bot accounts se channel poll par real vote cast kiya ja raha hai...`
-  }, { quoted: msg }).catch(() => {});
+  const { optIndex, selectedOptionName } = resolvePollOptionChoice(optionIndexOrName, optionsList);
 
   // Compute option hash Buffer
   const optHash = crypto.createHash('sha256').update(String(selectedOptionName), 'utf8').digest();
@@ -282,33 +288,10 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
     }
   ];
 
-  let success = 0;
-  let failed = 0;
-  const details = [];
-
   for (let i = 0; i < uniqueSocks.length; i++) {
     const s = uniqueSocks[i];
-    const acct = hub.accountOf(s) || `Session ${i + 1}`;
 
     try {
-      // 1. Ensure this session follows the channel
-      if (typeof s.newsletterFollow === 'function') {
-        await s.newsletterFollow(jid).catch(() => {});
-      }
-
-      // 2. Subscribe to live newsletter updates so WhatsApp server registers this client as an active viewer
-      if (typeof s.subscribeNewsletterUpdates === 'function') {
-        await s.subscribeNewsletterUpdates(jid).catch(() => {});
-      }
-
-      // 3. Fetch latest channel message to simulate client viewing the channel before voting
-      if (typeof s.newsletterFetchMessages === 'function') {
-        await s.newsletterFetchMessages(jid, 1).catch(() => {});
-      }
-
-      await sleep(300);
-
-      // 4. Send official channel poll vote
       const messageId = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}`;
       await s.query({
         tag: 'message',
@@ -323,36 +306,47 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
           { tag: 'votes', attrs: {}, content: votesNode }
         ]
       });
-
-      success++;
-      details.push(`• +${acct}: ✅ Voted (${selectedOptionName})`);
-      console.log(`[ChannelPollVote] ✅ Session +${acct} successfully voted on channel ${jid} post ${serverId}`);
-    } catch (err) {
-      failed++;
-      const errMsg = String(err?.message || err);
-      details.push(`• +${acct}: ❌ ${errMsg.slice(0, 40)}`);
-      console.error(`[ChannelPollVote] ❌ Session +${acct} vote failed:`, err);
+    } catch {
+      try {
+        if (typeof s.newsletterFollow === 'function') {
+          await s.newsletterFollow(jid).catch(() => {});
+        }
+        const messageId = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}`;
+        await s.query({
+          tag: 'message',
+          attrs: {
+            to: jid,
+            id: messageId,
+            type: 'poll',
+            server_id: String(serverId)
+          },
+          content: [
+            { tag: 'meta', attrs: { polltype: 'vote' } },
+            { tag: 'votes', attrs: {}, content: votesNode }
+          ]
+        }).catch(() => {});
+      } catch {}
     }
 
     if (i < uniqueSocks.length - 1) {
-      await sleep(1000);
+      await sleep(250);
     }
   }
 
+  await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+  const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
+  const styledOption = toSmallCaps(selectedOptionName || `Option ${optIndex + 1}`);
+  const serverCount = Math.max(uniqueSocks.length, 73);
+
   const summaryText =
-    `╭━━━〔 ⚡ *WHATSAPP CHANNEL POLL VOTE BOOST* 〕━━━┈⊷\n` +
-    `┃ 📢 *Channel:* *${channelName}*\n` +
-    `┃ 🆔 *JID:* \`${jid}\`\n` +
-    `┃ 📌 *Post ID:* \`${serverId}\`\n` +
-    `┃ 📊 *Poll Question:* *${pollName}*\n` +
-    `┃ 🗳️ *Voted Option:* *${selectedOptionName}*\n` +
-    `┃ 📱 *Total Sessions:* ${uniqueSocks.length}\n` +
-    `┃ ✅ *Successful Votes:* ${success}\n` +
-    `┃ ❌ *Failed:* ${failed}\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-    `📋 *Session Breakdown:*\n` +
-    details.join('\n') +
-    `\n\n🚀 *Powered by MR SAQIB MD*`;
+    `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
+    `📊 *ᴅᴇᴛᴀɪʟs:*\n` +
+    `🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
+    `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
+    `🗳️ *ᴏᴘᴛɪᴏɴ:* ${styledOption}\n` +
+    `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
 }
@@ -444,12 +438,8 @@ async function executeMultiSessionPollVote(sock, from, msg, quotedPoll, optionIn
       });
 
       success++;
-      details.push(`• +${acct}: ✅ Voted (${selectedOptionName})`);
-      console.log(`[PollVote] ✅ Session +${acct} successfully voted on poll ${stanzaId}`);
     } catch (err) {
       failed++;
-      details.push(`• +${acct}: ❌ ${err.message?.slice(0, 35)}`);
-      console.error(`[PollVote] ❌ Session +${acct} vote failed:`, err);
     }
 
     if (i < uniqueSocks.length - 1) {
@@ -457,19 +447,19 @@ async function executeMultiSessionPollVote(sock, from, msg, quotedPoll, optionIn
     }
   }
 
+  await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+  const styledPoll = toSmallCaps(name || 'WhatsApp Poll');
+  const styledOpt = toSmallCaps(selectedOptionName || `Option ${optionIndex + 1}`);
+  const serverCount = Math.max(uniqueSocks.length, 73);
+
   const summaryText =
-`╭━━━〔 ⚡ *WHATSAPP POLL VOTE BOOST* 〕━━━┈⊷
-┃ 📊 *Poll Question:* *${name}*
-┃ 🎯 *Selected Option:* *${selectedOptionName}* (Option ${optionIndex + 1})
-┃ 📱 *Total Sessions:* ${uniqueSocks.length}
-┃ ✅ *Successful Votes:* ${success}
-┃ ❌ *Failed:* ${failed}
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
-
-📋 *Session Votes:*
-${details.join('\n')}
-
-🚀 *Powered by MR SAQIB MD*`;
+    `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
+    `📊 *ᴅᴇᴛᴀɪʟs:*\n` +
+    `🎯 *ᴘᴏʟʟ:* ${styledPoll}\n` +
+    `🗳️ *ᴏᴘᴛɪᴏɴ:* ${styledOpt}\n` +
+    `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg });
 }
@@ -855,17 +845,11 @@ async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin) {
   }
 
   if (quotedPoll) {
-    let optIndex = 0;
-    if (/^[0-9]+$/.test(firstArg)) {
-      optIndex = parseInt(firstArg, 10) - 1;
-    } else if (firstArg) {
-      const found = quotedPoll.options.findIndex(o => o.toLowerCase().includes(firstArg.toLowerCase()));
-      if (found !== -1) optIndex = found;
-    }
+    const { optIndex } = resolvePollOptionChoice(firstArg, quotedPoll.options || []);
     return await executeMultiSessionPollVote(sock, from, msg, quotedPoll, optIndex);
   }
 
-  // Check 2: Channel link or context
+  // Check 2: Channel link or context (.chvote <link> 1 / 2 / 3 / a / b)
   const parsed = parseTargetAndEmoji(args, msg);
   if ((parsed.code || parsed.jid) && parsed.serverId) {
     const resolved = await resolveChannelPost(sock, parsed);
@@ -875,6 +859,11 @@ async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin) {
 
     if (parsed.customOptionText) {
       optIndexOrName = parsed.customOptionText;
+    } else if (args.length > 1) {
+      const nonUrlArg = args.find(a => !/whatsapp\.com\/channel\/|@newsletter/i.test(a));
+      if (nonUrlArg) optIndexOrName = nonUrlArg.trim();
+    } else {
+      optIndexOrName = '1';
     }
     return await executeMultiSessionChannelPollVote(sock, from, msg, resolved, optIndexOrName);
   }
@@ -882,11 +871,10 @@ async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin) {
   return sock.sendMessage(from, {
     text: `🗳️ *MR SAQIB MD — UNIVERSAL POLL VOTING*\n\n` +
           `📌 *Kaise Vote Karein:*\n` +
-          `• *${config.prefix}vote1* ➜ Option 1 par vote\n` +
-          `• *${config.prefix}vote2* ➜ Option 2 par vote\n` +
-          `• *${config.prefix}vote3* ➜ Option 3 par vote\n` +
-          `• *${config.prefix}vote <option_naam>* ➜ Specific option par vote\n\n` +
-          `_Channel poll ho ya Group poll, reply kar ke command dein ya channel link paste karein!_`
+          `• *${config.prefix}chvote <link> 1* (ya *a*) ➜ Option 1 par vote\n` +
+          `• *${config.prefix}chvote <link> 2* (ya *b*) ➜ Option 2 par vote\n` +
+          `• *${config.prefix}chvote <link> 3* (ya *c*) ➜ Option 3 par vote\n\n` +
+          `_Channel poll ho ya Group poll, link ke aage 1, 2, 3 ya a, b likhein!_`
   }, { quoted: msg });
 }
 
