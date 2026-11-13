@@ -611,7 +611,7 @@ const messageLogs = {};
 
 // Expose active sessions to channelHub and multi-session plugins
 global.ProBoySessionManager = {
-    getActiveSocks: () => Object.values(sessions).filter(s => s && s.sock && (s.isConnected || s.sock.user?.id)).map(s => s.sock),
+    getActiveSocks: () => Object.values(sessions).filter(s => s && s.sock && s.isConnected && channelHub.isOpen(s.sock)).map(s => s.sock),
     getSessions: () => sessions
 };
 

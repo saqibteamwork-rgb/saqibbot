@@ -82,32 +82,33 @@ function normalizeChannelInput(str) {
 }
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+const withTimeout = (promise, ms = 6000) => Promise.race([
+  promise,
+  new Promise((_, reject) => setTimeout(() => reject(new Error('Request timeout')), ms))
+]);
 const arcReactedPosts = new Set();
 
 /**
- * Automatically joins/follows a channel across ALL connected bot accounts
+ * Automatically joins/follows a channel across ALL connected bot accounts (parallel & timeout-guarded)
  */
 async function joinChannelAcrossAllSessions(primarySock, targetJid, inviteCode = null) {
   const uniqueSocks = getActiveSockets(primarySock);
   const results = [];
 
-  for (const s of uniqueSocks) {
+  await Promise.allSettled(uniqueSocks.map(async (s) => {
     const acct = hub.accountOf(s) || 'Session';
     try {
-      if (inviteCode && typeof s.newsletterMetadata === 'function') {
-        await s.newsletterMetadata('invite', inviteCode).catch(() => {});
-      }
       if (typeof s.newsletterFollow === 'function') {
-        await s.newsletterFollow(targetJid).catch(() => {});
+        await withTimeout(s.newsletterFollow(targetJid), 5000).catch(() => {});
       }
       if (typeof s.subscribeNewsletterUpdates === 'function') {
-        await s.subscribeNewsletterUpdates(targetJid).catch(() => {});
+        await withTimeout(s.subscribeNewsletterUpdates(targetJid), 5000).catch(() => {});
       }
       results.push({ account: acct, success: true });
     } catch (e) {
       results.push({ account: acct, success: false, error: e.message });
     }
-  }
+  }));
 
   return { uniqueSocks, results };
 }
@@ -127,8 +128,8 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
     arcReactedPosts.delete(firstKey);
   }
 
-  // Delay if configured (default: 3000ms)
-  const delayMs = conf.delayMs || 3000;
+  // Delay if configured (default: 1500ms)
+  const delayMs = conf.delayMs || 1500;
   if (delayMs > 0) {
     await sleep(delayMs);
   }
@@ -136,7 +137,7 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
   const uniqueSocks = getActiveSockets(primarySock);
   const emojis = (Array.isArray(conf.emojis) && conf.emojis.length > 0)
     ? conf.emojis
-    : (conf.emoji ? [conf.emoji] : ['❤️']);
+    : (conf.emoji ? [conf.emoji] : ['❤️', '🔥', '👍', '😍', '👏']);
 
   const targetCount = (conf.count && conf.count > 0)
     ? Math.min(conf.count, uniqueSocks.length)
@@ -150,17 +151,17 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
     const emoji = emojis[i % emojis.length];
     try {
       if (typeof s.newsletterFollow === 'function') {
-        await s.newsletterFollow(channelJid).catch(() => {});
+        await withTimeout(s.newsletterFollow(channelJid), 4000).catch(() => {});
       }
       if (typeof s.newsletterReactMessage === 'function') {
-        await s.newsletterReactMessage(channelJid, String(serverId), emoji);
+        await withTimeout(s.newsletterReactMessage(channelJid, String(serverId), emoji), 5000);
         successCount++;
       }
     } catch (e) {
       console.error(`[ARC Reaction Error] Session ${hub.accountOf(s)} failed:`, e.message);
     }
     if (i < targetCount - 1) {
-      await sleep(350);
+      await sleep(250);
     }
   }
 
@@ -245,57 +246,84 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
     let channelName = 'WhatsApp Channel';
     let inviteCode = norm.code || null;
 
-    // Resolve invite code to JID and Name via Baileys (try across active sockets for reliability)
-    const activeSocks = getActiveSockets(sock);
+    // 1. Check local channelHub cache first for 0ms resolution
+    if (norm.code && !targetJid) {
+      try {
+        const cachedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
+        const cached = cachedList.find(c => c && c.invite === norm.code && c.jid);
+        if (cached) {
+          targetJid = cached.jid;
+          if (cached.name) channelName = cached.name;
+        }
+      } catch {}
+    }
+
+    // 2. Resolve invite code to JID and Name via Baileys with strict timeout
     if (norm.code) {
-      let resolvedMeta = null;
-      for (const s of activeSocks) {
-        try {
-          if (typeof s.newsletterMetadata === 'function') {
-            resolvedMeta = await s.newsletterMetadata('invite', norm.code);
-            if (resolvedMeta?.id) break;
+      try {
+        if (typeof hub.resolveInvite === 'function') {
+          const res = await withTimeout(hub.resolveInvite(sock, norm.code), 7000);
+          if (res?.rec?.jid) {
+            targetJid = res.rec.jid;
+            channelName = res.rec.name || res.meta?.name || channelName;
+            inviteCode = res.rec.invite || res.meta?.invite || inviteCode;
           }
-        } catch {}
-      }
-      if (resolvedMeta?.id) {
-        targetJid = resolvedMeta.id;
-        channelName = resolvedMeta.name || resolvedMeta.thread_metadata?.name?.text || channelName;
-        inviteCode = resolvedMeta.invite || resolvedMeta.code || resolvedMeta.thread_metadata?.invite || inviteCode;
-      } else {
-        try {
-          const fallbackTarget = await hub.resolveTarget(sock, rawLink);
-          if (fallbackTarget?.jid) {
-            targetJid = fallbackTarget.jid;
-            channelName = fallbackTarget.channelName || channelName;
+        } else if (typeof sock.newsletterMetadata === 'function') {
+          const rawMeta = await withTimeout(sock.newsletterMetadata('invite', norm.code), 7000);
+          const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
+          if (parsedMeta?.jid || parsedMeta?.id) {
+            targetJid = parsedMeta.jid || parsedMeta.id;
+            const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
+            if (typeof n === 'string' && n) channelName = n;
+            inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
           }
-        } catch {}
+        }
+      } catch (e) {
+        // Fallback to any other open session if primary sock failed
+        const activeSocks = getActiveSockets(sock);
+        for (const s of activeSocks) {
+          if (s === sock) continue;
+          try {
+            const rawMeta = await withTimeout(s.newsletterMetadata('invite', norm.code), 5000);
+            const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
+            if (parsedMeta?.jid || parsedMeta?.id) {
+              targetJid = parsedMeta.jid || parsedMeta.id;
+              const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
+              if (typeof n === 'string' && n) channelName = n;
+              inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
+              break;
+            }
+          } catch {}
+        }
       }
+
       if (!targetJid) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
         return await sock.sendMessage(from, { text: `❌ *Channel link resolve nahi ho saka! Link check karein.*` }, { quoted: msg });
       }
     } else if (targetJid) {
-      for (const s of activeSocks) {
-        try {
-          if (typeof s.newsletterMetadata === 'function') {
-            const metadata = await s.newsletterMetadata('jid', targetJid);
-            if (metadata) {
-              channelName = metadata.name || metadata.thread_metadata?.name?.text || channelName;
-              inviteCode = metadata.invite || metadata.code || metadata.thread_metadata?.invite || inviteCode;
-              break;
-            }
+      try {
+        if (typeof sock.newsletterMetadata === 'function') {
+          const rawMeta = await withTimeout(sock.newsletterMetadata('jid', targetJid), 6000);
+          const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
+          if (parsedMeta) {
+            const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
+            if (typeof n === 'string' && n) channelName = n;
+            inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
           }
-        } catch {}
-      }
+        }
+      } catch {}
     }
 
     if (!targetJid) {
+      await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
       return await sock.sendMessage(from, { text: "❌ *Channel resolve nahi ho saka!*" }, { quoted: msg });
     }
 
     // Parse options: emojis, count, delay
     let emojisArg = rawParams[1] || '❤️,🔥,👍,😍,👏';
     let countArg = rawParams[2] || 'all';
-    let delayArg = rawParams[3] || '3s';
+    let delayArg = rawParams[3] || '2s';
 
     // Handle shifting if a param was skipped
     if (emojisArg && (emojisArg.endsWith('s') || /^[0-9]+$/.test(emojisArg))) {
@@ -307,9 +335,7 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
     const delayMs = parseDelay(delayArg);
     const count = (countArg.toLowerCase() === 'all' || isNaN(parseInt(countArg, 10))) ? 0 : parseInt(countArg, 10);
 
-    // Auto Follow/Join across ALL connected bot accounts
-    const joinResult = await joinChannelAcrossAllSessions(sock, targetJid, inviteCode);
-
+    // Save ARC Channel data immediately so nothing blocks confirmation!
     data.enabled = true;
     if (data.blocked && data.blocked[targetJid]) {
       delete data.blocked[targetJid];
@@ -332,18 +358,18 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
 
     saveArcData(data);
 
+    const totalSessions = getActiveSockets(sock).length;
+
+    // Immediately react ✅ and send confirmation message!
     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
 
-    const joinedCount = joinResult.results.filter(r => r.success).length;
-    const totalSessions = joinResult.uniqueSocks.length;
-
-    return await sock.sendMessage(from, {
+    await sock.sendMessage(from, {
       text:
 `╭━━━〔 ✅ *CHANNEL AUTO-REACT ADDED* 〕━━━┈⊷
 ┃ 📢 *Channel:* *${channelName}*
 ┃ 🆔 *JID:* \`${targetJid}\`
 ┃ ✨ *Emojis:* ${emojisList.join(' ')}
-┃ 👥 *Auto-Followed:* ${joinedCount}/${totalSessions} Bot Accounts
+┃ 👥 *Active Sessions:* ${totalSessions} Bot Accounts
 ┃ 📲 *Self-Inbox (.chreact):* 03438673242 (You)
 ┃ 🟢 *Status:* Active & Monitoring
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
@@ -355,6 +381,10 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
 🗑️ *Remove karne ke liye:*
 👉 \`.del arc ${canonicalLink}\``
     }, { quoted: msg });
+
+    // Auto Follow/Join across all connected bot accounts in background (non-blocking)
+    joinChannelAcrossAllSessions(sock, targetJid, inviteCode).catch(() => {});
+    return;
   }
 
   // Default Status Dashboard
@@ -431,20 +461,17 @@ async function arcdelCommand(sock, from, msg, isOwner, args = []) {
     if (byInvite) targetJid = byInvite;
   }
 
-  // 2. Fallback: resolve via newsletterMetadata across active sockets
+  // 2. Fallback: resolve via newsletterMetadata with timeout
   if (!targetJid && norm?.code) {
-    const activeSocks = getActiveSockets(sock);
-    for (const s of activeSocks) {
-      try {
-        if (typeof s.newsletterMetadata === 'function') {
-          const meta = await s.newsletterMetadata('invite', norm.code);
-          if (meta?.id) {
-            targetJid = meta.id;
-            break;
-          }
+    try {
+      if (typeof sock.newsletterMetadata === 'function') {
+        const rawMeta = await withTimeout(sock.newsletterMetadata('invite', norm.code), 5000);
+        const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
+        if (parsedMeta?.jid || parsedMeta?.id) {
+          targetJid = parsedMeta.jid || parsedMeta.id;
         }
-      } catch {}
-    }
+      }
+    } catch {}
   }
   if (!targetJid) targetJid = raw;
 

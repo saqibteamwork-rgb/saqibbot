@@ -194,7 +194,7 @@ function getActiveSockets(primarySock) {
     const acct = hub.accountOf(s);
     if (!acct) return;
     if (seen.has(acct)) return;
-    const isUp = Boolean(hub.isOpen(s) || s.ws?.isOpen || s.ws?.readyState === 1 || s.user?.id);
+    const isUp = Boolean(hub.isOpen(s) || s.ws?.isOpen === true || s.ws?.readyState === 1);
     if (isUp) {
       seen.add(acct);
       result.push(s);
