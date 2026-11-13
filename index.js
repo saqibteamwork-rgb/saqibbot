@@ -1026,7 +1026,27 @@ class BotSession {
                             try {
                                 const arcData = channelMenuCmds.loadArcData();
                                 if (arcData.enabled && !arcData.blocked?.[from]) {
-                                    const conf = arcData.channels?.[from];
+                                    let conf = arcData.channels?.[from];
+                                    if (!conf && arcData.channels) {
+                                        const chRec = typeof channelHub.getChannel === 'function' ? channelHub.getChannel(from) : null;
+                                        const chInvite = chRec?.invite || null;
+                                        if (chInvite) {
+                                            const matchedKey = Object.keys(arcData.channels).find(k => {
+                                                const c = arcData.channels[k];
+                                                return c && (c.invite === chInvite || (c.link && c.link.includes(chInvite)));
+                                            });
+                                            if (matchedKey) {
+                                                conf = arcData.channels[matchedKey];
+                                                if (matchedKey !== from) {
+                                                    conf.jid = from;
+                                                    if (chRec?.name && (!conf.name || conf.name === 'WhatsApp Channel')) conf.name = chRec.name;
+                                                    arcData.channels[from] = conf;
+                                                    delete arcData.channels[matchedKey];
+                                                    channelMenuCmds.saveArcData(arcData);
+                                                }
+                                            }
+                                        }
+                                    }
                                     if (conf && conf.enabled !== false) {
                                         const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
                                         if (serverId) {

@@ -246,11 +246,34 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
     let channelName = 'WhatsApp Channel';
     let inviteCode = norm.code || null;
 
-    // 1. Check local channelHub cache first for 0ms resolution
+    // Extract link preview metadata if attached by WhatsApp client
+    const extMsg = msg?.message?.extendedTextMessage || msg?.message?.ephemeralMessage?.message?.extendedTextMessage || {};
+    const previewTitle = extMsg?.title || extMsg?.contextInfo?.forwardedNewsletterMessageInfo?.newsletterName || null;
+    const previewJid = extMsg?.contextInfo?.forwardedNewsletterMessageInfo?.newsletterJid || null;
+    if (previewTitle && typeof previewTitle === 'string') {
+      channelName = previewTitle.replace(/\s*\|\s*WhatsApp Channel$/i, '').trim() || channelName;
+    }
+    if (!targetJid && previewJid && String(previewJid).endsWith('@newsletter')) {
+      targetJid = previewJid;
+    }
+
+    // 1. Check local caches first for 0ms instant resolution (ARC list, channels_v1.json, my_admin_channels.json)
+    if (norm.code && !targetJid) {
+      try {
+        const existingArc = Object.values(data.channels || {}).find(c =>
+          c && (c.invite === norm.code || (c.link && c.link.includes(norm.code))) && c.jid && !c.jid.startsWith(norm.code)
+        );
+        if (existingArc) {
+          targetJid = existingArc.jid;
+          if (existingArc.name && existingArc.name !== 'WhatsApp Channel') channelName = existingArc.name;
+        }
+      } catch {}
+    }
+
     if (norm.code && !targetJid) {
       try {
         const cachedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
-        const cached = cachedList.find(c => c && c.invite === norm.code && c.jid);
+        const cached = cachedList.find(c => c && (c.invite === norm.code || (c.link && c.link.includes(norm.code))) && c.jid);
         if (cached) {
           targetJid = cached.jid;
           if (cached.name) channelName = cached.name;
@@ -258,59 +281,64 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
       } catch {}
     }
 
-    // 2. Resolve invite code to JID and Name via Baileys with strict timeout
-    if (norm.code) {
+    if (norm.code && !targetJid) {
       try {
-        if (typeof hub.resolveInvite === 'function') {
-          const res = await withTimeout(hub.resolveInvite(sock, norm.code), 7000);
-          if (res?.rec?.jid) {
-            targetJid = res.rec.jid;
-            channelName = res.rec.name || res.meta?.name || channelName;
-            inviteCode = res.rec.invite || res.meta?.invite || inviteCode;
-          }
-        } else if (typeof sock.newsletterMetadata === 'function') {
-          const rawMeta = await withTimeout(sock.newsletterMetadata('invite', norm.code), 7000);
-          const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
-          if (parsedMeta?.jid || parsedMeta?.id) {
-            targetJid = parsedMeta.jid || parsedMeta.id;
-            const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
-            if (typeof n === 'string' && n) channelName = n;
-            inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
+        if (typeof hub.readAdminFile === 'function') {
+          const adminDoc = hub.readAdminFile() || {};
+          for (const acc of Object.values(adminDoc.accounts || {})) {
+            const found = (acc.channels || []).find(c =>
+              c && (c.invite === norm.code || (c.link && c.link.includes(norm.code))) && c.jid
+            );
+            if (found) {
+              targetJid = found.jid;
+              if (found.name) channelName = found.name;
+              break;
+            }
           }
         }
-      } catch (e) {
-        // Fallback to any other open session if primary sock failed
-        const activeSocks = getActiveSockets(sock);
-        for (const s of activeSocks) {
-          if (s === sock) continue;
-          try {
-            const rawMeta = await withTimeout(s.newsletterMetadata('invite', norm.code), 5000);
+      } catch {}
+    }
+
+    // 2. ONLY if still not resolved from local cache, try fast sync + single 2.5s metadata lookup
+    if (norm.code && !targetJid) {
+      try {
+        if (typeof hub.syncMyChannels === 'function') {
+          await withTimeout(hub.syncMyChannels(sock, { force: true }), 2500);
+          const syncedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
+          const synced = syncedList.find(c => c && (c.invite === norm.code || (c.link && c.link.includes(norm.code))) && c.jid);
+          if (synced) {
+            targetJid = synced.jid;
+            if (synced.name) channelName = synced.name;
+          }
+        }
+      } catch {}
+
+      if (!targetJid) {
+        try {
+          if (typeof sock.newsletterMetadata === 'function') {
+            const rawMeta = await withTimeout(sock.newsletterMetadata('invite', norm.code), 2500);
             const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
             if (parsedMeta?.jid || parsedMeta?.id) {
               targetJid = parsedMeta.jid || parsedMeta.id;
               const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
               if (typeof n === 'string' && n) channelName = n;
               inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
-              break;
             }
-          } catch {}
-        }
+          }
+        } catch {}
       }
 
+      // Guaranteed instant fallback so .arc never gets stuck or fails if WhatsApp GraphQL invite lookup times out
       if (!targetJid) {
-        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
-        return await sock.sendMessage(from, { text: `❌ *Channel link resolve nahi ho saka! Link check karein.*` }, { quoted: msg });
+        targetJid = `${norm.code}@newsletter`;
       }
-    } else if (targetJid) {
+    } else if (targetJid && (!inviteCode || channelName === 'WhatsApp Channel')) {
       try {
-        if (typeof sock.newsletterMetadata === 'function') {
-          const rawMeta = await withTimeout(sock.newsletterMetadata('jid', targetJid), 6000);
-          const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
-          if (parsedMeta) {
-            const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
-            if (typeof n === 'string' && n) channelName = n;
-            inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
-          }
+        const cachedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
+        const cached = cachedList.find(c => c && c.jid === targetJid);
+        if (cached) {
+          if (cached.name && channelName === 'WhatsApp Channel') channelName = cached.name;
+          if (cached.invite && !inviteCode) inviteCode = cached.invite;
         }
       } catch {}
     }

@@ -68,7 +68,16 @@ function loadArcChannelConf(channelJid) {
             const arcData = fs.readJsonSync(ARC_FILE) || {};
             if (arcData.enabled === false) return null;
             if (arcData.blocked && arcData.blocked[channelJid]) return null;
-            const conf = arcData.channels && arcData.channels[channelJid];
+            let conf = arcData.channels && arcData.channels[channelJid];
+            if (!conf && arcData.channels) {
+                const chRec = typeof hub.getChannel === 'function' ? hub.getChannel(channelJid) : null;
+                const chInvite = chRec?.invite || null;
+                if (chInvite) {
+                    conf = Object.values(arcData.channels).find(c =>
+                        c && c.enabled !== false && (c.invite === chInvite || (c.link && c.link.includes(chInvite)))
+                    );
+                }
+            }
             if (conf && conf.enabled !== false) return conf;
         }
     } catch {}

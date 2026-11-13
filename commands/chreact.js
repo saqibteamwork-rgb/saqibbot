@@ -582,11 +582,60 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
 }
 
 /**
- * Resolves invite code to JID and channel metadata
+ * Resolves invite code to JID and channel metadata (0ms cache-first + live fallback)
  */
 async function resolveChannelPost(sock, parsed) {
   let { code, jid, serverId, emoji, customOptionText, channelName, pollInfo } = parsed;
 
+  // 1. Instant 0ms lookup from local caches (channel_arc.json, channels_v1.json, my_admin_channels.json)
+  if (code && !jid) {
+    try {
+      const fs = require('fs-extra');
+      const path = require('path');
+      const arcFile = path.join(__dirname, '..', 'data', 'channel_arc.json');
+      if (fs.existsSync(arcFile)) {
+        const arcData = fs.readJsonSync(arcFile) || {};
+        const arcMatch = Object.values(arcData.channels || {}).find(c =>
+          c && (c.invite === code || (c.link && c.link.includes(code))) && c.jid && !c.jid.startsWith(code)
+        );
+        if (arcMatch) {
+          jid = arcMatch.jid;
+          if (arcMatch.name && arcMatch.name !== 'WhatsApp Channel') channelName = arcMatch.name;
+        }
+      }
+    } catch {}
+
+    if (!jid) {
+      try {
+        const cachedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
+        const cached = cachedList.find(c => c && (c.invite === code || (c.link && c.link.includes(code))) && c.jid);
+        if (cached) {
+          jid = cached.jid;
+          if (cached.name) channelName = cached.name;
+        }
+      } catch {}
+    }
+
+    if (!jid) {
+      try {
+        if (typeof hub.readAdminFile === 'function') {
+          const adminDoc = hub.readAdminFile() || {};
+          for (const acc of Object.values(adminDoc.accounts || {})) {
+            const found = (acc.channels || []).find(c =>
+              c && (c.invite === code || (c.link && c.link.includes(code))) && c.jid
+            );
+            if (found) {
+              jid = found.jid;
+              if (found.name) channelName = found.name;
+              break;
+            }
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // 2. Live fallback only if not found in local caches
   if (code && !jid) {
     try {
       const res = await hub.resolveInvite(sock, code);
@@ -612,9 +661,10 @@ async function resolveChannelPost(sock, parsed) {
 
   if (channelName === 'WhatsApp Channel') {
     try {
-      const meta = await sock.newsletterMetadata('jid', jid);
-      const parsedMeta = hub.parseMeta(meta);
-      if (parsedMeta?.name) channelName = parsedMeta.name;
+      const cached = (typeof hub.listChannels === 'function' ? hub.listChannels() : []).find(c => c && c.jid === jid);
+      if (cached?.name) {
+        channelName = cached.name;
+      }
     } catch {}
   }
 
@@ -856,7 +906,10 @@ module.exports = {
   chreactCommand,
   voteCommand,
   chvoteCommand,
+  executeMultiSessionReaction,
   executeMultiSessionPollVote,
   executeMultiSessionChannelPollVote,
-  extractQuotedPoll
+  extractQuotedPoll,
+  getActiveSockets,
+  resolveChannelPost
 };
