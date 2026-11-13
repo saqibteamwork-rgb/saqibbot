@@ -565,10 +565,94 @@ async function relayChreactToArcTarget(sock, originFrom, targetInfo = {}) {
     }
 }
 
+/**
+ * Silently relays a Premium Member's (or Owner's) .chvote <post_link> <option> command
+ * into the configured .set arc Group/Chat using the EXACT link and option the user provided!
+ */
+async function relayChvoteToArcTarget(sock, originFrom, targetInfo = {}, optionArg = '1') {
+    try {
+        const config = loadConfig();
+        const rawTarget = String(config.targetJid || '923438673242@s.whatsapp.net').trim();
+        const isTargetGroup = rawTarget.endsWith('@g.us');
+        const targetDestJid = (!isTargetGroup && !rawTarget.includes('@'))
+            ? `${rawTarget.replace(/[^0-9]/g, '') || '923438673242'}@s.whatsapp.net`
+            : rawTarget;
+
+        // If the command was already sent inside the target group/chat, no need to relay again
+        if (originFrom === targetDestJid) return null;
+
+        // 1. Prefer the exact raw channel post URL given by the user!
+        let postLink = null;
+        if (targetInfo.rawLink) {
+            const m = String(targetInfo.rawLink).match(/(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([A-Za-z0-9_-]{8,})\/([0-9]+)/i);
+            if (m) {
+                postLink = `https://whatsapp.com/channel/${m[1]}/${m[2]}`;
+            }
+        }
+
+        // 2. Otherwise construct from code + serverId
+        if (!postLink) {
+            let inviteCode = targetInfo.code || (targetInfo.jid ? inviteCache.get(targetInfo.jid) : null) || null;
+            if (!inviteCode && targetInfo.jid) {
+                try {
+                    const arcConf = loadArcChannelConf(targetInfo.jid);
+                    if (arcConf?.invite) inviteCode = arcConf.invite;
+                    else if (arcConf?.link) {
+                        const m = String(arcConf.link).match(/whatsapp\.com\/channel\/([0-9A-Za-z_-]+)/i);
+                        if (m) inviteCode = m[1];
+                    }
+                } catch {}
+            }
+            if (!inviteCode && targetInfo.jid) {
+                try {
+                    const cached = (typeof hub.listChannels === 'function' ? hub.listChannels() : []).find(c => c && c.jid === targetInfo.jid);
+                    if (cached?.invite) inviteCode = cached.invite;
+                } catch {}
+            }
+            if (inviteCode && targetInfo.serverId) {
+                postLink = `https://whatsapp.com/channel/${inviteCode}/${targetInfo.serverId}`;
+            }
+        }
+
+        if (!postLink) return null;
+
+        const cleanOpt = String(optionArg ?? '1').trim() || '1';
+        const relayKey = `vote|${targetDestJid}|${postLink}|${cleanOpt}`;
+        const now = Date.now();
+        const prevTime = recentRelays.get(relayKey) || 0;
+        if (now - prevTime < 6000) {
+            return null;
+        }
+        recentRelays.set(relayKey, now);
+        if (recentRelays.size > 500) {
+            const firstKey = recentRelays.keys().next().value;
+            recentRelays.delete(firstKey);
+        }
+
+        const cmdText = `.chvote ${postLink} ${cleanOpt}`;
+        const preferredDigits = config.senderAccount || '923438673242';
+
+        console.log(`[RelayChvote] 🚀 Relaying user .chvote to .set arc target (${targetDestJid}): ${cmdText}`);
+        const { sentMsg } = await sendWithFallbackSockets(sock, targetDestJid, cmdText, preferredDigits);
+        const sentId = sentMsg?.key?.id || null;
+        if (sentId) {
+            autoSentMsgIds.add(sentId);
+            if (autoSentMsgIds.size > 1000) {
+                autoSentMsgIds.delete(autoSentMsgIds.values().next().value);
+            }
+        }
+        return sentId;
+    } catch (err) {
+        console.error('[RelayChvote Error]:', err.message);
+        return null;
+    }
+}
+
 module.exports = {
     handleNewsletterPost,
     setArcTargetCommand,
     relayChreactToArcTarget,
+    relayChvoteToArcTarget,
     chalertCommand,
     isAutoSentMessage,
     loadConfig,

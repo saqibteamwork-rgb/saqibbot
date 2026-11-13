@@ -1028,6 +1028,7 @@ class BotSession {
 
                         // Auto Channel Reaction (ARC) & Self-Inbox .chreact Forwarder (ONLY for channels added via .arc)
                         if (from && from.endsWith('@newsletter')) {
+                            try { savePollMessage(msg); } catch (e) {}
                             try {
                                 const arcData = channelMenuCmds.loadArcData();
                                 if (arcData.enabled && !arcData.blocked?.[from]) {
@@ -1677,7 +1678,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await voteCommand(this.sock, from, msg, args, isOwner, isAdmin, 4);
                                             break;
                                         case 'chvote': case 'channelvote': case 'vote':
-                                            await chvoteCommand(this.sock, from, msg, args, isOwner, isAdmin);
+                                            await chvoteCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium);
                                             break;
 
                                         // ===== NEW UPGRADE: Multimedia & Essential Tools (Mmm-main & Server2-main) =====

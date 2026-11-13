@@ -68,6 +68,97 @@ function persistPolls() {
     }, 1500);
 }
 
+// Universal helper to extract poll question & options from any WhatsApp message or newsletter poll snapshot
+function extractPollFromMessageObject(m, depth = 0) {
+    if (!m || typeof m !== 'object' || depth > 5) return null;
+
+    // 1. Check direct PollCreationMessage variants (options: [{ optionName }])
+    const directCandidates = [
+        m.pollCreationMessage,
+        m.pollCreationMessageV2,
+        m.pollCreationMessageV3,
+        m.pollCreationMessageV5,
+        m.pollCreationMessageV4?.message?.pollCreationMessage,
+        m.pollCreationMessageV4?.message?.pollCreationMessageV2,
+        m.pollCreationMessageV4?.message?.pollCreationMessageV3,
+        m.pollCreationMessageV4?.message?.pollCreationMessageV5,
+        m.pollCreationOptionImageMessage?.message?.pollCreationMessage,
+        m.pollCreationOptionImageMessage?.message?.pollCreationMessageV2,
+        m.pollCreationOptionImageMessage?.message?.pollCreationMessageV3,
+        m.pollCreationOptionImageMessage?.message?.pollCreationMessageV5
+    ];
+
+    for (const c of directCandidates) {
+        if (c && Array.isArray(c.options) && c.options.length > 0) {
+            const options = c.options.map(opt => typeof opt === 'string' ? opt : (opt?.optionName || '')).filter(Boolean);
+            if (options.length > 0) {
+                return {
+                    name: c.name || 'Poll',
+                    options,
+                    selectableOptionsCount: c.selectableOptionsCount || 1
+                };
+            }
+        }
+    }
+
+    // 2. Check Newsletter / Channel PollResultSnapshotMessage variants (pollVotes: [{ optionName, optionVoteCount }])
+    const snapshotCandidates = [
+        m.pollResultSnapshotMessage,
+        m.pollResultSnapshotMessageV3,
+        m.pollCreationMessageV4?.message?.pollResultSnapshotMessage,
+        m.pollCreationMessageV4?.message?.pollResultSnapshotMessageV3
+    ];
+
+    for (const s of snapshotCandidates) {
+        if (s && Array.isArray(s.pollVotes) && s.pollVotes.length > 0) {
+            const options = s.pollVotes.map(v => typeof v === 'string' ? v : (v?.optionName || '')).filter(Boolean);
+            if (options.length > 0) {
+                return {
+                    name: s.name || 'Channel Poll',
+                    options,
+                    selectableOptionsCount: 1
+                };
+            }
+        }
+    }
+
+    // 3. Check if m itself has options or pollVotes
+    if (Array.isArray(m.options) && m.options.length > 0) {
+        const options = m.options.map(opt => typeof opt === 'string' ? opt : (opt?.optionName || '')).filter(Boolean);
+        if (options.length > 0) {
+            return { name: m.name || 'Poll', options, selectableOptionsCount: m.selectableOptionsCount || 1 };
+        }
+    }
+    if (Array.isArray(m.pollVotes) && m.pollVotes.length > 0) {
+        const options = m.pollVotes.map(v => typeof v === 'string' ? v : (v?.optionName || '')).filter(Boolean);
+        if (options.length > 0) {
+            return { name: m.name || 'Channel Poll', options, selectableOptionsCount: 1 };
+        }
+    }
+
+    // 4. Unwrap FutureProof / Ephemeral / ViewOnce / Edited wrappers recursively
+    const wrappers = [
+        m.ephemeralMessage?.message,
+        m.viewOnceMessage?.message,
+        m.viewOnceMessageV2?.message,
+        m.viewOnceMessageV2Extension?.message,
+        m.documentWithCaptionMessage?.message,
+        m.editedMessage?.message,
+        m.associatedChildMessage?.message,
+        m.pollCreationMessageV4?.message,
+        m.pollCreationOptionImageMessage?.message,
+        m.message
+    ];
+    for (const w of wrappers) {
+        if (w && typeof w === 'object' && w !== m) {
+            const found = extractPollFromMessageObject(w, depth + 1);
+            if (found) return found;
+        }
+    }
+
+    return null;
+}
+
 // Save poll message from incoming upsert or channel fetch
 function savePollMessage(msg) {
     if (!msg || !msg.message || !msg.key) return null;
@@ -78,24 +169,24 @@ function savePollMessage(msg) {
         || msg.message.documentWithCaptionMessage?.message 
         || msg.message;
 
-    const poll = mContent.pollCreationMessage 
-        || mContent.pollCreationMessageV2 
-        || mContent.pollCreationMessageV3
-        || mContent.pollCreationMessageV4
-        || mContent.pollCreationMessageV5;
+    const extracted = extractPollFromMessageObject(msg.message);
+    if (!extracted || !extracted.options || !extracted.options.length) return null;
 
-    if (!poll) return null;
-
-    const rawSecret = mContent.messageContextInfo?.messageSecret 
-        || msg.message.messageContextInfo?.messageSecret;
+    const rawSecret = mContent?.messageContextInfo?.messageSecret 
+        || msg.message?.messageContextInfo?.messageSecret;
 
     let secretBase64 = null;
     if (rawSecret) {
         secretBase64 = Buffer.isBuffer(rawSecret) ? rawSecret.toString('base64') : Buffer.from(rawSecret).toString('base64');
     }
 
-    const options = (poll.options || []).map(opt => typeof opt === 'string' ? opt : (opt.optionName || ''));
-    const serverId = msg.key.server_id || msg.server_id || null;
+    const options = extracted.options;
+    const isNewsletter = String(msg.key.remoteJid || '').endsWith('@newsletter');
+    const serverId = msg.key.server_id
+        || msg.server_id
+        || msg.messageServerId
+        || msg.newsletterServerId
+        || (isNewsletter && /^\d+$/.test(String(msg.key.id || '')) ? String(msg.key.id) : null);
     const msgId = msg.key.id || (serverId ? String(serverId) : null);
 
     if (!msgId) return null;
@@ -106,9 +197,9 @@ function savePollMessage(msg) {
         remoteJid: msg.key.remoteJid,
         participant: msg.key.participant || msg.participant || msg.key.remoteJid,
         fromMe: Boolean(msg.key.fromMe),
-        name: poll.name || 'Poll',
+        name: extracted.name || 'Poll',
         options,
-        selectableOptionsCount: poll.selectableOptionsCount || 1,
+        selectableOptionsCount: extracted.selectableOptionsCount || 1,
         secretBase64,
         timestamp: Date.now()
     };
@@ -121,7 +212,7 @@ function savePollMessage(msg) {
         }
     }
     persistPolls();
-    console.log(`[PollStore] 🗳️ Saved poll "${record.name}" (${record.id}) - HasSecret: ${Boolean(secretBase64)}`);
+    console.log(`[PollStore] 🗳️ Saved poll "${record.name}" (${record.id}) - Options: [${options.join(', ')}]`);
     return record;
 }
 
@@ -165,6 +256,7 @@ function getPoll(pollId, jid = null) {
 loadPolls();
 
 module.exports = {
+    extractPollFromMessageObject,
     savePollMessage,
     registerPoll,
     getPoll,
