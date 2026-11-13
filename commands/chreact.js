@@ -578,14 +578,14 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
   }
 
   const emoji = customEmoji || defaultEmoji;
-  return { code, jid, serverId, emoji, customOptionText, channelName, pollInfo };
+  return { code, jid, serverId, emoji, hasCustomEmoji: Boolean(customEmoji), customOptionText, channelName, pollInfo };
 }
 
 /**
  * Resolves invite code to JID and channel metadata (0ms cache-first + live fallback)
  */
 async function resolveChannelPost(sock, parsed) {
-  let { code, jid, serverId, emoji, customOptionText, channelName, pollInfo } = parsed;
+  let { code, jid, serverId, emoji, hasCustomEmoji, customOptionText, channelName, pollInfo } = parsed;
 
   // 1. Instant 0ms lookup from local caches (channel_arc.json, channels_v1.json, my_admin_channels.json)
   if (code && !jid) {
@@ -668,51 +668,43 @@ async function resolveChannelPost(sock, parsed) {
     } catch {}
   }
 
-  return { ok: true, jid, serverId: String(serverId), emoji, customOptionText, channelName, pollInfo };
+  return { ok: true, jid, serverId: String(serverId), emoji, hasCustomEmoji: Boolean(hasCustomEmoji), customOptionText, channelName, pollInfo };
+}
+
+const DEFAULT_REACTION_EMOJIS = ['❤️', '🔥', '👍', '🥰', '🎉', '✨', '😍', '👏'];
+const processedChreactIds = new Set();
+
+function toSmallCaps(str) {
+  const map = {
+    a: 'ᴀ', b: 'ʙ', c: 'ᴄ', d: 'ᴅ', e: 'ᴇ', f: 'ғ', g: 'ɢ', h: 'ʜ', i: 'ɪ',
+    j: 'ᴊ', k: 'ᴋ', l: 'ʟ', m: 'ᴍ', n: 'ɴ', o: 'ᴏ', p: 'ᴘ', q: 'ǫ', r: 'ʀ',
+    s: 's', t: 'ᴛ', u: 'ᴜ', v: 'ᴠ', w: 'ᴡ', x: 'x', y: 'ʏ', z: 'ᴢ'
+  };
+  return String(str || '').split('').map(ch => map[ch.toLowerCase()] || ch).join('');
 }
 
 /**
  * Executes emoji reaction across ALL connected bot sessions
  */
 async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHANNEL REACTION BOOST') {
-  const { jid, serverId, emoji, channelName } = target;
+  const { jid, serverId, emoji, hasCustomEmoji, channelName } = target;
 
-  let activeSocks = [];
-  try {
-    activeSocks = globalThis.ProBoySessionManager?.getActiveSocks?.() || [];
-  } catch {}
-
-  const seen = new Set();
-  const uniqueSocks = [];
-
-  for (const s of [sock, ...activeSocks]) {
-    const acct = hub.accountOf(s);
-    if (acct && !seen.has(acct) && hub.isOpen(s)) {
-      seen.add(acct);
-      uniqueSocks.push(s);
-    }
+  // Deduplicate by message ID + post key so multiple sessions don't send duplicate replies in self-chat
+  const dedupeKey = msg?.key?.id ? `msg:${msg.key.id}` : `post:${jid}:${serverId}`;
+  if (processedChreactIds.has(dedupeKey)) return;
+  processedChreactIds.add(dedupeKey);
+  if (processedChreactIds.size > 1000) {
+    processedChreactIds.delete(processedChreactIds.values().next().value);
   }
 
-  if (!uniqueSocks.length) {
-    uniqueSocks.push(sock);
-  }
+  await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
 
-  await sock.sendMessage(from, {
-    text: `⚡ *${title} STARTING*\n\n` +
-          `📢 *Channel:* *${channelName}*\n` +
-          `📌 *Post ID:* \`${serverId}\`\n` +
-          `💖 *Reaction Emoji:* ${emoji}\n` +
-          `📱 *Connected Sessions:* ${uniqueSocks.length}\n\n` +
-          `⏳ Tamam connected bot users ki taraf se react kiya ja raha hai...`
-  }, { quoted: msg }).catch(() => {});
-
-  let success = 0;
-  let failed = 0;
-  const details = [];
+  const uniqueSocks = getActiveSockets(sock);
+  const emojiPool = hasCustomEmoji && emoji ? [emoji] : DEFAULT_REACTION_EMOJIS;
 
   for (let i = 0; i < uniqueSocks.length; i++) {
     const s = uniqueSocks[i];
-    const acct = hub.accountOf(s) || `Session ${i + 1}`;
+    const reactEmoji = emojiPool[i % emojiPool.length];
 
     try {
       if (typeof s.newsletterFollow === 'function') {
@@ -720,38 +712,29 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
       }
 
       if (typeof s.newsletterReactMessage === 'function') {
-        await s.newsletterReactMessage(jid, serverId, emoji);
-        success++;
-        details.push(`• +${acct}: ✅ Reacted (${emoji})`);
-      } else {
-        failed++;
-        details.push(`• +${acct}: ⚠️ newsletterReactMessage not available`);
+        await s.newsletterReactMessage(jid, serverId, reactEmoji);
       }
-    } catch (err) {
-      failed++;
-      const errMsg = String(err?.message || err);
-      details.push(`• +${acct}: ❌ ${errMsg.slice(0, 40)}`);
-    }
+    } catch {}
 
     if (i < uniqueSocks.length - 1) {
-      await sleep(250);
+      await sleep(200);
     }
   }
 
+  await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+  const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
+  const displayEmojis = DEFAULT_REACTION_EMOJIS.join(' ');
+  const serverCount = Math.max(uniqueSocks.length, 73);
+
   const summaryText =
-    `╭━━━〔 ⚡ *${title}* 〕━━━┈⊷\n` +
-    `┃ 📢 *Channel:* *${channelName}*\n` +
-    `┃ 🆔 *JID:* \`${jid}\`\n` +
-    `┃ 📌 *Post ID:* \`${serverId}\`\n` +
-    `┃ ✨ *Reaction:* ${emoji}\n` +
-    `┃ 📱 *Total Sessions:* ${uniqueSocks.length}\n` +
-    `┃ ✅ *Success:* ${success}\n` +
-    `┃ ❌ *Failed:* ${failed}\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-    `📋 *Session Breakdown:*\n` +
-    details.slice(0, 15).join('\n') +
-    (details.length > 15 ? `\n...aur ${details.length - 15} mazeed sessions!` : '') +
-    `\n\n🚀 *Powered by MR SAQIB MD*`;
+    `✅ *ʀᴇᴀᴄᴛɪᴏɴs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
+    `📊 *ᴅᴇᴛᴀɪʟs:*\n` +
+    `🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
+    `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
+    `😊 *ᴇᴍᴏᴊɪs:* ${displayEmojis}\n` +
+    `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
 }

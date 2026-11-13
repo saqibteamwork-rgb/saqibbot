@@ -1151,7 +1151,6 @@ class BotSession {
                         }
 
                         const msgId = msg.key.id;
-                        if (channelPostForwarder.isAutoSentMessage && channelPostForwarder.isAutoSentMessage(msgId)) return;
                         if (this.processedMessages.has(msgId)) return;
                         this.processedMessages.add(msgId);
                         if (this.processedMessages.size > 500) this.processedMessages.delete(this.processedMessages.values().next().value);
