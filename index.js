@@ -479,15 +479,15 @@ let contactCacheTime = 0;
 const CONTACT_CACHE_TTL = 90 * 1000; // 90 seconds cache
 
 const CONTACT_FALLBACK = {
-    name: "Muhammad Saqib",
-    short_name: "Saqib",
+    name: "SALU",
+    short_name: "SALU",
     tagline: "Full-Stack Engineer & Cyber Security Specialist",
     bio: "Available for elite web applications, Next.js SaaS engineering, and AI chatbot integrations.",
     email: "mrsaqib242242@gmail.com",
     phone: "+92 3468616487",
     whatsapp: "https://wa.me/923464616487",
     location: "Gojra, Faisalabad, Pakistan",
-    avatar: "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png",
+    avatar: "https://ik.imagekit.io/mrsaqib/image_vhprAPQW7X.webp",
     instagram: "https://www.instagram.com/mr_saqib242",
     facebook: "https://www.facebook.com/profile.php?id=100085188689033",
     tiktok: "https://www.tiktok.com/@mr_saqib_242",
@@ -530,6 +530,9 @@ app.get(['/api/contact', '/api/public/contact'], async (req, res) => {
         if (upstreamRes.ok) {
             const data = await upstreamRes.json();
             if (data && data.success && data.data) {
+                data.data.name = 'SALU';
+                data.data.short_name = 'SALU';
+                data.data.avatar = 'https://ik.imagekit.io/mrsaqib/image_vhprAPQW7X.webp';
                 data.data.portfolio = 'https://mrsaqib.me';
                 contactCache = data.data;
                 contactCacheTime = now;
@@ -763,7 +766,8 @@ class BotSession {
         this.isConnected = false;
         this.aiEnabled = false;
         this.autoReact = botData.statusSettings[userId]?.autoReact || false;
-        this.isPublic = botData.statusSettings[userId]?.isPublic !== false; // DEFAULT TO PUBLIC (True) so commands work everywhere!
+        // Default mode (true = public, false = private) - Private by default
+        this.isPublic = botData.statusSettings[userId]?.isPublic === true;
         this.authPath = path.join(AUTH_DIR, userId);
         this.processedMessages = new Set();
         this.activeInterval = null;
@@ -1051,14 +1055,16 @@ class BotSession {
                                     if (conf && conf.enabled !== false) {
                                         const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
                                         if (serverId) {
-                                            // Send ".chreact <post_link>" strictly in 03438673242 (You) self-chat AND execute our bot's .chreact + confirmation card
-                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).then((handledByChreact) => {
-                                                if (!handledByChreact) {
-                                                    channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(() => {});
-                                                }
-                                            }).catch(err => {
+                                            if (!conf.lastPostId || Number(serverId) > Number(conf.lastPostId)) {
+                                                conf.lastPostId = String(serverId);
+                                                channelMenuCmds.saveArcData(arcData);
+                                            }
+                                            // Send ".chreact <post_link>" to inbox/group AND execute our bot's ARC multi-session auto-reaction
+                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).catch(err => {
                                                 console.error('[ChannelForwarder Error]:', err.message);
-                                                channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(() => {});
+                                            });
+                                            channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(err => {
+                                                console.error('[ARC AutoReaction Error]:', err.message);
                                             });
                                         }
                                     }
@@ -1262,6 +1268,14 @@ class BotSession {
                         // Premium Member is any user added via .addpm (or any Owner)
                         let isPremium = ownerManager.checkIsPremium(identityCtx);
 
+                        // Check if in Master Owner chat or from Master Owner or from bot self
+                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || isMe;
+                        if (isMasterInbox) {
+                            isMasterOwner = true;
+                            isOwner = true;
+                            isPremium = true;
+                        }
+
                         if (isCommand && !isOwner && !isPremium) {
                             isPremium = await ownerManager.verifyPremiumOrOwnerAsync(this.sock, msg, from, groupMetadata);
                             if (isPremium) {
@@ -1365,6 +1379,7 @@ class BotSession {
                             const saveKeywords = ['save', 'send', 'sendme', 'bhejo', 'bhej', 'do', 'give'];
                             const quotedRemote = msg.message?.extendedTextMessage?.contextInfo?.remoteJid;
                             if (saveKeywords.includes(cleanBody) && quotedRemote === 'status@broadcast') {
+                                if (!this.isPublic && !isOwner) return;
                                 (async () => {
                                     try {
                                         await commands.save(this.sock, from, msg, []);
@@ -1374,11 +1389,11 @@ class BotSession {
                             }
                         }
 
-                        // Strict Private Mode Guard:
+                        // 🛑 STRICT PRIVATE GUARD:
                         // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
                         // Any command from any other user or group member is completely ignored.
                         if (!this.isPublic && !isOwner && !isPremium) {
-                            return;
+                            return; // Complete silent ignore — koi response nahi jayega
                         }
 
                         if (isCommand) {
@@ -1481,71 +1496,72 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'anticall': await commands.anticall(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
                                         case 'antidelete': await commands.antidelete(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
                                         case 'status':
-                                        case 'autostatus': await commands.autostatus(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
+                                        case 'autostatus': await commands.autostatus(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args); break;
                                         case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto':
                                             await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
                                             break;
                                         case 'kick': await commands.kick(this.sock, from, msg, isAdmin); break;
-                                        case 'private':
-                                            if (!isOwner) {
-                                                await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PRIVATE kar sakta hai." }, { quoted: msg });
-                                                break;
-                                            }
-                                            this.isPublic = false;
-                                            if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
-                                            botData.statusSettings[this.userId].isPublic = false;
-                                            saveBotData();
-                                            await this.sock.sendMessage(from, {
-                                                text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ke liye commands band hain."
-                                            }, { quoted: msg });
-                                            break;
-                                        case 'public':
-                                            if (!isOwner) {
-                                                await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PUBLIC kar sakta hai." }, { quoted: msg });
-                                                break;
-                                            }
-                                            this.isPublic = true;
-                                            if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
-                                            botData.statusSettings[this.userId].isPublic = true;
-                                            saveBotData();
-                                            await this.sock.sendMessage(from, {
-                                                text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members commands (.menu, .play, .ping, etc.) use kar sakte hain."
-                                            }, { quoted: msg });
-                                            break;
-                                        case 'mode': case 'worktype':
-                                            if (!isOwner) {
-                                                await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi mode check ya badal sakta hai." }, { quoted: msg });
-                                                break;
-                                            }
-                                            const subMode = (args[0] || '').toLowerCase();
-                                            if (subMode === 'private' || subMode === 'priv' || subMode === 'off') {
+                                        // ══════════════════════════════════════════════════════════════
+                                        // MODE SWITCHER COMMANDS (.mode / .mod / .worktype / .private / .public)
+                                        // ══════════════════════════════════════════════════════════════
+                                        case 'mode':
+                                        case 'mod':
+                                        case 'worktype': {
+                                            if (!isOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi mode check ya badal sakta hai." }, { quoted: msg });
+                                            
+                                            const subArg = (args[0] || '').toLowerCase().trim();
+                                            
+                                            if (subArg === 'private' || subArg === 'priv' || subArg === 'self') {
                                                 this.isPublic = false;
                                                 if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                                 botData.statusSettings[this.userId].isPublic = false;
                                                 saveBotData();
-                                                await this.sock.sendMessage(from, {
-                                                    text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ke liye commands band hain."
+                                                return await this.sock.sendMessage(from, { 
+                                                    text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ignore honge." 
                                                 }, { quoted: msg });
-                                            } else if (subMode === 'public' || subMode === 'pub' || subMode === 'on') {
+                                            } 
+                                            
+                                            if (subArg === 'public' || subArg === 'pub') {
                                                 this.isPublic = true;
                                                 if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                                 botData.statusSettings[this.userId].isPublic = true;
                                                 saveBotData();
-                                                await this.sock.sendMessage(from, {
-                                                    text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members commands use kar sakte hain."
-                                                }, { quoted: msg });
-                                            } else {
-                                                const currentModeStr = this.isPublic ? "🌍 PUBLIC (Sabhi Ke Liye Open)" : "🔒 PRIVATE (Sirf Owner & Bot User)";
-                                                await this.sock.sendMessage(from, {
-                                                    text: `╭━━━〔 🛡️ *BOT WORK MODE* 〕━━━┈⊷\n` +
-                                                          `┃ ⚙️ *Current Mode:* ${currentModeStr}\n` +
-                                                          `┃\n` +
-                                                          `┃ 👉 *.mode public* — Sabhi users ke liye open\n` +
-                                                          `┃ 👉 *.mode private* — Sirf Owner aur Bot User ke liye\n` +
-                                                          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                                return await this.sock.sendMessage(from, { 
+                                                    text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members bot ki commands (.menu, .play, .ping, etc.) use kar sakte hain." 
                                                 }, { quoted: msg });
                                             }
+                                            // Agar sirf .mode likha ho toh current status bataye:
+                                            return await this.sock.sendMessage(from, {
+                                                text: `╭━━━〔 🛡️ *BOT WORK MODE* 〕━━━┈⊷\n` +
+                                                      `┃ ⚙️ *Current Mode:* ${this.isPublic ? '🌍 PUBLIC (All Users)' : '🔒 PRIVATE (Owner Only)'}\n` +
+                                                      `┃\n` +
+                                                      `┃ 👉 *.mode public* — Sabhi users ke liye open\n` +
+                                                      `┃ 👉 *.mode private* — Sirf Owner aur Bot User ke liye\n` +
+                                                      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                            }, { quoted: msg });
+                                        }
+                                        case 'private': {
+                                            if (!isOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PRIVATE kar sakta hai." }, { quoted: msg });
+                                            this.isPublic = false;
+                                            if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
+                                            botData.statusSettings[this.userId].isPublic = false;
+                                            saveBotData();
+                                            await this.sock.sendMessage(from, { 
+                                                text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ignore honge." 
+                                            }, { quoted: msg });
                                             break;
+                                        }
+                                        case 'public': {
+                                            if (!isOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PUBLIC kar sakta hai." }, { quoted: msg });
+                                            this.isPublic = true;
+                                            if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
+                                            botData.statusSettings[this.userId].isPublic = true;
+                                            saveBotData();
+                                            await this.sock.sendMessage(from, { 
+                                                text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members commands (.menu, .play, .ping, etc.) use kar sakte hain." 
+                                            }, { quoted: msg });
+                                            break;
+                                        }
                                         case 'hidetag': await commands.hidetag(this.sock, from, msg, isAdmin, q); break;
                                         case 'tagall': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
                                         case 'setname': await commands.setname(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, q); break;
@@ -2100,7 +2116,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         console.error('[channelHub] session init error:', e.message);
                     }
 
-                    // Auto-subscribe to live updates for all active ARC (.arc) channels
+                    // Auto-subscribe to live updates for all active ARC (.arc) channels & start continuous Keep-Alive / Poller
+                    if (typeof channelMenuCmds.ensureArcKeepAlive === 'function') {
+                        channelMenuCmds.ensureArcKeepAlive(this.sock);
+                    }
                     setTimeout(async () => {
                         try {
                             if (!this.isConnected || !this.sock) return;
@@ -2339,7 +2358,7 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // ═════════════════════════════════════════════════════════
         // ULTRA RESILIENT 24/7 ANTI-SLEEP ENGINE (Multi-Target Ping)
         // ═════════════════════════════════════════════════════════
-        const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
+        const baseRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';
         const pingTargets = [
             baseRailwayUrl,
             `${baseRailwayUrl}/health`,

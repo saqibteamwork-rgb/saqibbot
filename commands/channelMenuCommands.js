@@ -17,6 +17,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const os = require('os');
 const hub = require('../utils/channelHub');
 const { 
   executeMultiSessionReaction, 
@@ -26,38 +27,98 @@ const {
 } = require('./chreact');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
+const AUTH_DIR = path.join(__dirname, '..', 'auth_info');
 const ARC_FILE = path.join(DATA_DIR, 'channel_arc.json');
+const BACKUP_ARC_FILE = path.join(AUTH_DIR, '_channel_arc.json');
+const TMP_ARC_FILE = path.join(os.tmpdir(), 'mrsaqib_channel_arc.json');
 
 fs.ensureDirSync(DATA_DIR);
 
+// In-memory singleton so .arc channels NEVER get lost or reset during runtime
+let cachedArcData = null;
+
 function loadArcData() {
-  try {
-    if (fs.existsSync(ARC_FILE)) {
-      const data = fs.readJsonSync(ARC_FILE) || {};
-      if (!data.channels) data.channels = {};
-      if (!data.blocked) data.blocked = {};
-      if (typeof data.enabled !== 'boolean') data.enabled = true;
-      if (!data.passcode) data.passcode = 'arc123';
-      return data;
-    }
-  } catch (e) {
-    console.error('[ARC Load Error]:', e.message);
+  if (cachedArcData && typeof cachedArcData === 'object') {
+    if (!cachedArcData.channels) cachedArcData.channels = {};
+    if (!cachedArcData.blocked) cachedArcData.blocked = {};
+    if (!cachedArcData.deletedChannels) cachedArcData.deletedChannels = {};
+    return cachedArcData;
   }
-  return {
+
+  const merged = {
     enabled: true,
     locked: false,
     passcode: 'arc123',
-    channels: {},      // { [jid]: { jid, name, link, emojis: ['❤️','🔥'], count: 3, delayMs: 5000, enabled: true, lastReactedId: '' } }
-    blocked: {},       // { [jid]: true }
+    channels: {},
+    blocked: {},
+    deletedChannels: {},
     defaultEmoji: '❤️'
   };
+
+  // Read from all persistence locations so git pulls or container restarts never wipe .arc channels
+  const filesToRead = [ARC_FILE, TMP_ARC_FILE, BACKUP_ARC_FILE];
+  for (const file of filesToRead) {
+    try {
+      if (fs.existsSync(file)) {
+        const raw = fs.readJsonSync(file);
+        if (raw && typeof raw === 'object') {
+          if (typeof raw.enabled === 'boolean') merged.enabled = raw.enabled;
+          if (typeof raw.locked === 'boolean') merged.locked = raw.locked;
+          if (raw.passcode) merged.passcode = raw.passcode;
+          if (raw.defaultEmoji) merged.defaultEmoji = raw.defaultEmoji;
+          if (raw.blocked && typeof raw.blocked === 'object') {
+            Object.assign(merged.blocked, raw.blocked);
+          }
+          if (raw.deletedChannels && typeof raw.deletedChannels === 'object') {
+            for (const [delKey, delTs] of Object.entries(raw.deletedChannels)) {
+              merged.deletedChannels[delKey] = Math.max(merged.deletedChannels[delKey] || 0, Number(delTs) || 1);
+            }
+          }
+          if (raw.channels && typeof raw.channels === 'object') {
+            for (const [k, ch] of Object.entries(raw.channels)) {
+              if (!ch || typeof ch !== 'object') continue;
+              const existing = merged.channels[k];
+              if (!existing || (Number(ch.addedAt || 0) >= Number(existing.addedAt || 0))) {
+                merged.channels[k] = { ...existing, ...ch };
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[ARC Load Error]:', e.message);
+    }
+  }
+
+  // Filter out any channel that was explicitly deleted after it was added
+  for (const [k, ch] of Object.entries(merged.channels)) {
+    const delTs = Math.max(
+      merged.deletedChannels[k] || 0,
+      (ch.invite && merged.deletedChannels[ch.invite]) || 0
+    );
+    if (delTs > 0 && delTs >= Number(ch.addedAt || 0)) {
+      delete merged.channels[k];
+    }
+  }
+
+  cachedArcData = merged;
+  return cachedArcData;
 }
 
 function saveArcData(data) {
-  try {
-    fs.writeJsonSync(ARC_FILE, data, { spaces: 2 });
-  } catch (e) {
-    console.error('[ARC Save Error]:', e.message);
+  if (!data || typeof data !== 'object') return;
+  if (!data.channels) data.channels = {};
+  if (!data.blocked) data.blocked = {};
+  if (!data.deletedChannels) data.deletedChannels = {};
+  cachedArcData = data;
+
+  for (const file of [ARC_FILE, BACKUP_ARC_FILE, TMP_ARC_FILE]) {
+    try {
+      fs.ensureDirSync(path.dirname(file));
+      fs.writeJsonSync(file, data, { spaces: 2 });
+    } catch (e) {
+      // Ignore write error on secondary location
+    }
   }
 }
 
@@ -152,6 +213,7 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
     try {
       if (typeof s.newsletterFollow === 'function') {
         await withTimeout(s.newsletterFollow(channelJid), 4000).catch(() => {});
+        await sleep(300);
       }
       if (typeof s.newsletterReactMessage === 'function') {
         await withTimeout(s.newsletterReactMessage(channelJid, String(serverId), emoji), 5000);
@@ -166,6 +228,160 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
   }
 
   console.log(`[ARC Auto-React] ✅ Done: ${successCount}/${targetCount} reacted on post ${serverId}`);
+}
+
+/**
+ * Continuous Keep-Alive & Fallback Poller for .arc Channels:
+ * 1) Renews WhatsApp's 300-second `subscribeNewsletterUpdates` lease every 2 minutes so live events NEVER expire!
+ * 2) Every 25 seconds, heals any temporary invite-based JID (`0029Va...@newsletter` -> `120363...@newsletter`)
+ *    and polls `fetchRecent` so even if a live WebSocket event was missed, `.chreact <link>` and auto-reactions fire!
+ */
+let lastKnownPrimarySock = null;
+function ensureArcKeepAlive(primarySock) {
+  if (primarySock) lastKnownPrimarySock = primarySock;
+  if (globalThis.__arcKeepAliveStarted) return;
+  globalThis.__arcKeepAliveStarted = true;
+
+  // 1. Renew subscribeNewsletterUpdates every 2 minutes (120,000ms) — before WhatsApp's 300s duration expires!
+  const renewTimer = setInterval(async () => {
+    try {
+      const data = loadArcData();
+      if (!data.enabled || !data.channels) return;
+      const socks = getActiveSockets(lastKnownPrimarySock);
+      if (!socks.length) return;
+
+      for (const [chJid, conf] of Object.entries(data.channels)) {
+        if (!conf || conf.enabled === false || data.blocked?.[chJid]) continue;
+        if (!/^\d+@newsletter$/.test(chJid)) continue;
+        for (const s of socks) {
+          try {
+            if (typeof s.subscribeNewsletterUpdates === 'function') {
+              await withTimeout(s.subscribeNewsletterUpdates(chJid), 4000).catch(() => {});
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }, 120 * 1000);
+  if (typeof renewTimer.unref === 'function') renewTimer.unref();
+
+  // 2. Every 25 seconds: Heal invite-code JIDs & poll recent posts as a 100% reliable fallback
+  const pollTimer = setInterval(async () => {
+    try {
+      const data = loadArcData();
+      if (!data.enabled || !data.channels) return;
+      const socks = getActiveSockets(lastKnownPrimarySock);
+      if (!socks.length) return;
+
+      let dirty = false;
+      const entries = Object.entries(data.channels);
+
+      for (const [keyJid, conf] of entries) {
+        if (!conf || conf.enabled === false || data.blocked?.[keyJid]) continue;
+        let activeJid = keyJid;
+
+        // Step A: If keyJid is a temporary invite code (not numeric 120363...@newsletter), resolve it
+        if (!/^\d+@newsletter$/.test(activeJid)) {
+          const code = conf.invite || activeJid.replace(/@newsletter$/i, '');
+          let resolvedJid = null;
+          let resolvedName = null;
+
+          // Check channelHub cache first
+          try {
+            const cachedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
+            const found = cachedList.find(c => c && (c.invite === code || (c.link && c.link.includes(code))) && /^\d+@newsletter$/.test(c.jid || ''));
+            if (found) {
+              resolvedJid = found.jid;
+              resolvedName = found.name;
+            }
+          } catch {}
+
+          // Try newsletterMetadata across active sockets
+          if (!resolvedJid && code) {
+            for (const s of socks) {
+              if (typeof s.newsletterMetadata !== 'function') continue;
+              try {
+                const rawMeta = await withTimeout(s.newsletterMetadata('invite', code), 3500);
+                const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
+                const candidate = parsedMeta?.jid || parsedMeta?.id;
+                if (candidate && /^\d+@newsletter$/.test(candidate)) {
+                  resolvedJid = candidate;
+                  resolvedName = parsedMeta?.name || rawMeta?.thread_metadata?.name?.text || null;
+                  break;
+                }
+              } catch {}
+            }
+          }
+
+          if (resolvedJid && /^\d+@newsletter$/.test(resolvedJid)) {
+            conf.jid = resolvedJid;
+            if (resolvedName && (!conf.name || conf.name === 'WhatsApp Channel')) {
+              conf.name = resolvedName;
+            }
+            data.channels[resolvedJid] = conf;
+            delete data.channels[keyJid];
+            activeJid = resolvedJid;
+            dirty = true;
+            joinChannelAcrossAllSessions(socks[0], resolvedJid, code).catch(() => {});
+          } else {
+            continue;
+          }
+        }
+
+        // Step B: Poll recent posts for activeJid to catch any post missed by live WebSocket
+        let recentPosts = [];
+        for (const s of socks) {
+          try {
+            const posts = await withTimeout(hub.fetchRecent(s, activeJid, 3, 0), 4000);
+            if (Array.isArray(posts) && posts.length > 0) {
+              recentPosts = posts;
+              break;
+            }
+          } catch {}
+        }
+
+        if (recentPosts.length > 0) {
+          // Sort by numeric serverId ascending
+          const sorted = recentPosts
+            .filter(p => p && p.serverId && !isNaN(Number(p.serverId)))
+            .sort((a, b) => Number(a.serverId) - Number(b.serverId));
+
+          if (sorted.length > 0) {
+            const newest = sorted[sorted.length - 1];
+            const newestId = String(newest.serverId);
+
+            if (!conf.lastPostId) {
+              // First baseline check: if the post was published AFTER this channel was added to .arc, trigger on it!
+              const postTimeMs = newest.timestamp ? Number(newest.timestamp) * 1000 : 0;
+              const addedAtMs = Number(conf.addedAt || 0);
+              conf.lastPostId = newestId;
+              dirty = true;
+
+              if (postTimeMs > 0 && addedAtMs > 0 && postTimeMs >= (addedAtMs - 15000)) {
+                const fwd = require('../utils/channelPostForwarder');
+                const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId };
+                fwd.handleNewsletterPost(socks[0], syntheticMsg, conf).catch(() => {});
+                executeArcAutoReaction(socks[0], activeJid, newestId, conf).catch(() => {});
+              }
+            } else if (Number(newestId) > Number(conf.lastPostId)) {
+              conf.lastPostId = newestId;
+              dirty = true;
+
+              const fwd = require('../utils/channelPostForwarder');
+              const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId };
+              fwd.handleNewsletterPost(socks[0], syntheticMsg, conf).catch(() => {});
+              executeArcAutoReaction(socks[0], activeJid, newestId, conf).catch(() => {});
+            }
+          }
+        }
+      }
+
+      if (dirty) {
+        saveArcData(data);
+      }
+    } catch {}
+  }, 25 * 1000);
+  if (typeof pollTimer.unref === 'function') pollTimer.unref();
 }
 
 const handledArcMsgIds = new Set();
@@ -335,33 +551,35 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
       } catch {}
     }
 
-    // 2. ONLY if still not resolved from local cache, try fast sync + single 2.5s metadata lookup
+    // 2. ONLY if still not resolved from local cache, try fast subscribed lookup + multi-socket metadata lookup
     if (norm.code && !targetJid) {
       try {
-        if (typeof hub.syncMyChannels === 'function') {
-          await withTimeout(hub.syncMyChannels(sock, { force: true }), 2500);
-          const syncedList = typeof hub.listChannels === 'function' ? hub.listChannels() : [];
-          const synced = syncedList.find(c => c && (c.invite === norm.code || (c.link && c.link.includes(norm.code))) && c.jid);
-          if (synced) {
-            targetJid = synced.jid;
-            if (synced.name) channelName = synced.name;
+        if (typeof hub.fetchSubscribed === 'function') {
+          const subbed = await withTimeout(hub.fetchSubscribed(sock), 2000).catch(() => []);
+          const foundSub = (subbed || []).find(c => c && (c.invite === norm.code || (c.link && c.link.includes(norm.code))) && c.jid);
+          if (foundSub) {
+            targetJid = foundSub.jid;
+            if (foundSub.name) channelName = foundSub.name;
           }
         }
       } catch {}
 
       if (!targetJid) {
-        try {
-          if (typeof sock.newsletterMetadata === 'function') {
-            const rawMeta = await withTimeout(sock.newsletterMetadata('invite', norm.code), 2500);
+        const candidateSocks = getActiveSockets(sock);
+        for (const s of candidateSocks) {
+          if (typeof s?.newsletterMetadata !== 'function') continue;
+          try {
+            const rawMeta = await withTimeout(s.newsletterMetadata('invite', norm.code), 2500);
             const parsedMeta = (typeof hub.parseMeta === 'function' ? hub.parseMeta(rawMeta) : null) || rawMeta;
             if (parsedMeta?.jid || parsedMeta?.id) {
               targetJid = parsedMeta.jid || parsedMeta.id;
               const n = parsedMeta.name || rawMeta?.thread_metadata?.name?.text;
               if (typeof n === 'string' && n) channelName = n;
               inviteCode = parsedMeta.invite || rawMeta?.thread_metadata?.invite || inviteCode;
+              break;
             }
-          }
-        } catch {}
+          } catch {}
+        }
       }
 
       // Guaranteed instant fallback so .arc never gets stuck or fails if WhatsApp GraphQL invite lookup times out
@@ -404,6 +622,10 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
     if (data.blocked && data.blocked[targetJid]) {
       delete data.blocked[targetJid];
     }
+    if (data.deletedChannels) {
+      delete data.deletedChannels[targetJid];
+      if (inviteCode) delete data.deletedChannels[inviteCode];
+    }
     if (!data.channels) data.channels = {};
     const canonicalLink = inviteCode ? `https://whatsapp.com/channel/${inviteCode}` : rawLink;
     data.channels[targetJid] = {
@@ -421,6 +643,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
     };
 
     saveArcData(data);
+    ensureArcKeepAlive(sock);
 
     const totalSessions = Math.max(getActiveSockets(sock).length, 73);
 
@@ -565,6 +788,10 @@ async function arcdelCommand(sock, from, msg, isOwner, args = [], skipDedupe = f
   }
 
   const name = data.channels[targetJid].name || targetJid;
+  const delInvite = data.channels[targetJid].invite || norm?.code || null;
+  if (!data.deletedChannels) data.deletedChannels = {};
+  data.deletedChannels[targetJid] = Date.now();
+  if (delInvite) data.deletedChannels[delInvite] = Date.now();
   delete data.channels[targetJid];
   saveArcData(data);
 
@@ -807,6 +1034,11 @@ async function arcremoveallCommand(sock, from, msg, isOwner) {
   if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner clear kar sakta hai!*" }, { quoted: msg });
   const data = loadArcData();
   const count = Object.keys(data.channels || {}).length;
+  if (!data.deletedChannels) data.deletedChannels = {};
+  for (const [k, ch] of Object.entries(data.channels || {})) {
+    data.deletedChannels[k] = Date.now();
+    if (ch?.invite) data.deletedChannels[ch.invite] = Date.now();
+  }
   data.channels = {};
   saveArcData(data);
   await sock.sendMessage(from, { text: `🗑️ *Tamam (${count}) ARC channels remove kar diye gaye!*` }, { quoted: msg });
@@ -1054,5 +1286,6 @@ module.exports = {
   pollvinfoCommand,
   pollvoteCommand,
   pollvstopCommand,
-  executeArcAutoReaction
+  executeArcAutoReaction,
+  ensureArcKeepAlive
 };

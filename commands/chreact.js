@@ -567,31 +567,34 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
     }
   }
 
+  // Extract link preview title if WhatsApp client attached one
+  const previewTitle = mContent?.extendedTextMessage?.title || msg?.message?.extendedTextMessage?.title || null;
+  if (previewTitle && typeof previewTitle === 'string' && channelName === 'WhatsApp Channel') {
+    channelName = previewTitle.replace(/\s*\|\s*WhatsApp Channel$/i, '').trim() || channelName;
+  }
+
+  const rawLink = (code && serverId) ? `https://whatsapp.com/channel/${code}/${serverId}` : null;
   const emoji = customEmoji || defaultEmoji;
-  return { code, jid, serverId, emoji, hasCustomEmoji: Boolean(customEmoji), customOptionText, channelName, pollInfo };
+  return { code, jid, serverId, rawLink, emoji, hasCustomEmoji: Boolean(customEmoji), customOptionText, channelName, pollInfo };
 }
 
 /**
- * Resolves invite code to JID and channel metadata (0ms cache-first + live fallback)
+ * Resolves invite code to JID and channel metadata (0ms cache-first + fast 2.5s timeout fallback)
  */
 async function resolveChannelPost(sock, parsed) {
-  let { code, jid, serverId, emoji, hasCustomEmoji, customOptionText, channelName, pollInfo } = parsed;
+  let { code, jid, serverId, rawLink, emoji, hasCustomEmoji, customOptionText, channelName, pollInfo } = parsed;
 
   // 1. Instant 0ms lookup from local caches (channel_arc.json, channels_v1.json, my_admin_channels.json)
   if (code && !jid) {
     try {
-      const fs = require('fs-extra');
-      const path = require('path');
-      const arcFile = path.join(__dirname, '..', 'data', 'channel_arc.json');
-      if (fs.existsSync(arcFile)) {
-        const arcData = fs.readJsonSync(arcFile) || {};
-        const arcMatch = Object.values(arcData.channels || {}).find(c =>
-          c && (c.invite === code || (c.link && c.link.includes(code))) && c.jid && !c.jid.startsWith(code)
-        );
-        if (arcMatch) {
-          jid = arcMatch.jid;
-          if (arcMatch.name && arcMatch.name !== 'WhatsApp Channel') channelName = arcMatch.name;
-        }
+      const channelMenuCmds = require('./channelMenuCommands');
+      const arcData = typeof channelMenuCmds.loadArcData === 'function' ? channelMenuCmds.loadArcData() : {};
+      const arcMatch = Object.values(arcData.channels || {}).find(c =>
+        c && (c.invite === code || (c.link && c.link.includes(code))) && c.jid && !c.jid.startsWith(code)
+      );
+      if (arcMatch) {
+        jid = arcMatch.jid;
+        if (arcMatch.name && arcMatch.name !== 'WhatsApp Channel') channelName = arcMatch.name;
       }
     } catch {}
 
@@ -625,16 +628,22 @@ async function resolveChannelPost(sock, parsed) {
     }
   }
 
-  // 2. Live fallback only if not found in local caches
+  // 2. Fast 2.5s live fallback only if not found in local caches (never hangs or blocks!)
   if (code && !jid) {
     try {
-      const res = await hub.resolveInvite(sock, code);
+      const res = await Promise.race([
+        hub.resolveInvite(sock, code),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500))
+      ]);
       if (res && res.rec) {
         jid = res.rec.jid;
         channelName = res.rec.name || channelName;
       }
-    } catch (e) {
-      return { ok: false, error: `Channel invite link resolve nahi ho saka: ${e.message}` };
+    } catch {}
+
+    // Guaranteed fallback so external channels never fail or block .set arc relay!
+    if (!jid) {
+      jid = `${code}@newsletter`;
     }
   }
 
@@ -658,7 +667,7 @@ async function resolveChannelPost(sock, parsed) {
     } catch {}
   }
 
-  return { ok: true, code, jid, serverId: String(serverId), emoji, hasCustomEmoji: Boolean(hasCustomEmoji), customOptionText, channelName, pollInfo };
+  return { ok: true, code, jid, serverId: String(serverId), rawLink, emoji, hasCustomEmoji: Boolean(hasCustomEmoji), customOptionText, channelName, pollInfo };
 }
 
 const DEFAULT_REACTION_EMOJIS = ['❤️', '🔥', '👍', '🥰', '🎉', '✨', '😍', '👏'];
@@ -702,20 +711,42 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
   } catch {}
 
   const uniqueSocks = getActiveSockets(sock);
-  const emojiPool = hasCustomEmoji && emoji ? [emoji] : DEFAULT_REACTION_EMOJIS;
+  let emojiPool = hasCustomEmoji && emoji ? [emoji] : DEFAULT_REACTION_EMOJIS;
+  if (!hasCustomEmoji) {
+    try {
+      const fs = require('fs-extra');
+      const path = require('path');
+      const arcFile = path.join(__dirname, '..', 'data', 'channel_arc.json');
+      if (fs.existsSync(arcFile)) {
+        const arcData = fs.readJsonSync(arcFile) || {};
+        const arcCh = arcData.channels?.[jid] || Object.values(arcData.channels || {}).find(c => c && (c.jid === jid || (c.invite && target.code === c.invite)));
+        if (arcCh && Array.isArray(arcCh.emojis) && arcCh.emojis.length > 0) {
+          emojiPool = arcCh.emojis;
+        } else if (arcCh?.emoji) {
+          emojiPool = [arcCh.emoji];
+        }
+      }
+    } catch {}
+  }
 
   for (let i = 0; i < uniqueSocks.length; i++) {
     const s = uniqueSocks[i];
     const reactEmoji = emojiPool[i % emojiPool.length];
 
     try {
+      if (typeof s.newsletterFollow === 'function') {
+        await s.newsletterFollow(jid).catch(() => {});
+        await sleep(300);
+      }
       if (typeof s.newsletterReactMessage === 'function') {
         await s.newsletterReactMessage(jid, String(serverId), reactEmoji);
       }
-    } catch {
+    } catch (firstErr) {
       try {
+        await sleep(400);
         if (typeof s.newsletterFollow === 'function') {
           await s.newsletterFollow(jid).catch(() => {});
+          await sleep(300);
         }
         if (typeof s.newsletterReactMessage === 'function') {
           await s.newsletterReactMessage(jid, String(serverId), reactEmoji).catch(() => {});
@@ -724,7 +755,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     }
 
     if (i < uniqueSocks.length - 1) {
-      await sleep(200);
+      await sleep(250);
     }
   }
 
@@ -793,6 +824,17 @@ async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium
             `_Example:_ \`${config.prefix}chreact https://whatsapp.com/channel/.../123 ❤️\``
     }, { quoted: msg });
   }
+
+  // Immediately relay .chreact <exact_link> to the .set arc Group/Chat before any slow resolution!
+  try {
+    const fwd = require('../utils/channelPostForwarder');
+    if (typeof fwd.relayChreactToArcTarget === 'function') {
+      const relayedId = await fwd.relayChreactToArcTarget(sock, from, parsed);
+      if (relayedId) {
+        processedChreactIds.add(`msg:${relayedId}`);
+      }
+    }
+  } catch {}
 
   const resolved = await resolveChannelPost(sock, parsed);
   if (!resolved.ok) {
