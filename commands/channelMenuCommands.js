@@ -168,10 +168,29 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
   console.log(`[ARC Auto-React] ✅ Done: ${successCount}/${targetCount} reacted on post ${serverId}`);
 }
 
+const handledArcMsgIds = new Set();
+function isDuplicateArcMsg(msg) {
+  const id = msg?.key?.id;
+  if (!id) return false;
+  if (handledArcMsgIds.has(id)) return true;
+  handledArcMsgIds.add(id);
+  if (handledArcMsgIds.size > 1000) {
+    handledArcMsgIds.delete(handledArcMsgIds.values().next().value);
+  }
+  return false;
+}
+
 // 1. .arc [add | list | del | stop | on | off] - Main Controller
-async function arcCommand(sock, from, msg, isOwner, args = []) {
+async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
+  if (isDuplicateArcMsg(msg)) return;
   const data = loadArcData();
   const subCmd = (args[0] || '').toLowerCase();
+
+  // Set target group/chat if: .arc set [inbox]
+  if (subCmd === 'set') {
+    const fwd = require('../utils/channelPostForwarder');
+    return await fwd.setArcTargetCommand(sock, from, msg, isOwner, args.slice(1), groupMetadata);
+  }
 
   // Show list if: .arc list
   if (subCmd === 'list' || subCmd === 'ls') {
@@ -180,7 +199,7 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
 
   // Delete if: .arc del <link>
   if (subCmd === 'del' || subCmd === 'delete' || subCmd === 'remove' || subCmd === 'rm') {
-    return await arcdelCommand(sock, from, msg, isOwner, args.slice(1));
+    return await arcdelCommand(sock, from, msg, isOwner, args.slice(1), true);
   }
 
   // Stop if: .arc stop [link|all]
@@ -387,6 +406,12 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
     saveArcData(data);
 
     const totalSessions = getActiveSockets(sock).length;
+    let targetDisplay = '03438673242 (You)';
+    try {
+      const fwdCfg = require('../utils/channelPostForwarder').loadConfig();
+      if (fwdCfg?.targetName) targetDisplay = fwdCfg.targetName;
+      else if (fwdCfg?.targetJid) targetDisplay = fwdCfg.targetJid.replace('@s.whatsapp.net', '');
+    } catch {}
 
     // Immediately react ✅ and send confirmation message!
     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
@@ -398,15 +423,16 @@ async function arcCommand(sock, from, msg, isOwner, args = []) {
 ┃ 🆔 *JID:* \`${targetJid}\`
 ┃ ✨ *Emojis:* ${emojisList.join(' ')}
 ┃ 👥 *Active Sessions:* ${totalSessions} Bot Accounts
-┃ 📲 *Self-Inbox (.chreact):* 03438673242 (You)
+┃ 🎯 *Target (.chreact):* ${targetDisplay}
 ┃ 🟢 *Status:* Active & Monitoring
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
 💡 *Ab is channel me jab bhi koi post hogi:*
 1️⃣ Ye bot khud bhi auto-react karega
-2️⃣ *03438673242 (You)* inbox me \`.chreact <post_link>\` send hoga taake dusre bots se bhi auto reacts jayein!
+2️⃣ *${targetDisplay}* me \`.chreact <post_link>\` send hoga taake saare bots se auto reacts jayein!
 
-🗑️ *Remove karne ke liye:*
+📌 *Group/Chat Set Karne Ke Liye:* \`.set arc\`
+🗑️ *Remove Karne Ke Liye:*
 👉 \`.del arc ${canonicalLink}\``
     }, { quoted: msg });
 
@@ -470,7 +496,8 @@ async function arclistCommand(sock, from, msg) {
 }
 
 // 3. .del arc <link|jid> / .arcdel <link|jid> / .delarc <link|jid> - Delete channel from ARC
-async function arcdelCommand(sock, from, msg, isOwner, args = []) {
+async function arcdelCommand(sock, from, msg, isOwner, args = [], skipDedupe = false) {
+  if (!skipDedupe && isDuplicateArcMsg(msg)) return;
   if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner delete kar sakta hai!*" }, { quoted: msg });
 
   const raw = args[0] || '';

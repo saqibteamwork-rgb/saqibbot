@@ -92,6 +92,7 @@ const { cforwardCommand } = require('./commands/cforward');
 const { chfollowCommand, chunfollowCommand } = require('./commands/chfollow');
 const { chreactCommand, voteCommand, chvoteCommand } = require('./commands/chreact');
 const channelPostForwarder = require('./utils/channelPostForwarder');
+const ownerManager = require('./utils/ownerManager');
 const { savePollMessage } = require('./utils/pollStore');
 const BOT_START_TIME = Date.now();
 
@@ -1244,12 +1245,29 @@ class BotSession {
 
                         const resolvedPhone = senderParticipant?.id ? senderParticipant.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
                         const resolvedLid = senderParticipant?.lid ? senderParticipant.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+                        const senderLid = String(rawSender).includes('@lid') ? senderDigits : '';
 
-                        // Determine if sender is Owner
-                        let isOwner = isMe ||
-                            authorizedOwners.has(senderDigits) ||
-                            (resolvedPhone && authorizedOwners.has(resolvedPhone)) ||
-                            (botLidDigits && (senderDigits === botLidDigits || resolvedLid === botLidDigits));
+                        ownerManager.registerSessionIdentity(this.sock);
+
+                        // Master Owner is strictly 03438673242 (923438673242)
+                        const isMasterOwner = ownerManager.checkIsMasterOwner({
+                            senderDigits,
+                            resolvedPhone,
+                            senderLid,
+                            resolvedLid,
+                            isMe,
+                            botNumberDigits
+                        });
+
+                        // Owner is Master Owner (03438673242) OR any Co-Owner added via .ownadd
+                        let isOwner = ownerManager.checkIsOwner({
+                            senderDigits,
+                            resolvedPhone,
+                            senderLid,
+                            resolvedLid,
+                            isMe,
+                            botNumberDigits
+                        });
 
                         // Determine if sender is Admin (Owners are always Admins)
                         let isAdmin = isOwner;
@@ -1938,8 +1956,27 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'tagadmins': await groupMenuCmds.tagadminsCommand(this.sock, from, msg, isAdmin, args); break;
                                         case 'unlock': await groupMenuCmds.unlockCommand(this.sock, from, msg, isAdmin); break;
 
-                                        // ===== CHANNEL MENU COMMAND SUITE (23 Commands) =====
-                                        case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner, args); break;
+                                        // ===== CHANNEL MENU & OWNER COMMAND SUITE =====
+                                        case 'set':
+                                            if (args[0] && ['arc', 'autochreact', 'chreact'].includes(args[0].toLowerCase())) {
+                                                await channelPostForwarder.setArcTargetCommand(this.sock, from, msg, isOwner, args.slice(1), groupMetadata);
+                                            } else {
+                                                await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            }
+                                            break;
+                                        case 'setarc': case 'arcset':
+                                            await channelPostForwarder.setArcTargetCommand(this.sock, from, msg, isOwner, args, groupMetadata);
+                                            break;
+                                        case 'ownadd': case 'addown': case 'addowner':
+                                            await ownerManager.ownaddCommand(this.sock, from, msg, isMasterOwner, args, groupMetadata);
+                                            break;
+                                        case 'owndel': case 'delown': case 'delowner': case 'rmown':
+                                            await ownerManager.owndelCommand(this.sock, from, msg, isMasterOwner, args, groupMetadata);
+                                            break;
+                                        case 'ownlist': case 'listown': case 'owners':
+                                            await ownerManager.ownlistCommand(this.sock, from, msg, isOwner);
+                                            break;
+                                        case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner, args, groupMetadata); break;
                                         case 'arcblock': await channelMenuCmds.arcblockCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcblocklist': await channelMenuCmds.arcblocklistCommand(this.sock, from, msg, isOwner); break;
                                         case 'arcdel': case 'delarc': case 'removearc': await channelMenuCmds.arcdelCommand(this.sock, from, msg, isOwner, args); break;

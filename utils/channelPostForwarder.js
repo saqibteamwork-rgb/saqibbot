@@ -196,19 +196,27 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     const postLink = `https://whatsapp.com/channel/${inviteCode}/${serverId}`;
     const cmdText = `${config.command || '.chreact'} ${postLink}`;
 
-    const targetDigits = String(config.targetJid).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || '923438673242';
-    const targetSelfJid = `${targetDigits}@s.whatsapp.net`;
+    const rawTarget = String(config.targetJid || '923438673242@s.whatsapp.net').trim();
+    const isTargetGroup = rawTarget.endsWith('@g.us');
+    let targetDestJid = rawTarget;
 
-    // Strictly use 03438673242's own socket so the message lands in 03438673242's "You" (Self-Chat)
-    const selfSock = findTargetSelfSocket(sock, targetDigits);
-    if (!selfSock) {
-        console.log(`[ChannelForwarder] ℹ️ Session ${targetDigits} is not connected; skipping self-chat .chreact send to avoid messaging from secondary numbers.`);
-        return;
+    if (!isTargetGroup && !rawTarget.includes('@')) {
+        const d = rawTarget.replace(/[^0-9]/g, '') || '923438673242';
+        targetDestJid = `${d}@s.whatsapp.net`;
+    }
+
+    // Prefer Master Owner (923438673242) socket; if target is a group and 923438673242 isn't connected, fallback to active sock
+    const masterSock = findTargetSelfSocket(sock, '923438673242');
+    const senderSock = isTargetGroup ? (masterSock || sock) : (findTargetSelfSocket(sock, targetDestJid.split('@')[0]) || masterSock);
+
+    if (!senderSock) {
+        console.log(`[ChannelForwarder] ℹ️ Target session for ${targetDestJid} is not connected; skipping .chreact send.`);
+        return false;
     }
 
     try {
-        console.log(`[ChannelForwarder] 📢 ARC Channel Post in "${channelName}"! Sending to ${targetDigits} (You): ${cmdText}`);
-        const sentMsg = await selfSock.sendMessage(targetSelfJid, { text: cmdText });
+        console.log(`[ChannelForwarder] 📢 ARC Channel Post in "${channelName}"! Sending to ${targetDestJid}: ${cmdText}`);
+        const sentMsg = await senderSock.sendMessage(targetDestJid, { text: cmdText });
         if (sentMsg?.key?.id) {
             autoSentMsgIds.add(sentMsg.key.id);
             if (autoSentMsgIds.size > 1000) {
@@ -217,10 +225,9 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
         }
 
         // Directly trigger our own bot's .chreact command handler on the auto-sent message
-        // (Because Baileys does not emit m.type === 'notify' back to the socket that called sendMessage!)
         const cmdMsg = (sentMsg && sentMsg.key) ? sentMsg : {
             key: {
-                remoteJid: targetSelfJid,
+                remoteJid: targetDestJid,
                 fromMe: true,
                 id: sentMsg?.key?.id || `ARC_${serverId}_${Date.now()}`
             },
@@ -229,12 +236,90 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
 
         await new Promise(r => setTimeout(r, 1000));
         const { chreactCommand } = require('../commands/chreact');
-        await chreactCommand(selfSock, targetSelfJid, cmdMsg, [postLink], true, true);
+        await chreactCommand(senderSock, targetDestJid, cmdMsg, [postLink], true, true);
         return true;
     } catch (sendErr) {
         console.error('[ChannelForwarder Send Error]:', sendErr.message);
         return false;
     }
+}
+
+// Deduplication set for .set arc so multiple sessions in a group don't send duplicate replies
+const handledSetArcMsgIds = new Set();
+
+/**
+ * Command: .set arc / .setarc
+ * Sets the current chat or group as the target destination where `.chreact <post_link>` is automatically sent!
+ */
+async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
+    const msgId = msg?.key?.id;
+    if (msgId) {
+        if (handledSetArcMsgIds.has(msgId)) return;
+        handledSetArcMsgIds.add(msgId);
+        if (handledSetArcMsgIds.size > 1000) {
+            handledSetArcMsgIds.delete(handledSetArcMsgIds.values().next().value);
+        }
+    }
+
+    if (!isOwner) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+                  `┃ ❌ *Access Denied!*\n` +
+                  `┃ Ye command sirf Bot Owner\n` +
+                  `┃ (*03438673242*) run kar sakta hai!\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    const config = loadConfig();
+    const sub = (args[0] || '').toLowerCase().trim();
+
+    if (['inbox', 'you', 'self', 'me', 'reset', 'default'].includes(sub)) {
+        config.enabled = true;
+        config.targetJid = '923438673242@s.whatsapp.net';
+        config.targetName = '03438673242 (You / Self-Inbox)';
+        saveConfig(config);
+
+        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🎯 *ARC TARGET RESET TO INBOX* 〕━━━┈⊷\n` +
+                  `┃ ✅ *Status:* Active & Connected\n` +
+                  `┃ 📲 *Target:* *03438673242 (You / Inbox)*\n` +
+                  `┃ ⌨️ *Auto Command:* \`${config.command || '.chreact'} <post_link>\`\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    }
+
+    const isGroup = from.endsWith('@g.us');
+    let targetLabel = from.replace('@s.whatsapp.net', '');
+    if (isGroup) {
+        targetLabel = groupMetadata?.subject || 'WhatsApp Group';
+    } else if (from.startsWith('923438673242')) {
+        targetLabel = '03438673242 (You / Inbox)';
+    }
+
+    config.enabled = true;
+    config.targetJid = from;
+    config.targetName = targetLabel;
+    saveConfig(config);
+
+    await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 🎯 *ARC TARGET CHAT SET* 〕━━━┈⊷\n` +
+              `┃ ✅ *Status:* Active & Linked\n` +
+              `┃ 📍 *Target ${isGroup ? 'Group' : 'Chat'}:* *${targetLabel}*\n` +
+              `┃ 🆔 *JID:* \`${from}\`\n` +
+              `┃ ⌨️ *Auto Command:* \`${config.command || '.chreact'} <post_link>\`\n` +
+              `┃ 👑 *Set By:* Bot Owner\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `💡 *Ab jab bhi aapke \`.arc\` channel me koi post hogi:*\n` +
+              `👉 \`${config.command || '.chreact'} <post_link>\` automatic isi ${isGroup ? 'Group' : 'Chat'} me send hoga aur saare bots se auto-react lag jayega!\n\n` +
+              `🔄 *Wapis Inbox (You) me karne ke liye:* \`.set arc inbox\`\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
 }
 
 /**
@@ -303,6 +388,7 @@ async function chalertCommand(sock, from, msg, isOwner, args = []) {
 
 module.exports = {
     handleNewsletterPost,
+    setArcTargetCommand,
     chalertCommand,
     isAutoSentMessage,
     loadConfig,
