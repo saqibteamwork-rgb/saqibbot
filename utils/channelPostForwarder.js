@@ -215,8 +215,25 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
                 autoSentMsgIds.delete(autoSentMsgIds.values().next().value);
             }
         }
+
+        // Directly trigger our own bot's .chreact command handler on the auto-sent message
+        // (Because Baileys does not emit m.type === 'notify' back to the socket that called sendMessage!)
+        const cmdMsg = (sentMsg && sentMsg.key) ? sentMsg : {
+            key: {
+                remoteJid: targetSelfJid,
+                fromMe: true,
+                id: sentMsg?.key?.id || `ARC_${serverId}_${Date.now()}`
+            },
+            message: { conversation: cmdText }
+        };
+
+        await new Promise(r => setTimeout(r, 1000));
+        const { chreactCommand } = require('../commands/chreact');
+        await chreactCommand(selfSock, targetSelfJid, cmdMsg, [postLink], true, true);
+        return true;
     } catch (sendErr) {
         console.error('[ChannelForwarder Send Error]:', sendErr.message);
+        return false;
     }
 }
 

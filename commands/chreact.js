@@ -707,14 +707,19 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     const reactEmoji = emojiPool[i % emojiPool.length];
 
     try {
-      if (typeof s.newsletterFollow === 'function') {
-        await s.newsletterFollow(jid).catch(() => {});
-      }
-
       if (typeof s.newsletterReactMessage === 'function') {
-        await s.newsletterReactMessage(jid, serverId, reactEmoji);
+        await s.newsletterReactMessage(jid, String(serverId), reactEmoji);
       }
-    } catch {}
+    } catch {
+      try {
+        if (typeof s.newsletterFollow === 'function') {
+          await s.newsletterFollow(jid).catch(() => {});
+        }
+        if (typeof s.newsletterReactMessage === 'function') {
+          await s.newsletterReactMessage(jid, String(serverId), reactEmoji).catch(() => {});
+        }
+      } catch {}
+    }
 
     if (i < uniqueSocks.length - 1) {
       await sleep(200);

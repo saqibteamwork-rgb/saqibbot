@@ -1050,12 +1050,15 @@ class BotSession {
                                     if (conf && conf.enabled !== false) {
                                         const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
                                         if (serverId) {
-                                            // 1. Send ".chreact <post_link>" strictly in 03438673242 (You) self-chat
-                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).catch(err => {
+                                            // Send ".chreact <post_link>" strictly in 03438673242 (You) self-chat AND execute our bot's .chreact + confirmation card
+                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).then((handledByChreact) => {
+                                                if (!handledByChreact) {
+                                                    channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(() => {});
+                                                }
+                                            }).catch(err => {
                                                 console.error('[ChannelForwarder Error]:', err.message);
+                                                channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(() => {});
                                             });
-                                            // 2. Automatically react to the post from all connected bot sessions
-                                            channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(() => {});
                                         }
                                     }
                                 }
