@@ -2,7 +2,6 @@
   "enabled": true,
   "locked": false,
   "passcode": "arc123",
-  "defaultEmoji": "❤️",
   "channels": {
     "120363421389121979@newsletter": {
       "jid": "120363421389121979@newsletter",
@@ -73,5 +72,7 @@
       "lastPostId": null
     }
   },
-  "blocked": {}
+  "blocked": {},
+  "deletedChannels": {},
+  "defaultEmoji": "❤️"
 }

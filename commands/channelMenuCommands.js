@@ -101,6 +101,25 @@ function loadArcData() {
     }
   }
 
+  // Cross-sync custom target routes from channel_forwarder.json for zero memory loss
+  try {
+    const fwdFile = path.join(DATA_DIR, 'channel_forwarder.json');
+    if (fs.existsSync(fwdFile)) {
+      const fwdCfg = fs.readJsonSync(fwdFile);
+      if (fwdCfg?.channelTargets && typeof fwdCfg.channelTargets === 'object') {
+        for (const [chKey, ct] of Object.entries(fwdCfg.channelTargets)) {
+          if (ct?.targetJid && merged.channels[chKey]) {
+            if (!merged.channels[chKey].targetJid || Number(ct.updatedAt || 0) >= Number(merged.channels[chKey].targetUpdatedAt || 0)) {
+              merged.channels[chKey].targetJid = ct.targetJid;
+              merged.channels[chKey].targetName = ct.targetName || ct.targetJid;
+              merged.channels[chKey].targetUpdatedAt = ct.updatedAt || Date.now();
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+
   cachedArcData = merged;
   return cachedArcData;
 }
@@ -717,13 +736,17 @@ async function arclistCommand(sock, from, msg) {
     const delay = c.delayStr || `${Math.round((c.delayMs || 5000) / 1000)}s`;
     const count = c.count === 0 ? 'All Sessions' : `${c.count}x`;
 
+    const targetLabel = c.targetName || (c.targetJid ? (c.targetJid.endsWith('@g.us') ? 'WhatsApp Group' : 'Custom Chat') : null);
+    const targetDisplay = targetLabel ? `🎯 Target: *${targetLabel}*` : '🎯 Target: Default (Inbox / Group)';
+
     text += `┃\n`;
     text += `┃ ${idx + 1}. *${c.name || 'Channel'}* (${state})\n`;
     text += `┃    🆔 \`${jid}\`\n`;
+    text += `┃    ${targetDisplay}\n`;
     text += `┃    ✨ React: ${emojis} | 🔢 ${count} | ⏳ ${delay}\n`;
   });
   text += `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n`;
-  text += `💡 *Commands:* \`.arcdel <jid>\`  |  \`.arcstop <jid|all>\`  |  \`.arcstart <jid|all>\``;
+  text += `💡 *Commands:* \`.set arc <link>\` (group me set karein) | \`.set arc list\` | \`.arcdel <link>\``;
 
   await sock.sendMessage(from, { text }, { quoted: msg });
 }
@@ -794,6 +817,13 @@ async function arcdelCommand(sock, from, msg, isOwner, args = [], skipDedupe = f
   if (delInvite) data.deletedChannels[delInvite] = Date.now();
   delete data.channels[targetJid];
   saveArcData(data);
+
+  try {
+    const fwd = require('../utils/channelPostForwarder');
+    if (typeof fwd.removeChannelTarget === 'function') {
+      fwd.removeChannelTarget(targetJid, delInvite);
+    }
+  } catch {}
 
   await sock.sendMessage(from, {
     text: `✅ *Channel "${name}" successfully Auto-React (.arc) list se remove kar diya gaya hai!*\n\n🛑 Ab is channel ki posts par auto-react ya .chreact link send nahi hoga.`

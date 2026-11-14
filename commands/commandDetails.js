@@ -36,6 +36,25 @@ const COMMAND_GUIDES = {
       '.arcstop all'
     ]
   },
+  setarc: {
+    name: 'setarc',
+    aliases: ['arcset', 'set arc'],
+    category: 'CHANNEL',
+    permission: 'Owner / Premium 👑',
+    usage: '.set arc\n.set arc <channel_link>\n.set arc <channel_link> <group_link_or_jid>\n.set arc list\n.set arc reset <channel_link>\n.set arc inbox',
+    desc: 'Channel Post Forwarder Target Routing Engine: Kisi bhi channel ki .chreact posts ko kisi specific group ya chat me automatically route karein. Zero memory loss ke sath permanently save rehta hai.',
+    params: [
+      '<channel_link>: (Optional) WhatsApp channel ka link jisko current group se bind karna hai',
+      '<group_link_or_jid>: (Optional) Agar kisi doosre group me bind karna ho to uska invite link ya JID'
+    ],
+    examples: [
+      '.set arc (Current group ko default target banayein)',
+      '.set arc https://whatsapp.com/channel/0029Va... (Is channel ko current group se bind karein)',
+      '.set arc list (Tamam channel routes dekhein)',
+      '.set arc reset https://whatsapp.com/channel/0029Va... (Channel route hatayein)',
+      '.set arc inbox (Default target ko You/Inbox me reset karein)'
+    ]
+  },
   chautojoin: {
     name: 'chautojoin',
     aliases: ['autojoin', 'chjoin'],
