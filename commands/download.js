@@ -41,7 +41,7 @@ async function downloadCommand(sock, from, msg, args = []) {
 
     if (lower.includes('youtube.com') || lower.includes('youtu.be')) {
         return await ytmp4Command(sock, from, msg, args);
-    } else if (lower.includes('tiktok.com')) {
+    } else if (lower.includes('tiktok.com') || lower.includes('douyin.com')) {
         return await tiktokCommand(sock, from, msg, url);
     } else if (lower.includes('instagram.com')) {
         return await instagramCommand(sock, from, msg, url);

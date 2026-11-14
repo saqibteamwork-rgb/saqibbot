@@ -1,7 +1,8 @@
-// JawadTech
+// JawadTech / MR SAQIB MD
 const { cmd } = require("../command");
 const fetch = require('node-fetch');
 const converter = require('../lib/converter'); // Add converter
+const { tiktokAudioCommand } = require('../commands/tiktok');
 
 cmd({
     pattern: "ttmp3",
@@ -11,51 +12,8 @@ cmd({
     category: "download",
     use: ".ttmp3 <TikTok URL>",
     filename: __filename
-}, async (conn, mek, m, { from, reply, args, q }) => {
-    try {
-        const url = q || m.quoted?.text;
-        if (!url || !url.includes("tiktok.com")) {
-            return reply("❌ Please provide/reply to a TikTok link");
-        }
-
-        await conn.sendMessage(from, { react: { text: '⏳', key: m.key } });
-
-        // Fetch TikTok video using new API
-        const apiUrl = `https://api.deline.web.id/downloader/tiktok?url=${encodeURIComponent(url)}`;
-        const response = await fetch(apiUrl);
-        const data = await response.json();
-        
-        if (!data.status || !data.result) {
-            await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-            return reply("Failed to fetch TikTok video.");
-        }
-
-        // Get download URL from new API structure
-        const videoUrl = data.result.download;
-        
-        // Download video as buffer
-        await conn.sendMessage(from, { react: { text: '⬇️', key: m.key } });
-        const videoResponse = await fetch(videoUrl);
-        const videoBuffer = await videoResponse.buffer();
-        
-        // Convert video to MP3 using converter
-        await conn.sendMessage(from, { react: { text: '🔧', key: m.key } });
-        const audioBuffer = await converter.toAudio(videoBuffer, 'mp4');
-        
-        // Send converted audio
-        await conn.sendMessage(from, {
-            audio: audioBuffer,
-            mimetype: 'audio/mpeg',
-            ptt: false
-        }, { quoted: mek });
-
-        await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
-
-    } catch (error) {
-        console.error('TTMP3 Error:', error);
-        await conn.sendMessage(from, { react: { text: '❌', key: m.key } });
-        reply("❌ Audio extraction failed. Error: " + error.message);
-    }
+}, async (conn, mek, m, { from, q }) => {
+    await tiktokAudioCommand(conn, from, mek, q);
 });
 
 cmd({

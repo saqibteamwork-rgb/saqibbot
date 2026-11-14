@@ -1567,8 +1567,15 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'tagall': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
                                         case 'setname': await commands.setname(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, q); break;
                                         case 'insta': case 'ig': await commands.insta(this.sock, from, msg, q); break;
-                                        case 'tiktok': case 'tt': case 'tik': case 'tktok': case 'ttdl':
+                                        case 'tiktok': case 'tt': case 'tik': case 'tktok': case 'ttdl': case 'tiktok2': case 'tt2': case 'ttdl2': case 'tiktok3': case 'tt3': case 'ttdl3':
                                             await commands.tiktok(this.sock, from, msg, q); break;
+                                        case 'ttmp3': case 'ttaudio': case 'tiktokaudio': case 'tiktokmp3':
+                                            if (typeof commands.tiktok.tiktokAudioCommand === 'function') {
+                                                await commands.tiktok.tiktokAudioCommand(this.sock, from, msg, q);
+                                            } else {
+                                                await commands.tiktok(this.sock, from, msg, q);
+                                            }
+                                            break;
                                         case 'song': case 'ytmp3': case 'play': case 'yta': case 'audio': case 'mp3': case 'music':
                                             await ytmp3Command(this.sock, from, msg, args); 
                                             break;

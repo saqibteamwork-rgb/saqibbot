@@ -500,13 +500,16 @@ const COMMAND_GUIDES = {
   },
   tiktok: {
     name: 'tiktok',
-    aliases: ['tt', 'ttdl'],
+    aliases: ['tt', 'ttdl', 'tik', 'tktok', 'tt2', 'tt3'],
     category: 'DOWNLOAD',
     permission: 'Everyone 🌐',
-    usage: '.tiktok <tiktok_url>',
-    desc: 'TikTok video bina watermark ke HD quality mein download karta hai.',
-    params: ['<tiktok_url>: TikTok video ka link'],
-    examples: ['.tiktok https://vt.tiktok.com/xxxx']
+    usage: '.tt <tiktok_url>\n.tiktok <tiktok_url>\n(Ya kisi TikTok link wale message ko reply karke .tt likhein)',
+    desc: 'TikTok videos bina watermark ke HD quality mein aur photo slideshows music ke sath download karta hai. Short links (vt.tiktok.com) aur replied messages dono fully supported hain.',
+    params: ['<tiktok_url>: TikTok video ya photo slide ka link'],
+    examples: [
+      '.tt https://vt.tiktok.com/ZSp9fXCWS/',
+      '.tiktok https://www.tiktok.com/@user/video/...'
+    ]
   },
   instagram: {
     name: 'instagram',
