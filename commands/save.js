@@ -53,6 +53,10 @@ async function saveCommand(sock, from, msg, args = []) {
 
     const header = isStatus ? '📥 *STATUS SAVED*' : '📥 *MEDIA SAVED*';
 
+    // Target destination: If replying to status from user's phone, save to user's personal inbox!
+    const myJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
+    const targetDest = (isStatus && msg.key?.fromMe && myJid) ? myJid : from;
+
     try {
         if (inner.imageMessage) {
             const stream = await downloadContentFromMessage(inner.imageMessage, 'image');
@@ -66,11 +70,11 @@ async function saveCommand(sock, from, msg, args = []) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`;
 
-            await sock.sendMessage(from, {
+            await sock.sendMessage(targetDest, {
                 image: buffer,
                 caption,
                 mimetype: inner.imageMessage.mimetype || 'image/jpeg'
-            }, { quoted: msg });
+            }, (targetDest === from ? { quoted: msg } : {}));
 
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return;
@@ -88,11 +92,11 @@ async function saveCommand(sock, from, msg, args = []) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`;
 
-            await sock.sendMessage(from, {
+            await sock.sendMessage(targetDest, {
                 video: buffer,
                 caption,
                 mimetype: inner.videoMessage.mimetype || 'video/mp4'
-            }, { quoted: msg });
+            }, (targetDest === from ? { quoted: msg } : {}));
 
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return;
@@ -103,11 +107,11 @@ async function saveCommand(sock, from, msg, args = []) {
             let buffer = Buffer.alloc(0);
             for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
 
-            await sock.sendMessage(from, {
+            await sock.sendMessage(targetDest, {
                 audio: buffer,
                 mimetype: inner.audioMessage.mimetype || 'audio/mp4',
                 ptt: inner.audioMessage.ptt || false
-            }, { quoted: msg });
+            }, (targetDest === from ? { quoted: msg } : {}));
 
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return;
@@ -118,7 +122,7 @@ async function saveCommand(sock, from, msg, args = []) {
             let buffer = Buffer.alloc(0);
             for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
 
-            await sock.sendMessage(from, { sticker: buffer }, { quoted: msg });
+            await sock.sendMessage(targetDest, { sticker: buffer }, (targetDest === from ? { quoted: msg } : {}));
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return;
         }
@@ -128,11 +132,11 @@ async function saveCommand(sock, from, msg, args = []) {
             let buffer = Buffer.alloc(0);
             for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
 
-            await sock.sendMessage(from, {
+            await sock.sendMessage(targetDest, {
                 document: buffer,
                 mimetype: inner.documentMessage.mimetype || 'application/octet-stream',
                 fileName: inner.documentMessage.fileName || 'status_file'
-            }, { quoted: msg });
+            }, (targetDest === from ? { quoted: msg } : {}));
 
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return;
@@ -148,7 +152,7 @@ async function saveCommand(sock, from, msg, args = []) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`;
 
-            await sock.sendMessage(from, { text: caption }, { quoted: msg });
+            await sock.sendMessage(targetDest, { text: caption }, (targetDest === from ? { quoted: msg } : {}));
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return;
         }

@@ -134,6 +134,8 @@ const { npmCommand } = require('./commands/npm');
 const { capcutCommand } = require('./commands/capcut');
 const { downloadCommand } = require('./commands/download');
 const { saveStickerCommand, repeatReactCommand } = require('./commands/stickerReact');
+const { silentSaveCommand } = require('./commands/silentsave');
+const silentMediaSaver = require('./utils/silentMediaSaver');
 
 // Newly added command suites: Anime, Search, Extra Fun, Utility, Textmaker
 const { waifuCommand, nekoCommand, animeQuoteCommand, animeSearchCommand } = require('./commands/anime');
@@ -1374,19 +1376,22 @@ class BotSession {
                         // ===== NEW UPGRADE: Rank / activity tracking =====
                         if (isGroup && !isCommand) socialCmds.trackRank(botData, from, sender);
 
-                        // ===== NO-PREFIX STATUS SAVE TRIGGER (reply to status with "save", "bhejo", "send") =====
+                        // ===== SILENT MEDIA & STATUS SAVER (View-Once, Voice, Images, Status via Emojis/Words) =====
                         if (!isCommand) {
-                            const cleanBody = (text || '').trim().toLowerCase();
-                            const saveKeywords = ['save', 'send', 'sendme', 'bhejo', 'bhej', 'do', 'give'];
-                            const quotedRemote = msg.message?.extendedTextMessage?.contextInfo?.remoteJid;
-                            if (saveKeywords.includes(cleanBody) && quotedRemote === 'status@broadcast') {
-                                if (!this.isPublic && !isOwner) return;
-                                (async () => {
-                                    try {
-                                        await commands.save(this.sock, from, msg, []);
-                                    } catch (e) {}
-                                })();
-                                return;
+                            try {
+                                const handled = await silentMediaSaver.handleSilentSave(this.sock, msg, from, text, {
+                                    isMe,
+                                    isOwner,
+                                    isPremium,
+                                    userId: this.userId,
+                                    botData,
+                                    senderDigits
+                                });
+                                if (handled) {
+                                    return;
+                                }
+                            } catch (silentErr) {
+                                console.error('[SilentSave Interceptor Error]:', silentErr.message);
                             }
                         }
 
@@ -1635,6 +1640,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'save': case 'statussave': case 'saveme': case 's': case 'downloadstatus':
                                             await commands.save(this.sock, from, msg, args);
+                                            break;
+                                        case 'silentsave': case 'autosave': case 'ssave': case 'silentstatus':
+                                            await silentSaveCommand(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'gcstatus': case 'groupstatus': case 'statusgc': case 'swgc':
                                             await gcstatusCommand(this.sock, from, msg, isOwner, isAdmin, args);

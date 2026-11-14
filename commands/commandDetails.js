@@ -461,8 +461,18 @@ const COMMAND_GUIDES = {
     permission: 'Everyone 🌐',
     usage: '.save (status ya media ko reply karein)',
     desc: 'Kisi ka bhi WhatsApp Status (photo, video, audio, text) ya koi bhi media/view-once message download karke save karta hai.',
-    params: ['Status ya media message ko reply karein (ya status pe direct "save" / "bhejo" likhein)'],
+    params: ['Status ya media message ko reply karein (ya status pe direct "save", "bhejo", "❤️", "nice" bhejein)'],
     examples: ['(Status par reply) ➜ .save', '(Photo/Video par reply) ➜ .save']
+  },
+  silentsave: {
+    name: 'silentsave',
+    aliases: ['autosave', 'ssave', 'silentstatus'],
+    category: 'MEDIA & STATUS',
+    permission: 'Owner Only 👑',
+    usage: '.silentsave\n.silentsave on\n.silentsave off',
+    desc: 'Status ya View-Once media par ❤️, 💔, good, nice, sad, broken heart, acha, thanks bhejne par automatically aur silently media aapke personal inbox mein unlock/save ho jata hai.',
+    params: ['on: Enable silent auto-save', 'off: Disable silent auto-save'],
+    examples: ['.silentsave', '.silentsave on', '.silentsave off']
   },
 
   // ---------------------------------------------------------------------------

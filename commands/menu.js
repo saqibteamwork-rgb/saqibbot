@@ -79,7 +79,7 @@ function makeBox(title, commands) {
 const CATEGORIES = {
     'AI & MEDIA': [
         'ai', 'ai2', 'emojimix', 'flux', 'imagine', 'malik', 'pinterest',
-        'qr', 'rmbg', 'sigma', 'sticker', 'take', 'tourl', 'vc'
+        'qr', 'rmbg', 'sigma', 'silentsave', 'sticker', 'take', 'tourl', 'vc'
     ],
     'CHANNEL': [
         'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock',
