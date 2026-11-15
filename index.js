@@ -546,7 +546,8 @@ const CONTACT_FALLBACK = {
     phone: "+92 3468616487",
     whatsapp: "https://wa.me/923464616487",
     location: "Gojra, Faisalabad, Pakistan",
-    avatar: "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png",
+    avatar: "/avatar.png",
+    avatar_fallback: "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png",
     instagram: "https://www.instagram.com/mr_saqib242",
     facebook: "https://www.facebook.com/profile.php?id=100085188689033",
     tiktok: "https://www.tiktok.com/@mr_saqib_242",
@@ -591,7 +592,8 @@ app.get(['/api/contact', '/api/public/contact'], async (req, res) => {
             if (data && data.success && data.data) {
                 data.data.name = 'Muhammad Saqib';
                 data.data.short_name = 'MR SAQIB';
-                data.data.avatar = 'https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png';
+                data.data.avatar = '/avatar.png';
+                data.data.avatar_fallback = 'https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png';
                 data.data.portfolio = 'https://mrsaqib.me';
                 contactCache = data.data;
                 contactCacheTime = now;
@@ -2077,6 +2079,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'pmlist': case 'listpm': case 'premlist':
                                             await ownerManager.pmlistCommand(this.sock, from, msg, isOwner);
+                                            break;
+                                        case 'cs': case 'checksession': case 'checksessions': case 'sessions': case 'paired': case 'botsessions':
+                                            await ownerManager.checkSessionsCommand(this.sock, from, msg, isOwner, args, sessions, AUTH_DIR);
+                                            break;
+                                        case 'delcs': case 'rmcs': case 'logoutcs':
+                                            await ownerManager.delSessionCommand(this.sock, from, msg, isOwner, args, sessions, AUTH_DIR, logoutSession);
                                             break;
                                         case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner || isPremium, args, groupMetadata); break;
                                         case 'arcblock': await channelMenuCmds.arcblockCommand(this.sock, from, msg, isOwner, args); break;

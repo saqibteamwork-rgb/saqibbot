@@ -119,7 +119,7 @@ async function tourlCommand(sock, from, msg) {
                     title: "MR SAQIB MD - Media Uploader",
                     body: `File uploaded: ${fileSizeFormatted}`,
                     mediaType: 1,
-                    thumbnailUrl: "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_7oG52NZUY.png",
+                    thumbnailUrl: "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png",
                     sourceUrl: url,
                     renderLargerThumbnail: false
                 }

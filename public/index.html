@@ -201,7 +201,8 @@
           <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full p-[2px] bg-gradient-to-tr from-emerald-500 via-teal-400 to-sky-500 shadow-sm">
             <img
               id="headerAvatar"
-              src="https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png"
+              src="/avatar.png"
+              onerror="this.src='https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png'"
               alt="Muhammad Saqib"
               class="w-full h-full object-cover rounded-full border border-white"
             />
@@ -218,7 +219,7 @@
             </span>
           </div>
           <p class="text-[10px] sm:text-[11px] font-semibold text-slate-500 truncate mt-0.5">
-            Created by <a id="headerCreatorLink" href="https://mrsaqib.me" target="_blank" rel="noopener noreferrer" class="text-emerald-700 hover:underline font-bold">Muhammad Saqib</a> · <span id="headerTagline">Full-Stack & Security</span>
+            Created by <a id="headerCreatorLink" href="https://mrsaqib.me" target="_blank" rel="noopener noreferrer" class="text-emerald-700 hover:underline font-bold">Muhammad Saqib</a> · <span id="headerTagline">Full-Stack Engineer &amp; Cyber Security Specialist</span>
           </p>
         </div>
       </div>
@@ -292,6 +293,93 @@
             >
               <i class="fa-solid fa-qrcode text-xs"></i>
               <span>QR Code Scan</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- DUAL-SERVER LOAD BALANCER & CLUSTER ROUTER                          -->
+        <!-- =================================================================== -->
+        <div class="mb-5 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl border border-slate-700/80">
+          <div class="flex items-center justify-between mb-3 px-1">
+            <div class="flex items-center gap-2">
+              <span class="relative flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span class="text-xs font-black uppercase tracking-wider text-slate-200">Cloud Cluster Engine</span>
+            </div>
+            <div id="routingModeBadge" class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm">
+              <i class="fa-solid fa-bolt text-[10px]"></i>
+              <span id="routingModeText">Auto Balanced (Heroku ⇄ Railway)</span>
+            </div>
+          </div>
+
+          <!-- Server Selector Cards Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <!-- 1. AUTO ROUTING (SMART BALANCER) -->
+            <button
+              type="button"
+              id="serverCardAuto"
+              onclick="setServerRouting('auto')"
+              class="server-pill-btn p-2.5 rounded-xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-500/25 via-teal-500/20 to-transparent text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1">
+                  <i class="fa-solid fa-shuffle text-[10px]"></i> Smart Auto
+                </span>
+                <i id="checkAuto" class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
+              </div>
+              <div class="text-xs font-black text-white truncate">Auto-Route (50/50)</div>
+              <div class="text-[10px] text-slate-300 font-semibold truncate mt-0.5">
+                Load Balancer Active
+              </div>
+            </button>
+
+            <!-- 2. SERVER 1 (HEROKU) -->
+            <button
+              type="button"
+              id="serverCardHeroku"
+              onclick="setServerRouting('heroku')"
+              class="server-pill-btn p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[11px]"></i> Server 1
+                </span>
+                <span id="herokuDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="text-xs font-black text-white truncate flex items-center justify-between">
+                <span>Heroku Cloud</span>
+                <span id="herokuPing" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[10px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="herokuCapacity">Active: 0/50</span>
+                <span class="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-bold">Container</span>
+              </div>
+            </button>
+
+            <!-- 3. SERVER 2 (RAILWAY) -->
+            <button
+              type="button"
+              id="serverCardRailway"
+              onclick="setServerRouting('railway')"
+              class="server-pill-btn p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-black uppercase tracking-wider text-sky-300 flex items-center gap-1">
+                  <i class="fa-solid fa-server text-[10px]"></i> Server 2
+                </span>
+                <span id="railwayDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="text-xs font-black text-white truncate flex items-center justify-between">
+                <span>Railway Scale</span>
+                <span id="railwayPing" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[10px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="railwayCapacity">Active: 4/50</span>
+                <span class="text-[9px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-bold">Fast</span>
+              </div>
             </button>
           </div>
         </div>
@@ -821,7 +909,8 @@
             <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-full p-[2px] bg-gradient-to-tr from-orange-400 via-pink-500 to-indigo-500 shadow-md">
               <img
                 id="hubAvatar"
-                src="https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png"
+                src="/avatar.png"
+                onerror="this.src='https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png'"
                 alt="Muhammad Saqib"
                 class="w-full h-full object-cover rounded-full border border-white"
               />
@@ -930,12 +1019,136 @@
   <!-- JAVASCRIPT: PAIRING ENGINE & TELEMETRY API                          -->
   <!-- =================================================================== -->
   <script>
+    // ═════════════════════════════════════════════════════════
+    // MULTI-SERVER CLUSTER ARCHITECTURE & DUAL-ROUTING ENGINE
+    // ═════════════════════════════════════════════════════════
+    const CLUSTER = {
+      heroku: {
+        id: 'heroku',
+        name: 'Server 1 (Heroku Cloud)',
+        short: 'Heroku',
+        url: 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
+        online: true,
+        active: 0,
+        ping: null
+      },
+      railway: {
+        id: 'railway',
+        name: 'Server 2 (Railway Engine)',
+        short: 'Railway',
+        url: 'https://web-production-08da5300.up.railway.app',
+        online: true,
+        active: 0,
+        ping: null
+      }
+    };
+
+    let selectedServerMode = 'auto'; // 'auto' | 'heroku' | 'railway'
+    let autoCounter = 0;
+
+    function setServerRouting(mode) {
+      selectedServerMode = mode;
+      updateServerButtonsUI();
+      if (mode === 'auto') {
+        addLog('⚡ Smart Load-Balancer activated: Traffic distributed 50/50 between Server 1 (Heroku) and Server 2 (Railway)', 'info');
+      } else if (mode === 'heroku') {
+        addLog('📍 Dedicated Routing: Locked to Server 1 (Heroku Docker Container)', 'info');
+      } else if (mode === 'railway') {
+        addLog('📍 Dedicated Routing: Locked to Server 2 (Railway Scale Engine)', 'info');
+      }
+    }
+
+    function updateServerButtonsUI() {
+      const btnAuto = document.getElementById('serverCardAuto');
+      const btnH = document.getElementById('serverCardHeroku');
+      const btnR = document.getElementById('serverCardRailway');
+      const checkAuto = document.getElementById('checkAuto');
+      const modeText = document.getElementById('routingModeText');
+
+      const defaultClass = 'server-pill-btn p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group';
+      if (btnAuto) btnAuto.className = defaultClass;
+      if (btnH) btnH.className = defaultClass;
+      if (btnR) btnR.className = defaultClass;
+      if (checkAuto) checkAuto.classList.add('hidden');
+
+      if (selectedServerMode === 'auto') {
+        if (btnAuto) btnAuto.className = 'server-pill-btn p-2.5 rounded-xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-500/25 via-teal-500/20 to-transparent text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30';
+        if (checkAuto) checkAuto.classList.remove('hidden');
+        if (modeText) modeText.textContent = 'Auto Balanced (Heroku ⇄ Railway)';
+      } else if (selectedServerMode === 'heroku') {
+        if (btnH) btnH.className = 'server-pill-btn p-2.5 rounded-xl border-2 border-purple-400 bg-gradient-to-br from-purple-500/25 to-indigo-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-purple-400/30';
+        if (modeText) modeText.textContent = 'Dedicated Server 1 (Heroku)';
+      } else if (selectedServerMode === 'railway') {
+        if (btnR) btnR.className = 'server-pill-btn p-2.5 rounded-xl border-2 border-sky-400 bg-gradient-to-br from-sky-500/25 to-blue-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-sky-400/30';
+        if (modeText) modeText.textContent = 'Dedicated Server 2 (Railway)';
+      }
+    }
+
+    function getTargetServerNode() {
+      if (selectedServerMode === 'heroku') return CLUSTER.heroku;
+      if (selectedServerMode === 'railway') return CLUSTER.railway;
+
+      // Auto Mode: check health first
+      if (!CLUSTER.heroku.online && CLUSTER.railway.online) return CLUSTER.railway;
+      if (!CLUSTER.railway.online && CLUSTER.heroku.online) return CLUSTER.heroku;
+
+      // Both online: alternate round-robin so both servers are equally loaded
+      autoCounter++;
+      return (autoCounter % 2 === 0) ? CLUSTER.heroku : CLUSTER.railway;
+    }
+
+    function getAlternativeServerNode(currentNode) {
+      return currentNode.id === 'heroku' ? CLUSTER.railway : CLUSTER.heroku;
+    }
+
+    // Ping health & latency for both servers every 15 seconds
+    async function pingClusterHealth() {
+      const checkNode = async (nodeKey, dotId, pingId, capId) => {
+        const node = CLUSTER[nodeKey];
+        const t0 = performance.now();
+        try {
+          const res = await fetch(node.url + '/health', { cache: 'no-store' });
+          const latency = Math.round(performance.now() - t0);
+          if (res.ok) {
+            const data = await res.json();
+            node.online = true;
+            node.ping = latency;
+            node.active = data.activeSessions || 0;
+
+            const dot = document.getElementById(dotId);
+            const pingEl = document.getElementById(pingId);
+            const capEl = document.getElementById(capId);
+
+            if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+            if (pingEl) pingEl.textContent = latency + 'ms';
+            if (capEl) capEl.textContent = `Active: ${node.active}/50`;
+          } else {
+            throw new Error('Status ' + res.status);
+          }
+        } catch (e) {
+          node.online = false;
+          const dot = document.getElementById(dotId);
+          const pingEl = document.getElementById(pingId);
+          if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
+          if (pingEl) pingEl.textContent = 'Offline';
+        }
+      };
+
+      await Promise.allSettled([
+        checkNode('heroku', 'herokuDot', 'herokuPing', 'herokuCapacity'),
+        checkNode('railway', 'railwayDot', 'railwayPing', 'railwayCapacity')
+      ]);
+    }
+
+    pingClusterHealth();
+    setInterval(pingClusterHealth, 15000);
+
     const isExternalHost = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('pages.dev') || window.location.protocol === 'file:';
-    const API_BASE = isExternalHost ? 'https://web-production-08da5300.up.railway.app' : '';
+    let API_BASE = CLUSTER.heroku.url;
 
     let socket;
     try {
-      socket = io(API_BASE || undefined, { transports: ['websocket', 'polling'] });
+      socket = io(CLUSTER.heroku.url, { transports: ['websocket', 'polling'] });
     } catch (e) {}
 
     function addLog(msg, type = 'info') {
@@ -999,44 +1212,62 @@
         connStatusBox.classList.remove('hidden', 'bg-emerald-50', 'text-emerald-800', 'border-emerald-200', 'bg-rose-50', 'text-rose-800', 'border-rose-200');
         connStatusBox.classList.add('bg-sky-50', 'text-sky-800', 'border-sky-200');
         connStatusIcon.className = 'fa-solid fa-spinner fa-spin text-sky-600';
-        connStatusMsg.textContent = `Generating code for +${number}...`;
-        addLog(`Requesting pairing code for +${number}...`);
+        connStatusMsg.textContent = `Connecting to cloud cluster for +${number}...`;
+
+        let targetNode = getTargetServerNode();
+        addLog(`⚡ Dispatching pairing request to ${targetNode.name}...`, 'info');
+
+        let data = null;
+        let usedNode = targetNode;
 
         try {
-          const res = await fetch(API_BASE + '/api/pair?number=' + encodeURIComponent(number));
-          const data = await res.json();
+          const res = await fetch(targetNode.url + '/api/pair?number=' + encodeURIComponent(number));
+          data = await res.json();
+        } catch (primaryErr) {
+          const backupNode = getAlternativeServerNode(targetNode);
+          addLog(`⚠️ ${targetNode.short} unresponsive, auto-routing to ${backupNode.name}...`, 'info');
+          usedNode = backupNode;
+          try {
+            const res = await fetch(backupNode.url + '/api/pair?number=' + encodeURIComponent(number));
+            data = await res.json();
+          } catch (secErr) {
+            throw new Error(`Cluster error: ${primaryErr.message}`);
+          }
+        }
 
-          if (data.success && data.code) {
+        try {
+          if (data && data.success && data.code) {
             codeDisplay.textContent = data.code;
             document.getElementById('pairBtnText').textContent = 'New Code';
             pairBtn.disabled = false;
-            addLog(`🔑 Pairing Code: ${data.code}`, 'success');
-            connStatusMsg.textContent = 'Code generated! WhatsApp Linked Devices mein enter karein.';
+            addLog(`🔑 [${usedNode.short}] Pairing Code: ${data.code}`, 'success');
+            connStatusMsg.textContent = `Code ready on ${usedNode.short}! WhatsApp Linked Devices mein enter karein.`;
 
             if (window.pairPoll) clearInterval(window.pairPoll);
             window.pairPoll = setInterval(async () => {
               try {
-                const sRes = await fetch(API_BASE + '/api/pair/status?number=' + encodeURIComponent(number));
+                const sRes = await fetch(usedNode.url + '/api/pair/status?number=' + encodeURIComponent(number));
                 const sData = await sRes.json();
                 if (sData.connected) {
                   clearInterval(window.pairPoll);
-                  onConnectedSuccess(number);
+                  onConnectedSuccess(number, usedNode.short);
                 }
               } catch (e) {}
             }, 2500);
 
-            if (socket) {
-              socket.on('connection-status-' + number, (st) => {
+            try {
+              const nodeSocket = io(usedNode.url, { transports: ['websocket', 'polling'] });
+              nodeSocket.on('connection-status-' + number, (st) => {
                 if (st && st.connected) {
                   if (window.pairPoll) clearInterval(window.pairPoll);
-                  onConnectedSuccess(number);
+                  onConnectedSuccess(number, usedNode.short);
                 }
               });
-            }
-          } else if (data.isConnected) {
-            onConnectedSuccess(number);
+            } catch (e) {}
+          } else if (data && data.isConnected) {
+            onConnectedSuccess(number, usedNode.short);
           } else {
-            throw new Error(data.error || 'Failed');
+            throw new Error(data?.error || 'Failed to generate code');
           }
         } catch (err) {
           addLog(`❌ Error: ${err.message}`, 'error');
@@ -1050,14 +1281,14 @@
       });
     }
 
-    function onConnectedSuccess(num) {
+    function onConnectedSuccess(num, serverName = 'Cloud') {
       connStatusBox.classList.remove('bg-sky-50', 'text-sky-800', 'border-sky-200');
       connStatusBox.classList.add('bg-emerald-50', 'text-emerald-800', 'border-emerald-200');
       connStatusIcon.className = 'fa-solid fa-circle-check text-emerald-600';
-      connStatusMsg.textContent = `🎉 Connected! MR SAQIB MD is online for +${num}!`;
+      connStatusMsg.textContent = `🎉 Connected! MR SAQIB MD is online on ${serverName} for +${num}!`;
       document.getElementById('pairBtnText').textContent = '✅ Connected';
       pairBtn.disabled = true;
-      addLog(`✅ WhatsApp Connected successfully for +${num}!`, 'success');
+      addLog(`✅ WhatsApp Connected successfully via ${serverName} for +${num}!`, 'success');
     }
 
     const codeResultBox = document.querySelector('.pairing-box');
@@ -1083,17 +1314,38 @@
       qrGenBtn.addEventListener('click', async () => {
         qrGenBtn.disabled = true;
         document.getElementById('qrGenBtnText').textContent = 'Loading...';
-        addLog('Requesting QR code from backend...');
+
+        let targetNode = getTargetServerNode();
+        addLog(`📷 Requesting QR code via ${targetNode.name}...`);
+
+        let data = null;
+        let usedNode = targetNode;
 
         try {
-          const res = await fetch(API_BASE + '/api/qr/start');
-          const data = await res.json();
-          if (data.success && data.qr) {
+          const res = await fetch(targetNode.url + '/api/qr/start');
+          data = await res.json();
+        } catch (err) {
+          const backupNode = getAlternativeServerNode(targetNode);
+          addLog(`⚠️ ${targetNode.short} busy, switching to ${backupNode.name}...`, 'info');
+          usedNode = backupNode;
+          try {
+            const res = await fetch(backupNode.url + '/api/qr/start');
+            data = await res.json();
+          } catch (e2) {
+            addLog(`❌ QR Error: ${e2.message}`, 'error');
+            qrGenBtn.disabled = false;
+            document.getElementById('qrGenBtnText').textContent = 'Try Again';
+            return;
+          }
+        }
+
+        try {
+          if (data && data.success && data.qr) {
             qrImageElement.src = data.qr;
             qrDisplayContainer.classList.remove('hidden');
             document.getElementById('qrGenBtnText').textContent = 'Refresh';
             qrGenBtn.disabled = false;
-            addLog('📷 QR Code loaded! Scan with WhatsApp.', 'success');
+            addLog(`📷 QR Code loaded on ${usedNode.short}! Scan with WhatsApp.`, 'success');
 
             const sid = data.sessionId;
             let count = 0;
@@ -1101,11 +1353,11 @@
               count++;
               if (count > 30) { clearInterval(qPoll); return; }
               try {
-                const s = await (await fetch(API_BASE + '/api/qr/status?id=' + sid)).json();
+                const s = await (await fetch(usedNode.url + '/api/qr/status?id=' + sid)).json();
                 if (s.connected) {
                   clearInterval(qPoll);
-                  qrDisplayContainer.innerHTML = '<div class="text-emerald-700 font-extrabold text-sm p-3">🎉 WhatsApp Connected via QR!</div>';
-                  addLog('✅ Connected via QR code!', 'success');
+                  qrDisplayContainer.innerHTML = `<div class="text-emerald-700 font-extrabold text-sm p-3">🎉 WhatsApp Connected via QR on ${usedNode.short}!</div>`;
+                  addLog(`✅ Connected via QR code on ${usedNode.short}!`, 'success');
                 }
               } catch (e) {}
             }, 2000);
@@ -1192,7 +1444,7 @@
           phone: "+92 3468616487",
           whatsapp: "https://wa.me/923464616487",
           location: "Gojra, Faisalabad, Pakistan",
-          avatar: "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png",
+          avatar: "/avatar.png",
           instagram: "https://www.instagram.com/mr_saqib242",
           facebook: "https://www.facebook.com/profile.php?id=100085188689033",
           tiktok: "https://www.tiktok.com/@mr_saqib_242",
@@ -1205,21 +1457,29 @@
         profile.portfolio = "https://mrsaqib.me";
       }
 
+      // Enforce Creator Official Identity & DP
+      const saqibName = "Muhammad Saqib";
+      const saqibAvatar = "/avatar.png";
+      const saqibAvatarFallback = "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png";
+
       // Populate Header Elements
       const headerAvatar = document.getElementById('headerAvatar');
-      if (headerAvatar && profile.avatar) headerAvatar.src = profile.avatar;
+      if (headerAvatar) {
+        headerAvatar.src = saqibAvatar;
+        headerAvatar.onerror = () => { headerAvatar.src = saqibAvatarFallback; };
+      }
 
       const headerCreatorLink = document.getElementById('headerCreatorLink');
       if (headerCreatorLink) {
         headerCreatorLink.href = 'https://mrsaqib.me';
-        if (profile.name) headerCreatorLink.textContent = profile.name;
+        headerCreatorLink.textContent = saqibName;
       }
 
       const headerTagline = document.getElementById('headerTagline');
-      if (headerTagline && profile.tagline) headerTagline.textContent = profile.tagline;
+      if (headerTagline) headerTagline.textContent = profile.tagline || 'Full-Stack Engineer & Cyber Security Specialist';
 
       const headerBadge = document.getElementById('headerBadge');
-      if (headerBadge && profile.badge_text) headerBadge.textContent = profile.badge_text;
+      if (headerBadge) headerBadge.textContent = 'Verified ID';
 
       const headerPortfolioBtn = document.getElementById('headerPortfolioBtn');
       if (headerPortfolioBtn) {
@@ -1240,10 +1500,13 @@
 
       // Populate Developer & Contact Hub Elements
       const hubAvatar = document.getElementById('hubAvatar');
-      if (hubAvatar && profile.avatar) hubAvatar.src = profile.avatar;
+      if (hubAvatar) {
+        hubAvatar.src = saqibAvatar;
+        hubAvatar.onerror = () => { hubAvatar.src = saqibAvatarFallback; };
+      }
 
       const hubName = document.getElementById('hubName');
-      if (hubName && profile.name) hubName.textContent = profile.name;
+      if (hubName) hubName.textContent = saqibName;
 
       const hubTagline = document.getElementById('hubTagline');
       if (hubTagline && profile.tagline) hubTagline.textContent = profile.tagline;

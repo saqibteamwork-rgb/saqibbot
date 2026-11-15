@@ -145,15 +145,38 @@ function saveOwnersData(data) {
         if (!data.lidMap || typeof data.lidMap !== 'object') data.lidMap = {};
         data.updatedAt = Date.now();
         fs.ensureDirSync(path.dirname(OWNERS_FILE));
-        fs.writeJsonSync(OWNERS_FILE, data, { spaces: 2 });
+        
+        const payload = JSON.stringify(data, null, 2);
+        const tmpFile = OWNERS_FILE + '.tmp';
+        try {
+            fs.writeFileSync(tmpFile, payload, 'utf8');
+            fs.renameSync(tmpFile, OWNERS_FILE);
+        } catch (_) {
+            try {
+                fs.writeFileSync(OWNERS_FILE, payload, 'utf8');
+            } catch (errWrite) {
+                // Retry once after 50ms if Windows locked file briefly
+                setTimeout(() => {
+                    try { fs.writeFileSync(OWNERS_FILE, payload, 'utf8'); } catch (_) {}
+                }, 50);
+            }
+        }
+
         try {
             fs.ensureDirSync(AUTH_DIR);
-            fs.writeJsonSync(OWNERS_AUTH_BACKUP, data, { spaces: 2 });
-        } catch {}
+            fs.writeFileSync(OWNERS_AUTH_BACKUP, payload, 'utf8');
+        } catch (_) {}
+
         cachedOwnersData = data;
         try {
             cachedOwnersMtime = fs.statSync(OWNERS_FILE).mtimeMs;
-        } catch {}
+        } catch (_) {}
+
+        // Non-blocking Cloud Sync to MongoDB Atlas
+        try {
+            const mongoSync = require('./mongoSync');
+            mongoSync.pushToMongo('owners_data', data, 400);
+        } catch (_) {}
     } catch (e) {
         console.error('[OwnerManager Save Error]:', e.message);
     }
@@ -1121,7 +1144,7 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
 }
 
 /**
- * Command: .delpm / .pmdel [number | @mention | reply]
+ * Command: .delpm / .delprem / .pmdel [number | @mention | reply | all]
  */
 async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
     if (markCommandHandled(msg?.key?.id)) return;
@@ -1133,14 +1156,42 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         }, { quoted: msg });
     }
 
-    const target = await extractTargetUser(sock, msg, args, groupMetadata, from);
-    if (!target) {
+    const data = loadOwnersData();
+
+    // Support: .delprem all / .delpm all
+    if (args[0] && args[0].toLowerCase() === 'all') {
+        const count = data.premium.length;
+        if (count === 0) {
+            return await sock.sendMessage(from, {
+                text: `ℹ️ *Premium list pehle se khaali hai! Koi user mojood nahi.*`
+            }, { quoted: msg });
+        }
+        data.premium = [];
+        saveOwnersData(data);
+        await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
         return await sock.sendMessage(from, {
-            text: `❌ *Usage:* Kisi message par reply kar ke \`.delpm\` likhein, ya \`.delpm @user\` / \`.delpm 03001234567\` likhein!`
+            text: `╭━━━〔 🗑️ *ALL PREMIUM CLEARED* 〕━━━┈⊷\n` +
+                  `┃ ✅ Tamam *${count}* Premium members list se remove kar diye gaye!\n` +
+                  `┃ 🔒 *Access:* Premium Access Revoked for all\n` +
+                  `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
     }
 
-    const data = loadOwnersData();
+    const target = await extractTargetUser(sock, msg, args, groupMetadata, from);
+    if (!target) {
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🗑️ *DELETE PREMIUM (.delprem)* 〕━━━┈⊷\n` +
+                  `┃ 📌 *Usage:*\n` +
+                  `┃ 1️⃣ Reply kar ke: \`.delprem\`\n` +
+                  `┃ 2️⃣ Mention kar ke: \`.delprem @user\`\n` +
+                  `┃ 3️⃣ Number likh kar: \`.delprem 03001234567\`\n` +
+                  `┃ 4️⃣ Sab ko hatane ke liye: \`.delprem all\`\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
     const beforeCount = data.premium.length;
     const targetLast10 = target.digits && target.digits.length >= 10 ? target.digits.slice(-10) : '';
     data.premium = data.premium.filter(p => {
@@ -1162,6 +1213,7 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         text: `╭━━━〔 🗑️ *PREMIUM MEMBER REMOVED* 〕━━━┈⊷\n` +
               `┃ 👤 *Removed:* ${target.display}\n` +
               `┃ 🔒 *Status:* Premium Access Revoked\n` +
+              `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
@@ -1200,6 +1252,131 @@ async function pmlistCommand(sock, from, msg, isOwner) {
     }, { quoted: msg });
 }
 
+/**
+ * Command: .cs / .checksession / .checksessions / .sessions / .paired
+ * Strictly executable ONLY by Bot Owner (03438673242 / isOwner / isMasterOwner)
+ * Inspects all paired numbers connected to this bot instance and displays detailed status.
+ */
+async function checkSessionsCommand(sock, from, msg, isOwner, args = [], sessionsMap = {}, authDir = null) {
+    if (markCommandHandled(msg?.key?.id)) return;
+
+    if (!isOwner) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+                  `┃ ❌ *Access Denied!*\n` +
+                  `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+                  `┃ paired sessions check kar sakta hai!\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    await sock.sendMessage(from, { react: { text: '🔍', key: msg.key } }).catch(() => {});
+
+    // Collect all session IDs from memory and disk
+    const sessionIds = new Set(Object.keys(sessionsMap || {}));
+    if (authDir && fs.existsSync(authDir)) {
+        try {
+            const files = fs.readdirSync(authDir);
+            for (const f of files) {
+                if (f.startsWith('.') || f.includes('_backup_') || f.includes('_expired_') || f.includes('_store') || f.endsWith('.json')) continue;
+                const fullP = path.join(authDir, f);
+                try {
+                    if (fs.statSync(fullP).isDirectory() && fs.existsSync(path.join(fullP, 'creds.json'))) {
+                        sessionIds.add(f);
+                    }
+                } catch (_) {}
+            }
+        } catch (_) {}
+    }
+
+    const sessionList = Array.from(sessionIds);
+    let onlineCount = 0;
+    let offlineCount = 0;
+    const items = [];
+
+    sessionList.forEach((id) => {
+        const sess = sessionsMap?.[id];
+        const isOnline = Boolean(sess && sess.isConnected);
+        if (isOnline) onlineCount++;
+        else offlineCount++;
+
+        const cleanNum = id.replace(/[^0-9]/g, '');
+        const pushName = sess?.sock?.user?.name || sess?.sock?.user?.notify || '';
+        const platform = sess?.sock?.user?.platform || 'Multi-Device';
+
+        items.push({
+            id: cleanNum || id,
+            isOnline,
+            pushName,
+            platform
+        });
+    });
+
+    // Server Environment Detection
+    const isHeroku = Boolean(process.env.HEROKU_APP_NAME || process.env.DYNO);
+    const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_NAME);
+    const serverNode = isHeroku ? 'Heroku Dyno (Server 1)' : (isRailway ? 'Railway Cloud (Server 2)' : 'Dedicated Cloud Node');
+
+    // System stats
+    const uptimeSec = Math.floor(process.uptime());
+    const uptimeHrs = Math.floor(uptimeSec / 3600);
+    const uptimeMins = Math.floor((uptimeSec % 3600) / 60);
+    const ramMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
+
+    let listText = '';
+    if (items.length === 0) {
+        listText = `┃ 📭 *Abhi koi number pair nahi hai!*`;
+    } else {
+        items.forEach((it, idx) => {
+            const statusEmoji = it.isOnline ? '🟢 *ONLINE*' : '🔴 *OFFLINE*';
+            const nameStr = it.pushName ? ` (${it.pushName})` : '';
+            listText += `┃ *${idx + 1}.* 📱 \`+${it.id}\`${nameStr}\n` +
+                        `┃    └ Status: ${statusEmoji}\n`;
+        });
+    }
+
+    const message =
+`╭━━━〔 🖥️ *BOT SESSIONS INSPECTOR (.cs)* 〕━━━┈⊷\n` +
+`┃ 👑 *Master Owner:* MR SAQIB (03438673242)\n` +
+`┃ 🌐 *Host Node:* ${serverNode}\n` +
+`┃ ⚡ *RAM Usage:* ${ramMb} MB | *Uptime:* ${uptimeHrs}h ${uptimeMins}m\n` +
+`┃\n` +
+`┃ 📊 *TOTAL PAIRED:* ${sessionList.length} Numbers\n` +
+`┃ 🟢 *Active Online:* ${onlineCount}\n` +
+`┃ 🔴 *Offline / Idle:* ${offlineCount}\n` +
+`┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
+`┃ 📋 *PAIRED NUMBERS LIST:*\n` +
+`┃\n` +
+`${listText}\n` +
+`╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+`> 🔒 *Visitor Privacy:* Protected (Public cannot see these numbers)\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
+
+    return await sock.sendMessage(from, { text: message }, { quoted: msg });
+}
+
+/**
+ * Command: .delcs / .rmcs / .logoutcs [number]
+ * Allows Bot Owner to disconnect and remove a paired session.
+ */
+async function delSessionCommand(sock, from, msg, isOwner, args = [], sessionsMap = {}, authDir = null, logoutFn = null) {
+    if (markCommandHandled(msg?.key?.id)) return;
+    if (!isOwner) {
+        return await sock.sendMessage(from, { text: `❌ *Access Denied!* Sirf Bot Owner ye command chala sakta hai.` }, { quoted: msg });
+    }
+    const rawTarget = (args[0] || '').replace(/[^0-9]/g, '');
+    if (!rawTarget) {
+        return await sock.sendMessage(from, { text: `❌ *Usage:* \`.delcs 923001234567\`` }, { quoted: msg });
+    }
+    if (typeof logoutFn === 'function') {
+        await logoutFn(rawTarget);
+    }
+    return await sock.sendMessage(from, {
+        text: `✅ Session *+${rawTarget}* ko disconnect aur remove kar diya gaya!`
+    }, { quoted: msg });
+}
+
 module.exports = {
     MASTER_OWNER_DIGITS,
     markCommandHandled,
@@ -1220,5 +1397,7 @@ module.exports = {
     ownlistCommand,
     addpmCommand,
     delpmCommand,
-    pmlistCommand
+    pmlistCommand,
+    checkSessionsCommand,
+    delSessionCommand
 };

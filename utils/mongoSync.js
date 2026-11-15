@@ -81,7 +81,8 @@ async function initialSync() {
     const syncTargets = [
         { key: 'bot_data', file: path.join(DATA_DIR, 'bot_data.json') },
         { key: 'channel_arc', file: path.join(DATA_DIR, 'channel_arc.json') },
-        { key: 'saved_stickers', file: path.join(DATA_DIR, 'saved_stickers.json') }
+        { key: 'saved_stickers', file: path.join(DATA_DIR, 'saved_stickers.json') },
+        { key: 'owners_data', file: path.join(DATA_DIR, 'owners.json') }
     ];
 
     for (const target of syncTargets) {

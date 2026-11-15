@@ -201,7 +201,8 @@
           <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-full p-[2px] bg-gradient-to-tr from-emerald-500 via-teal-400 to-sky-500 shadow-sm">
             <img
               id="headerAvatar"
-              src="https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png"
+              src="/avatar.png"
+              onerror="this.src='https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png'"
               alt="Muhammad Saqib"
               class="w-full h-full object-cover rounded-full border border-white"
             />
@@ -218,7 +219,7 @@
             </span>
           </div>
           <p class="text-[10px] sm:text-[11px] font-semibold text-slate-500 truncate mt-0.5">
-            Created by <a id="headerCreatorLink" href="https://mrsaqib.me" target="_blank" rel="noopener noreferrer" class="text-emerald-700 hover:underline font-bold">Muhammad Saqib</a> · <span id="headerTagline">Full-Stack & Security</span>
+            Created by <a id="headerCreatorLink" href="https://mrsaqib.me" target="_blank" rel="noopener noreferrer" class="text-emerald-700 hover:underline font-bold">Muhammad Saqib</a> · <span id="headerTagline">Full-Stack Engineer &amp; Cyber Security Specialist</span>
           </p>
         </div>
       </div>
@@ -908,7 +909,8 @@
             <div class="w-11 h-11 sm:w-12 sm:h-12 rounded-full p-[2px] bg-gradient-to-tr from-orange-400 via-pink-500 to-indigo-500 shadow-md">
               <img
                 id="hubAvatar"
-                src="https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png"
+                src="/avatar.png"
+                onerror="this.src='https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png'"
                 alt="Muhammad Saqib"
                 class="w-full h-full object-cover rounded-full border border-white"
               />
@@ -1442,7 +1444,7 @@
           phone: "+92 3468616487",
           whatsapp: "https://wa.me/923464616487",
           location: "Gojra, Faisalabad, Pakistan",
-          avatar: "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png",
+          avatar: "/avatar.png",
           instagram: "https://www.instagram.com/mr_saqib242",
           facebook: "https://www.facebook.com/profile.php?id=100085188689033",
           tiktok: "https://www.tiktok.com/@mr_saqib_242",
@@ -1457,11 +1459,15 @@
 
       // Enforce Creator Official Identity & DP
       const saqibName = "Muhammad Saqib";
-      const saqibAvatar = "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png";
+      const saqibAvatar = "/avatar.png";
+      const saqibAvatarFallback = "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png";
 
       // Populate Header Elements
       const headerAvatar = document.getElementById('headerAvatar');
-      if (headerAvatar) headerAvatar.src = saqibAvatar;
+      if (headerAvatar) {
+        headerAvatar.src = saqibAvatar;
+        headerAvatar.onerror = () => { headerAvatar.src = saqibAvatarFallback; };
+      }
 
       const headerCreatorLink = document.getElementById('headerCreatorLink');
       if (headerCreatorLink) {
@@ -1470,7 +1476,7 @@
       }
 
       const headerTagline = document.getElementById('headerTagline');
-      if (headerTagline) headerTagline.textContent = profile.tagline || 'Full-Stack & Security';
+      if (headerTagline) headerTagline.textContent = profile.tagline || 'Full-Stack Engineer & Cyber Security Specialist';
 
       const headerBadge = document.getElementById('headerBadge');
       if (headerBadge) headerBadge.textContent = 'Verified ID';
@@ -1494,7 +1500,10 @@
 
       // Populate Developer & Contact Hub Elements
       const hubAvatar = document.getElementById('hubAvatar');
-      if (hubAvatar) hubAvatar.src = saqibAvatar;
+      if (hubAvatar) {
+        hubAvatar.src = saqibAvatar;
+        hubAvatar.onerror = () => { hubAvatar.src = saqibAvatarFallback; };
+      }
 
       const hubName = document.getElementById('hubName');
       if (hubName) hubName.textContent = saqibName;
