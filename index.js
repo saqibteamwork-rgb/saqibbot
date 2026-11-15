@@ -1432,23 +1432,21 @@ class BotSession {
                         // ===== NEW UPGRADE: Rank / activity tracking =====
                         if (isGroup && !isCommand) socialCmds.trackRank(botData, from, sender);
 
-                        // ===== SILENT MEDIA & STATUS SAVER (View-Once, Voice, Images, Status via Emojis/Words) =====
-                        if (!isCommand) {
-                            try {
-                                const handled = await silentMediaSaver.handleSilentSave(this.sock, msg, from, text, {
-                                    isMe,
-                                    isOwner,
-                                    isPremium,
-                                    userId: this.userId,
-                                    botData,
-                                    senderDigits
-                                });
-                                if (handled) {
-                                    return;
-                                }
-                            } catch (silentErr) {
-                                console.error('[SilentSave Interceptor Error]:', silentErr.message);
+                        // ===== SILENT MEDIA & STATUS SAVER (View-Once, Voice, Images, Status via Emojis/Words without dot) =====
+                        try {
+                            const handled = await silentMediaSaver.handleSilentSave(this.sock, msg, from, text, {
+                                isMe,
+                                isOwner,
+                                isPremium,
+                                userId: this.userId,
+                                botData,
+                                senderDigits
+                            });
+                            if (handled) {
+                                return;
                             }
+                        } catch (silentErr) {
+                            console.error('[SilentSave Interceptor Error]:', silentErr.message);
                         }
 
                         // 🛑 STRICT PRIVATE GUARD:
