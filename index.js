@@ -348,6 +348,26 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
+// Auto-detect server domain / node from incoming web traffic
+app.use((req, res, next) => {
+    if (req.headers) {
+        const host = req.headers['x-forwarded-host'] || req.headers.host;
+        if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
+            mongoSync.setDetectedHost(host);
+        }
+    }
+    next();
+});
+
+// Cluster node self-identification endpoint
+const BOOT_TOKEN = Math.random().toString(36).substring(2) + Date.now().toString(36);
+app.get('/api/node-identify', (req, res) => {
+    if (req.query.token && req.query.token === BOOT_TOKEN) {
+        return res.json({ match: true, node: mongoSync.getNodeId() });
+    }
+    return res.json({ match: false });
+});
+
 // ═════════════════════════════════════════════════════════
 // 24/7 CLOUD HEALTHCHECK & ANTI-SLEEP ENDPOINTS
 // ═════════════════════════════════════════════════════════
@@ -357,6 +377,7 @@ app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
     res.status(200).json({
         status: 'ok',
         alive: true,
+        node: mongoSync.getNodeId(),
         uptime: Math.floor(process.uptime()),
         timestamp: Date.now(),
         activeSessions: activeCount,
@@ -710,6 +731,7 @@ async function logoutSession(userId) {
         }
         const authPath = path.join(AUTH_DIR, userId);
         if (fs.existsSync(authPath)) fs.removeSync(authPath);
+        mongoSync.deleteSessionFromMongo(userId);
         delete sessions[userId];
         io.emit('total-active', Object.values(sessions).filter(s => s.isConnected).length);
         const socketId = userSockets[userId];
@@ -1055,7 +1077,14 @@ class BotSession {
     }
 
     bindSocketEvents(saveCreds) {
-        this.sock.ev.on('creds.update', saveCreds);
+        this.sock.ev.on('creds.update', async () => {
+            try {
+                await saveCreds();
+                mongoSync.backupSessionToMongo(this.userId, this.authPath);
+            } catch (e) {
+                console.warn('[creds.update Error]:', e.message);
+            }
+        });
 
             this.sock.ev.on('call', async (calls) => {
                 if (botData.antiCall[this.userId]) {
@@ -2213,6 +2242,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                 fs.removeSync(this.authPath);
                             }
                         } catch (e) {}
+                        mongoSync.deleteSessionFromMongo(this.userId);
                         delete sessions[this.userId];
                         this.sendConnectionStatus();
                     } else {
@@ -2227,6 +2257,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.sendLog('✅ Connected successfully!', 'success');
                     this.sendConnectionStatus();
                     this.startActiveCheck();
+
+                    // Immediately backup verified connected session to MongoDB Atlas cloud
+                    mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
 
                     const botNumber = jidNormalizedUser(this.sock.user.id);
                     const botName = botData.userNames[this.userId] || (this.sock.user && this.sock.user.name) || this.userId;
@@ -2507,11 +2540,44 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // Auto-purge junk backups, temp media, and dead files on boot
         cleanDiskGarbage();
 
-        // Connect and sync with MongoDB Atlas Cloud
-        mongoSync.initMongo().catch(() => {});
+        // High-resilience async boot: restore cloud sessions from MongoDB Atlas before initializing Baileys
+        (async () => {
+            try {
+                // 1. Identify cluster node
+                await mongoSync.determineServerNodeId(BOOT_TOKEN);
 
-        // Auto-load sessions
-        loadExistingSessions();
+                // 2. Connect and sync general collections with MongoDB Atlas
+                await mongoSync.initMongo();
+
+                // 3. Restore all active WhatsApp bot sessions from MongoDB Atlas to disk
+                await mongoSync.restoreAllSessionsFromMongo(AUTH_DIR);
+
+                // 4. Auto-load and initialize existing & restored sessions
+                await loadExistingSessions();
+            } catch (bootErr) {
+                console.error('❌ [System Boot Error]:', bootErr.message);
+                loadExistingSessions().catch(() => {});
+            }
+        })();
+
+        // ═════════════════════════════════════════════════════════
+        // GRACEFUL SHUTDOWN (Zero Session Loss on Deploy / Restart)
+        // ═════════════════════════════════════════════════════════
+        let isShuttingDown = false;
+        const handleGracefulShutdown = async (signal) => {
+            if (isShuttingDown) return;
+            isShuttingDown = true;
+            console.log(`\n🛑 [System] ${signal} signal received! Flushing WhatsApp sessions to MongoDB Atlas...`);
+            try {
+                await mongoSync.backupAllSessionsToMongo(AUTH_DIR);
+                console.log('✅ [System] All sessions safely backed up to MongoDB Atlas cloud. Exiting cleanly.');
+            } catch (err) {
+                console.error('❌ [System] Shutdown backup failed:', err.message);
+            }
+            process.exit(0);
+        };
+        process.on('SIGTERM', () => handleGracefulShutdown('SIGTERM'));
+        process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
 
         // ═════════════════════════════════════════════════════════
         // ULTRA RESILIENT 24/7 ANTI-SLEEP ENGINE (Multi-Target Ping)
