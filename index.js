@@ -364,6 +364,62 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// ═════════════════════════════════════════════════════════
+// AUTONOMOUS DISK & VOLUME GARBAGE COLLECTOR (Zero ENOSPC)
+// ═════════════════════════════════════════════════════════
+function cleanDiskGarbage() {
+    let deletedCount = 0;
+    try {
+        // 1. Purge all dead session backup and expired folders in auth_info
+        if (fs.existsSync(AUTH_DIR)) {
+            const items = fs.readdirSync(AUTH_DIR);
+            for (const item of items) {
+                if (item.includes('_backup_') || item.includes('_expired_') || (item.startsWith('qr_') && !item.endsWith('.json'))) {
+                    try {
+                        fs.removeSync(path.join(AUTH_DIR, item));
+                        deletedCount++;
+                    } catch (_) {}
+                }
+            }
+        }
+
+        // 2. Purge cached channel media files in database/channel_media
+        const chMediaDir = path.join(__dirname, 'database', 'channel_media');
+        if (fs.existsSync(chMediaDir)) {
+            const files = fs.readdirSync(chMediaDir);
+            for (const f of files) {
+                try {
+                    fs.removeSync(path.join(chMediaDir, f));
+                    deletedCount++;
+                } catch (_) {}
+            }
+        }
+
+        // 3. Purge temp and tmp directories
+        const tempDir = path.join(__dirname, 'temp');
+        if (fs.existsSync(tempDir)) {
+            try { fs.emptyDirSync(tempDir); } catch (_) {}
+        }
+        const tmpDir = path.join(__dirname, 'tmp');
+        if (fs.existsSync(tmpDir)) {
+            try { fs.emptyDirSync(tmpDir); } catch (_) {}
+        }
+
+        if (deletedCount > 0) {
+            console.log(`🧹 [DiskCleaner] Successfully purged ${deletedCount} junk items. Volume space freed!`);
+        }
+    } catch (err) {
+        console.error('[DiskCleaner Error]:', err.message);
+    }
+    return deletedCount;
+}
+
+app.get('/api/clean-disk', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const count = cleanDiskGarbage();
+    return res.json({ success: true, message: `Successfully cleaned ${count} junk items from volume/disk!` });
+});
+
 // REST API for direct pairing code generation
 app.get('/api/pair', async (req, res) => {
     try {
@@ -936,11 +992,10 @@ class BotSession {
             // Bind socket events IMMEDIATELY so creds.update and connection.update are listening during pairing handshake!
             this.bindSocketEvents(saveCreds);
 
-            if (pairingNumber && !state.creds.registered) {
-                if (!this.sock.authState.creds.registered) {
-                    await delay(2500);
-                    try {
-                        let code = await this.sock.requestPairingCode(pairingNumber);
+            if (pairingNumber) {
+                await delay(2500);
+                try {
+                    let code = await this.sock.requestPairingCode(pairingNumber);
                         code = code?.match(/.{1,4}/g)?.join("-") || code;
                         this.pairingCode = code;
                         this.isInitializing = false;
@@ -979,7 +1034,6 @@ class BotSession {
                         throw err;
                     }
                 }
-            }
 
             if (this.pairingCode) return this.pairingCode;
         } catch (err) {
@@ -2083,12 +2137,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         this.sendLog('🔴 Session explicitly logged out from device. Clearing auth data for fresh pairing...', 'error');
                         try {
                             if (fs.existsSync(this.authPath)) {
-                                const backupPath = this.authPath + '_backup_' + Date.now();
-                                fs.moveSync(this.authPath, backupPath);
+                                fs.removeSync(this.authPath);
                             }
-                        } catch (e) {
-                            if (fs.existsSync(this.authPath)) fs.removeSync(this.authPath);
-                        }
+                        } catch (e) {}
                         delete sessions[this.userId];
                         this.sendConnectionStatus();
                     } else {
@@ -2368,16 +2419,22 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         '  [■] Owner ................ ' + settings.ownerName + '\n\n' +
         '▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓\n');
 
+        // Auto-purge junk backups, temp media, and dead files on boot
+        cleanDiskGarbage();
+
         // Auto-load sessions
         loadExistingSessions();
 
         // ═════════════════════════════════════════════════════════
         // ULTRA RESILIENT 24/7 ANTI-SLEEP ENGINE (Multi-Target Ping)
         // ═════════════════════════════════════════════════════════
-        const baseRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';
+        const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
+        const fallbackRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';
         const pingTargets = [
             baseRailwayUrl,
             `${baseRailwayUrl}/health`,
+            fallbackRailwayUrl,
+            `${fallbackRailwayUrl}/health`,
             process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}/health` : null,
             process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : null,
             process.env.APP_URL ? `${process.env.APP_URL}/health` : null,
@@ -2396,6 +2453,11 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 } catch (e) {}
             }
         }, 45 * 1000); // High-frequency ping every 45 seconds prevents cloud sleeping 24/7!
+
+        // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
+        setInterval(() => {
+            cleanDiskGarbage();
+        }, 20 * 60 * 1000);
 
         // Periodic Memory Trimmer (Runs every 2 mins to prevent memory leaks and OOM crashes)
         setInterval(() => {
