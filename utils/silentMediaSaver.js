@@ -4,23 +4,16 @@
  * MR SAQIB MD :: SILENT MEDIA & STATUS SAVER (PRO ENGINE)
  * ============================================================================
  * Silently saves WhatsApp Status and View-Once Media (Images, Videos, Voice notes)
- * directly into the user's personal inbox (Message Yourself / Saved Messages)
- * or chat when replying with trigger words or emojis WITHOUT needing any dot (.)!
+ * DIRECTLY and ONLY into the user's personal inbox (Message Yourself / Saved Messages).
  *
- * Supported Triggers (WITHOUT DOT OR WITH DOT):
- * - Words: nice, good, acha, okay, ok, okk, k, axha, accha, achha, gud, nyc,
- *          mast, zabardast, super, superb, wow, osm, awesome, best, perfect,
- *          sahi, khoob, pyara, khoobsurat, great, fire, dil, heart, broken,
- *          save, send, bhejo, bhej, bhej do, pls send, plz send, vv, once, viewonce, status
- * - Emojis: ❤️, 💔, 💖, 💗, 💓, 💞, 💕, ❣️, 🖤, 🤍, 🤎, 💜, 💙, 💚, 💛, 🧡,
- *           👍, 🔥, 😍, 🥰, 🥺, 😭, 😢, 👏, ✨, ⭐, 💯, 🌹, 🌸, 👌, 🤲
- *
- * Features:
- * - 100% Zero dot (.) needed! Just reply "nice", "good", "acha", "okay" or "❤️".
- * - View-Once image/video unlocks instantly and delivers to Inbox.
- * - WhatsApp Status photo/video saves instantly to Inbox.
- * - Deep multi-layer unwrapping (ephemeral + viewOnce + viewOnceV2).
- * - Reaction confirmation (⚡) so user knows media was successfully saved!
+ * CRITICAL PRIVACY & STEALTH RULES:
+ * 1. STRICT USER GUARD: Only the Bot User themselves (from their paired phone, msg.key.fromMe)
+ *    or Master Owner (923438673242) can trigger Silent Save!
+ *    Any messages or replies from friends, contacts, or group members are 100% IGNORED!
+ * 2. 100% SILENT IN CONTACT'S CHAT: Media is NEVER sent into the contact's chat (`from`),
+ *    and NO reactions (⚡) are ever sent into the contact's chat. The contact's chat remains
+ *    completely silent and undisturbed.
+ * 3. NO SELF-STATUS LOOP: Replying to one's own status will not trigger auto-save.
  * ============================================================================
  */
 
@@ -50,10 +43,9 @@ function isSilentSaveTrigger(text) {
         .replace(/[.,!?;:'"~`_@#$%^&*()-]/g, ' ')
         .trim();
 
-    // Exact trigger words
+    // Exact trigger words (Appreciation, praise, or save/send intent)
+    // Casual conversational words like "ok", "okay", "k" are intentionally excluded to prevent accidental saves.
     const exactWords = new Set([
-        // Okay variations
-        'ok', 'okay', 'okk', 'okey', 'oke', 'k', 'ok ji', 'okay ji', 'ok yaar', 'okay yar', 'ok bro',
         // Feedback / appreciation words
         'good', 'gud', 'nice', 'nyc', 'nyce', 'sad', 'so sad', 'very sad',
         'acha', 'achha', 'axha', 'accha', 'acha ha', 'acha hai', 'bohot acha', 'bohat acha', 'bht acha', 'buht acha',
@@ -74,7 +66,7 @@ function isSilentSaveTrigger(text) {
     if (words.length <= 6) {
         const keyRoots = [
             'good', 'gud', 'nice', 'nyc', 'sad', 'thanks', 'thx',
-            'acha', 'axha', 'achha', 'accha', 'okay', 'ok', 'okk',
+            'acha', 'axha', 'achha', 'accha',
             'heart', 'broken', 'dil', 'save', 'bhejo', 'bhej', 'send',
             'vv', 'once', 'viewonce', 'status', 'mast', 'zabardast', 'superb', 'osm'
         ];
@@ -156,16 +148,31 @@ async function downloadMedia(mContent, mediaType, customDownloader = null) {
  * Returns true if handled, false otherwise
  */
 async function handleSilentSave(sock, msg, from, text, opts = {}) {
-    const { isMe, isOwner, isPremium, userId, botData } = opts;
-    const isGroup = from.endsWith('@g.us');
+    const { userId, botData } = opts;
 
-    // Prevent duplicate processing
+    // 🛑 1. CRITICAL USER GUARD:
+    // ONLY the Bot User themselves (sent from their paired phone, msg.key.fromMe === true)
+    // OR Master Owner (923438673242) can trigger Silent Save!
+    // If any other person, contact, friend, or group member chats or replies, IGNORE COMPLETELY!
+    const isFromMe = Boolean(msg?.key?.fromMe || opts?.isMe);
+    const senderDigits = String(opts?.senderDigits || '').replace(/[^0-9]/g, '');
+    const isMasterOwner = Boolean(
+        opts?.isMasterOwner ||
+        senderDigits === '923438673242' ||
+        senderDigits.endsWith('3438673242')
+    );
+
+    if (!isFromMe && !isMasterOwner) {
+        return false;
+    }
+
+    // 🛑 2. Prevent duplicate processing
     const msgId = msg?.key?.id;
     if (msgId && processedSaveIds.has(msgId)) {
         return false;
     }
 
-    // Extract contextInfo and quotedMessage
+    // 🛑 3. Extract contextInfo and quotedMessage
     const contextInfo = msg.message?.extendedTextMessage?.contextInfo ||
                         msg.message?.imageMessage?.contextInfo ||
                         msg.message?.videoMessage?.contextInfo ||
@@ -176,30 +183,48 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         return false;
     }
 
-    // Check triggers
+    // 🛑 4. Check triggers
     const triggerText = text || msg.message?.extendedTextMessage?.text || msg.message?.reactionMessage?.text || '';
     if (!isSilentSaveTrigger(triggerText)) {
         return false;
     }
 
-    // Check if silent save is explicitly disabled in settings
+    // 🛑 5. Check if silent save is explicitly disabled in user settings
     const userSettings = botData?.statusSettings?.[userId];
     if (userSettings && userSettings.silentSave === false) {
         return false;
     }
 
-    // Detect if this is replying to a WhatsApp Status
+    // 🛑 6. Determine Bot User's personal inbox JID ("Message Yourself" / Saved Messages)
+    const botUserJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
+    const masterJid = '923438673242@s.whatsapp.net';
+    const targetInbox = (isMasterOwner && !isFromMe) ? masterJid : (botUserJid || masterJid);
+
+    if (!targetInbox) {
+        return false;
+    }
+
+    // 🛑 7. Detect if this is replying to a WhatsApp Status
     const isStatusReply = contextInfo?.remoteJid === 'status@broadcast' ||
                           contextInfo?.participant === 'status@broadcast' ||
                           from === 'status@broadcast';
 
-    // Unwrap quoted message completely
+    // If replying to user's OWN status, ignore (no need to save your own status to yourself)
+    if (isStatusReply && contextInfo?.participant) {
+        const participantDigits = String(contextInfo.participant).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        const myDigits = String(targetInbox).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        if (myDigits && participantDigits && (participantDigits === myDigits || myDigits.endsWith(participantDigits) || participantDigits.endsWith(myDigits))) {
+            return false;
+        }
+    }
+
+    // 🛑 8. Unwrap quoted message completely
     const { inner, isViewOnce } = unwrapMessage(quoted);
     if (!inner) {
         return false;
     }
 
-    // Check media availability
+    // 🛑 9. Check media availability
     const hasImage = Boolean(inner.imageMessage);
     const hasVideo = Boolean(inner.videoMessage);
     const hasAudio = Boolean(inner.audioMessage);
@@ -212,22 +237,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         return false;
     }
 
-    // Determine Bot User's own "Message Yourself" JID
-    const botUserJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
-
-    // Target Destinations:
-    // 1. If isMe (bot owner replied from their phone): Send to botUserJid (their own inbox)
-    // 2. If !isMe and in Private Chat (DM): Send to `from` (the person chatting), plus copy to botUserJid!
-    // 3. If in Group Chat: Send SILENTLY to botUserJid (never spam the group)
-    const primaryInbox = isMe
-        ? botUserJid
-        : (!isGroup ? from : botUserJid);
-
-    if (!primaryInbox && !botUserJid) {
-        return false;
-    }
-
-    // Extract sender display
+    // Extract original status/media sender display
     let senderNumber = 'Contact';
     if (contextInfo.participant && contextInfo.participant !== 'status@broadcast') {
         senderNumber = contextInfo.participant.split('@')[0].split(':')[0];
@@ -245,10 +255,15 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         }
     }
 
-    // Give subtle reaction confirmation on the reply message
-    try {
-        await sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
-    } catch {}
+    // 🛑 10. SILENT CONTACT CHAT RULE:
+    // Only send a reaction ⚡ if the user is in their OWN personal chat ("Message Yourself").
+    // When replying to someone else's status or in a contact's DM, the contact's chat MUST BE 100% SILENT!
+    const isSelfChat = (from === targetInbox);
+    if (isSelfChat) {
+        try {
+            await sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
+        } catch {}
+    }
 
     try {
         // ==========================================
@@ -266,21 +281,12 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`;
 
-                // Deliver to primary inbox
-                await sock.sendMessage(primaryInbox, {
+                // Deliver STRICTLY and ONLY to target personal inbox
+                await sock.sendMessage(targetInbox, {
                     image: buffer,
                     caption,
                     mimetype: inner.imageMessage.mimetype || 'image/jpeg'
                 });
-
-                // If in DM from someone else, also save a copy in bot owner's own inbox
-                if (!isMe && botUserJid && primaryInbox !== botUserJid) {
-                    await sock.sendMessage(botUserJid, {
-                        image: buffer,
-                        caption: caption + '\n📌 *(Auto-Backup to Bot Owner)*',
-                        mimetype: inner.imageMessage.mimetype || 'image/jpeg'
-                    }).catch(() => {});
-                }
                 return true;
             }
         }
@@ -300,19 +306,12 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`;
 
-                await sock.sendMessage(primaryInbox, {
+                // Deliver STRICTLY and ONLY to target personal inbox
+                await sock.sendMessage(targetInbox, {
                     video: buffer,
                     caption,
                     mimetype: inner.videoMessage.mimetype || 'video/mp4'
                 });
-
-                if (!isMe && botUserJid && primaryInbox !== botUserJid) {
-                    await sock.sendMessage(botUserJid, {
-                        video: buffer,
-                        caption: caption + '\n📌 *(Auto-Backup to Bot Owner)*',
-                        mimetype: inner.videoMessage.mimetype || 'video/mp4'
-                    }).catch(() => {});
-                }
                 return true;
             }
         }
@@ -326,13 +325,13 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
                 const isPtt = Boolean(inner.audioMessage.ptt);
                 const tag = isViewOnce ? '🔓 *VIEW-ONCE VOICE NOTE SAVED*' : '🎙️ *VOICE NOTE SAVED*';
 
-                await sock.sendMessage(primaryInbox, {
+                await sock.sendMessage(targetInbox, {
                     audio: buffer,
                     mimetype: inner.audioMessage.mimetype || 'audio/mp4',
                     ptt: isPtt
                 });
 
-                await sock.sendMessage(primaryInbox, {
+                await sock.sendMessage(targetInbox, {
                     text:
 `╭━━━〔 ${tag} 〕━━━┈⊷
 ┃ 👤 *From:* ${senderDisplay}
@@ -341,14 +340,6 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`
                 });
-
-                if (!isMe && botUserJid && primaryInbox !== botUserJid) {
-                    await sock.sendMessage(botUserJid, {
-                        audio: buffer,
-                        mimetype: inner.audioMessage.mimetype || 'audio/mp4',
-                        ptt: isPtt
-                    }).catch(() => {});
-                }
                 return true;
             }
         }
@@ -365,7 +356,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 🚀 *Saved by MR SAQIB MD*`;
 
-            await sock.sendMessage(primaryInbox, { text: caption });
+            await sock.sendMessage(targetInbox, { text: caption });
             return true;
         }
 
@@ -375,7 +366,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         if (hasSticker) {
             const buffer = await downloadMedia(inner.stickerMessage, 'sticker', opts.downloader);
             if (buffer && buffer.length > 0) {
-                await sock.sendMessage(primaryInbox, { sticker: buffer });
+                await sock.sendMessage(targetInbox, { sticker: buffer });
                 return true;
             }
         }
@@ -386,7 +377,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         if (hasDocument) {
             const buffer = await downloadMedia(inner.documentMessage, 'document', opts.downloader);
             if (buffer && buffer.length > 0) {
-                await sock.sendMessage(primaryInbox, {
+                await sock.sendMessage(targetInbox, {
                     document: buffer,
                     mimetype: inner.documentMessage.mimetype || 'application/octet-stream',
                     fileName: inner.documentMessage.fileName || 'saved_file'

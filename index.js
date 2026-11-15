@@ -1544,6 +1544,8 @@ class BotSession {
                                 isMe,
                                 isOwner,
                                 isPremium,
+                                isSessionOwner,
+                                isMasterOwner,
                                 userId: this.userId,
                                 botData,
                                 senderDigits
