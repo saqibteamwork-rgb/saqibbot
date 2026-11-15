@@ -2067,8 +2067,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'broadcast': await adminTools.broadcastCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'stats': await adminTools.statsCommand(this.sock, from, msg, botData, BOT_START_TIME); break;
                                         case 'backup': await adminTools.backupCommand(this.sock, from, msg, isOwner); break;
-                                        case 'block': await adminTools.blockCommand(this.sock, from, msg, isOwner, botData, saveBotData); break;
-                                        case 'unblock': await adminTools.unblockCommand(this.sock, from, msg, isOwner, botData, saveBotData); break;
+                                        case 'block': await adminTools.blockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
+                                        case 'unblock': await adminTools.unblockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
 
                                         // ===== NEW UPGRADE: Poetry / Text / Language (AI powered) =====
                                         case 'poetry': case 'shayari': await textAi.poetryCommand(this.sock, from, msg, this, args); break;
@@ -2205,7 +2205,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'gcjid': await groupMenuCmds.gcjidCommand(this.sock, from, msg); break;
                                         case 'groupdesc': await groupMenuCmds.groupdescCommand(this.sock, from, msg); break;
                                         case 'groupinfo': case 'gcinfo': await groupMenuCmds.groupinfoCommand(this.sock, from, msg); break;
-                                        case 'join': await groupMenuCmds.joinCommand(this.sock, from, msg, isOwner, args); break;
+                                        case 'join': await groupMenuCmds.joinCommand(this.sock, from, msg, isOwner || isSessionOwner, args); break;
                                         case 'joinrequest': await groupMenuCmds.joinrequestCommand(this.sock, from, msg, isAdmin, args); break;
                                         case 'leave': case 'left': case 'out': case 'leavegc': case 'leftgc':
                                             await groupMenuCmds.leaveCommand(this.sock, from, msg, isOwner || isSessionOwner);
