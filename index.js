@@ -60,6 +60,8 @@ const commands = {
     autostatus: require('./commands/status'),
     autotyping: require('./commands/status').autotypingCommand,
     autorecording: require('./commands/status').autorecordingCommand,
+    sendRecordingPresence: require('./commands/status').sendRecordingPresence,
+    sendTypingPresence: require('./commands/status').sendTypingPresence,
     statusseen: require('./commands/status').statusseenCommand,
     statusreact: require('./commands/status').statusreactCommand,
 
@@ -1302,11 +1304,12 @@ class BotSession {
                             storeMessage(msg).catch(() => {});
 
                             // Live presence updates: Autotyping & Autorecording
-                            const uStatus = botData.statusSettings?.[this.userId];
+                            const botPhone = this.sock.user?.id ? this.sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+                            const uStatus = botData.statusSettings?.[this.userId] || (botPhone ? botData.statusSettings?.[botPhone] : null);
                             if (uStatus?.autoRecording) {
-                                this.sock.sendPresenceUpdate('recording', from).catch(() => {});
+                                commands.sendRecordingPresence(this.sock, from).catch(() => {});
                             } else if (uStatus?.autoTyping) {
-                                this.sock.sendPresenceUpdate('composing', from).catch(() => {});
+                                commands.sendTypingPresence(this.sock, from).catch(() => {});
                             }
                         }
 
@@ -1672,12 +1675,30 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'statusreact': case 'statusreacts': case 'autostatusreact': case 'statuslike': case 'autolike': case 'likestatus':
                                             await commands.statusreact(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
-                                        case 'autotyping': case 'typing': case 'autotype':
+                                        case 'autotyping': case 'typing': case 'autotype': case 'type':
                                             await commands.autotyping(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
-                                        case 'autorecording': case 'recording': case 'autorecord':
+                                        case 'autorecording': case 'recording': case 'autorecord': case 'autorecoding': case 'recoding': case 'record': case 'autorec': case 'rec':
                                             await commands.autorecording(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
+                                        case 'auto': {
+                                            const sub = (args[0] || '').toLowerCase().trim();
+                                            const subArgs = args.slice(1);
+                                            if (sub === 'recording' || sub === 'recoding' || sub === 'record' || sub === 'autorecording' || sub === 'autorecoding' || sub === 'rec') {
+                                                await commands.autorecording(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
+                                            } else if (sub === 'typing' || sub === 'type' || sub === 'autotyping' || sub === 'autotype') {
+                                                await commands.autotyping(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
+                                            } else if (sub === 'read' || sub === 'seen' || sub === 'autoread') {
+                                                await commands.autoread(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
+                                            } else if (sub === 'status' || sub === 'autostatus') {
+                                                await commands.autostatus(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
+                                            } else if (sub === 'react' || sub === 'reacts' || sub === 'autoreact') {
+                                                await commands.autoreacts(this.sock, from, msg, isAdmin, this, subArgs, botData, saveBotData);
+                                            } else {
+                                                await commands.autostatus(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
+                                            }
+                                            break;
+                                        }
                                         case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto':
                                             await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
                                             break;

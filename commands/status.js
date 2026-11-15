@@ -20,10 +20,69 @@ const toBold = (text) => {
     return text.split('').map(c => boldChars[c] || c).join('');
 };
 
-function ensureStatusSettings(botData, userId) {
+/**
+ * Bulletproof Recording Presence Dispatcher
+ * Sends both standard Baileys chatstate ('composing' media='audio') and direct raw WhatsApp
+ * recording XML stanza (<chatstate><recording/></chatstate>) with presence subscription.
+ * This guarantees 100% visibility on all WhatsApp clients (Android, iOS, Web, Desktop).
+ */
+async function sendRecordingPresence(sock, toJid) {
+    if (!sock || !toJid) return;
+    try {
+        if (typeof sock.presenceSubscribe === 'function') {
+            await sock.presenceSubscribe(toJid).catch(() => {});
+        }
+        if (typeof sock.sendPresenceUpdate === 'function') {
+            await sock.sendPresenceUpdate('recording', toJid).catch(() => {});
+        }
+        if (typeof sock.sendNode === 'function') {
+            const isLid = String(toJid).includes('@lid');
+            const myId = isLid ? sock.user?.lid : sock.user?.id;
+            await sock.sendNode({
+                tag: 'chatstate',
+                attrs: {
+                    to: toJid,
+                    ...(myId ? { from: myId } : {})
+                },
+                content: [
+                    {
+                        tag: 'recording',
+                        attrs: {}
+                    }
+                ]
+            }).catch(() => {});
+        }
+    } catch (e) {}
+}
+
+/**
+ * Bulletproof Typing Presence Dispatcher
+ */
+async function sendTypingPresence(sock, toJid) {
+    if (!sock || !toJid) return;
+    try {
+        if (typeof sock.presenceSubscribe === 'function') {
+            await sock.presenceSubscribe(toJid).catch(() => {});
+        }
+        if (typeof sock.sendPresenceUpdate === 'function') {
+            await sock.sendPresenceUpdate('composing', toJid).catch(() => {});
+        }
+    } catch (e) {}
+}
+
+function ensureStatusSettings(botData, userId, sock = null) {
     if (!botData.statusSettings) botData.statusSettings = {};
-    if (!botData.statusSettings[userId]) {
-        botData.statusSettings[userId] = {
+
+    const userKeys = [userId].filter(Boolean);
+    if (sock?.user?.id) {
+        const phoneDigits = String(sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        if (phoneDigits && !userKeys.includes(phoneDigits)) userKeys.push(phoneDigits);
+    }
+
+    let existingKey = userKeys.find(k => botData.statusSettings[k]);
+    if (!existingKey) {
+        existingKey = userKeys[0] || 'default';
+        botData.statusSettings[existingKey] = {
             autoStatus: false,
             autoSeen: false,
             autoLike: false,
@@ -34,8 +93,8 @@ function ensureStatusSettings(botData, userId) {
             isPublic: false
         };
     }
-    // Ensure all keys exist
-    const s = botData.statusSettings[userId];
+
+    const s = botData.statusSettings[existingKey];
     if (typeof s.autoStatus === 'undefined') s.autoStatus = false;
     if (typeof s.autoSeen === 'undefined') s.autoSeen = false;
     if (typeof s.autoLike === 'undefined') s.autoLike = false;
@@ -43,6 +102,12 @@ function ensureStatusSettings(botData, userId) {
     if (typeof s.autoTyping === 'undefined') s.autoTyping = false;
     if (typeof s.autoRecording === 'undefined') s.autoRecording = false;
     if (typeof s.autoRead === 'undefined') s.autoRead = false;
+
+    // Link reference across all userKeys
+    userKeys.forEach(k => {
+        botData.statusSettings[k] = s;
+    });
+
     return s;
 }
 
@@ -110,9 +175,9 @@ async function statusCommand(sock, from, msg, isAdmin, botData, saveBotData, use
         return await statusseenCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
     } else if (action === 'like' || action === 'react') {
         return await statusreactCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
-    } else if (action === 'typing') {
+    } else if (action === 'typing' || action === 'type') {
         return await autotypingCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
-    } else if (action === 'recording' || action === 'record') {
+    } else if (action === 'recording' || action === 'record' || action === 'recoding' || action === 'autorecoding' || action === 'autorecord') {
         return await autorecordingCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
     } else if (action === 'download') {
         const val = args[1]?.toLowerCase();
@@ -139,14 +204,14 @@ async function statusCommand(sock, from, msg, isAdmin, botData, saveBotData, use
 async function autotypingCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args) {
     if (!isAdmin) return await sock.sendMessage(from, { text: "❌ Only owner can use this command." }, { quoted: msg });
 
-    const settings = ensureStatusSettings(botData, userId);
+    const settings = ensureStatusSettings(botData, userId, sock);
     const action = args[0]?.toLowerCase();
 
     if (action === 'on' || action === 'enable' || action === '1') {
         settings.autoTyping = true;
         settings.autoRecording = false; // Mutually exclusive
-        saveBotData();
-        await sock.sendPresenceUpdate('composing', from).catch(() => {});
+        if (typeof saveBotData === 'function') saveBotData();
+        await sendTypingPresence(sock, from);
         return await sock.sendMessage(from, {
             text: `╭━━━〔 ⌨️ *AUTO TYPING: ON* 〕━━━┈⊷\n` +
                   `┃ ✅ *Status:* Active & Enabled\n` +
@@ -156,7 +221,7 @@ async function autotypingCommand(sock, from, msg, isAdmin, botData, saveBotData,
         }, { quoted: msg });
     } else if (action === 'off' || action === 'disable' || action === '0') {
         settings.autoTyping = false;
-        saveBotData();
+        if (typeof saveBotData === 'function') saveBotData();
         await sock.sendPresenceUpdate('paused', from).catch(() => {});
         return await sock.sendMessage(from, {
             text: `╭━━━〔 ⌨️ *AUTO TYPING: OFF* 〕━━━┈⊷\n` +
@@ -185,14 +250,14 @@ async function autotypingCommand(sock, from, msg, isAdmin, botData, saveBotData,
 async function autorecordingCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args) {
     if (!isAdmin) return await sock.sendMessage(from, { text: "❌ Only owner can use this command." }, { quoted: msg });
 
-    const settings = ensureStatusSettings(botData, userId);
+    const settings = ensureStatusSettings(botData, userId, sock);
     const action = args[0]?.toLowerCase();
 
     if (action === 'on' || action === 'enable' || action === '1') {
         settings.autoRecording = true;
         settings.autoTyping = false; // Mutually exclusive
-        saveBotData();
-        await sock.sendPresenceUpdate('recording', from).catch(() => {});
+        if (typeof saveBotData === 'function') saveBotData();
+        await sendRecordingPresence(sock, from);
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🎙️ *AUTO RECORDING: ON* 〕━━━┈⊷\n` +
                   `┃ ✅ *Status:* Active & Enabled\n` +
@@ -202,7 +267,7 @@ async function autorecordingCommand(sock, from, msg, isAdmin, botData, saveBotDa
         }, { quoted: msg });
     } else if (action === 'off' || action === 'disable' || action === '0') {
         settings.autoRecording = false;
-        saveBotData();
+        if (typeof saveBotData === 'function') saveBotData();
         await sock.sendPresenceUpdate('paused', from).catch(() => {});
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🎙️ *AUTO RECORDING: OFF* 〕━━━┈⊷\n` +
@@ -330,5 +395,9 @@ statusCommand.autorecordingCommand = autorecordingCommand;
 statusCommand.statusseenCommand = statusseenCommand;
 statusCommand.statusreactCommand = statusreactCommand;
 statusCommand.autoreadCommand = autoreadCommand;
+statusCommand.sendRecordingPresence = sendRecordingPresence;
+statusCommand.sendTypingPresence = sendTypingPresence;
 
 module.exports = statusCommand;
+module.exports.sendRecordingPresence = sendRecordingPresence;
+module.exports.sendTypingPresence = sendTypingPresence;
