@@ -47,7 +47,7 @@ module.exports = {
 
   async execute(sock, msg, args, extra) {
     const { reply, react } = extra;
-    if (!extra.isOwner && !extra.isSudo) return reply('🔒 Owner only.');
+    if (!extra.isOwner && !extra.isSudo && !extra.isSessionOwner && !msg?.key?.fromMe) return reply('🔒 Owner / Session User only.');
     const low = args.map((a) => String(a).toLowerCase());
     const allSessions = low.includes('--all-sessions') || low.includes('-as') || low.includes('-sa') || (low.includes('-a') && low.includes('-s'));
     if (allSessions) args = args.filter((a) => !String(a).startsWith('-')); // keep the words (sync/links/ids...), drop the flags
@@ -221,14 +221,15 @@ module.exports = {
       await react('❌');
     }
   },
-  channelsCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData) {
+  channelsCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner = false) {
     const extra = {
       from,
       sender: msg.key.participant || from,
       isGroup: from.endsWith('@g.us'),
       isOwner,
       isAdmin,
-      isSudo: isOwner || isAdmin,
+      isSessionOwner,
+      isSudo: isOwner || isAdmin || isSessionOwner,
       database: {
         getGlobalSetting: (key) => (botData ? botData[key] : null),
         setGlobalSetting: (key, val) => {

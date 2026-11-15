@@ -409,7 +409,7 @@ async function leaveCommand(sock, from, msg, isAllowed) {
 // 17b. .leftall / .leaveall / .outall - Bot leaves ALL participating groups
 async function leftallCommand(sock, from, msg, isAllowed) {
     if (!isAllowed) {
-        return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner sabhi groups leave karwa sakta hai!*" }, { quoted: msg });
+        return await sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ya is session ka paired user hi sabhi groups leave karwa sakta hai." }, { quoted: msg });
     }
 
     await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});

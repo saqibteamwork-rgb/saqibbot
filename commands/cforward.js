@@ -37,7 +37,7 @@ module.exports = {
 
   async execute(sock, msg, args, extra) {
     const { reply, react } = extra;
-    if (!extra.isOwner && !extra.isSudo && !msg?.key?.fromMe) return reply('🔒 Owner only.');
+    if (!extra.isOwner && !extra.isSudo && !extra.isSessionOwner && !msg?.key?.fromMe) return reply('🔒 Owner / Session User only.');
     let tmpFile = null, deferCleanup = false;
     try {
       hub.registerSock(sock);
@@ -221,14 +221,15 @@ module.exports = {
       if (!deferCleanup && tmpFile && tmpFile.path && !tmpFile.keep) { try { fs.unlinkSync(tmpFile.path); } catch { /* ignore */ } }
     }
   },
-  cforwardCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData) {
+  cforwardCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner = false) {
     const extra = {
       from,
       sender: msg.key.participant || from,
       isGroup: from.endsWith('@g.us'),
       isOwner,
       isAdmin,
-      isSudo: isOwner || isAdmin,
+      isSessionOwner,
+      isSudo: isOwner || isAdmin || isSessionOwner,
       database: {
         getGlobalSetting: (key) => (botData ? botData[key] : null),
         setGlobalSetting: (key, val) => {

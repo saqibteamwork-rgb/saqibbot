@@ -1858,10 +1858,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'gift': await commands.gift(this.sock, from, msg, q, args); break;
                                         case 'channelid': await commands.channelid(this.sock, from, msg, q); break;
                                         case 'channels': case 'mychannels': case 'chlist':
-                                            await channelsCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
+                                            await channelsCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
                                         case 'cforward': case 'chforward':
-                                            await cforwardCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
+                                            await cforwardCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
                                         case 'chfollow': case 'followall': case 'boostchannel': case 'chboost':
                                             await chfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
@@ -2228,7 +2228,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await groupMenuCmds.leaveCommand(this.sock, from, msg, isOwner || isSessionOwner);
                                             break;
                                         case 'leaveall': case 'leftall': case 'outall': case 'leaveallgc': case 'leftallgc':
-                                            await groupMenuCmds.leftallCommand(this.sock, from, msg, isOwner);
+                                            await groupMenuCmds.leftallCommand(this.sock, from, msg, isOwner || isSessionOwner);
                                             break;
                                         case 'lock': await groupMenuCmds.lockCommand(this.sock, from, msg, isAdmin); break;
                                         case 'membercount': await groupMenuCmds.membercountCommand(this.sock, from, msg); break;
