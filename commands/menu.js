@@ -189,23 +189,24 @@ function loadMenuImageBuffer() {
 }
 loadMenuImageBuffer();
 
-const CHANNEL_CONTEXT = Object.freeze({
-    forwardingScore: 999,
-    isForwarded: true,
-    forwardedNewsletterMessageInfo: {
-        newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
-        newsletterName: settings.botName || 'MR SAQIB MD',
-        serverMessageId: 1
-    }
-});
+function getMenuChannelContext() {
+    return {
+        forwardingScore: 999,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+            newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
+            newsletterName: settings.botName || 'MR SAQIB MD',
+            serverMessageId: 1
+        }
+    };
+}
 
 // Dedicated Separate 'SEARCH ON GOOGLE' Card (100% Preserved!)
-const GOOGLE_LINKS_CARD = Object.freeze(
+const GOOGLE_LINKS_CARD = 
 `╭━━━〔 🔍 *SEARCH ON GOOGLE* 〕━━━┈⊷
 ┃ 🚀 *Mr Saqib:*
 ┃ google.com/search?q=mr+saqib
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
-);
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
 async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, args = []) {
     // 1. Instant loading reaction (fired asynchronously in background: ZERO delay!)
@@ -290,10 +291,11 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 
     // 6. Send Message 1: Main Menu with guaranteed delivery
     try {
+        const channelContext = getMenuChannelContext();
         if (imagePayload) {
-            await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: CHANNEL_CONTEXT }, { quoted: msg });
+            await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
         } else {
-            await sock.sendMessage(from, { text: menuText, contextInfo: CHANNEL_CONTEXT }, { quoted: msg });
+            await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
         }
     } catch (err) {
         console.error('[menuCommand] Error sending menu:', err.message);
