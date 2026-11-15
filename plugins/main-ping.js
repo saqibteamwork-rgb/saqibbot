@@ -1,4 +1,5 @@
 const { cmd } = require('../command');
+const pingCommand = require('../commands/ping');
 
 cmd({
     pattern: "ping",
@@ -11,30 +12,7 @@ cmd({
 },
 async (conn, mek, m, { from, sender }) => {
     try {
-        const start = Date.now();
-        await conn.sendMessage(from, { react: { text: "⚡", key: mek.key } }).catch(() => {});
-        const end = Date.now();
-        const diff = Math.max(1, end - start);
-
-        const text = 
-`╭━━━〔 ⚡ *MR SAQIB MD SPEED* 〕━━━┈⊷
-┃ 🚀 *Response Speed:* ${diff}ms (${(diff/1000).toFixed(3)}s)
-┃ 🟢 *Status:* Online & Active
-┃ 👑 *Owner:* MR SAQIB
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
-
-        await conn.sendMessage(from, {
-            text,
-            contextInfo: {
-                forwardingScore: 999,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363421389121979@newsletter',
-                    newsletterName: "MR SAQIB MD",
-                    serverMessageId: 1
-                }
-            }
-        }, { quoted: mek });
+        await pingCommand(conn, from, mek);
     } catch (e) {
         console.error("Error in ping command:", e);
     }
