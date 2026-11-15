@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * ProBoy-MD / MR SAQIB MD :: SMD-Mini Aesthetic Menu Engine
+ * ProBoy-MD / MR SAQIB MD :: Ultra-Sonic SMD-Mini Aesthetic Menu Engine
  * ============================================================================
  * Ultra-clean SMD-Mini theme with Bold Sans & Italic typography requested by user:
  * ╭━━━〔 ⚡ 𝗠𝗥 𝗦𝗔𝗤𝗜𝗕 𝗠𝗗 ⚡ 〕━━━┈⊷
@@ -154,26 +154,79 @@ const CATEGORIES = {
     ]
 };
 
+// ══════════════════════════════════════════════════════════════
+// ULTRA-SONIC SPEED MEMORY CACHE (Pre-Compiled at Server Boot)
+// ══════════════════════════════════════════════════════════════
+const PRECOMPILED_BOXES = new Map();
+let FULL_MENU_PRECOMPILED_BODY = '';
+let TOTAL_COMMANDS_COUNT = 0;
+
+function initPrecompiledMenu() {
+    let body = '';
+    let count = 0;
+    for (const [categoryName, cmds] of Object.entries(CATEGORIES)) {
+        count += cmds.length;
+        const box = makeBox(categoryName, cmds);
+        PRECOMPILED_BOXES.set(categoryName.toLowerCase(), { name: categoryName, box });
+        body += box;
+    }
+    FULL_MENU_PRECOMPILED_BODY = body;
+    TOTAL_COMMANDS_COUNT = count;
+}
+initPrecompiledMenu();
+
+// Pre-buffered in-RAM Image Buffer (zero hard disk latency!)
+let PRELOADED_MENU_IMAGE = null;
+function loadMenuImageBuffer() {
+    try {
+        const localImgPath = path.join(__dirname, '..', 'data', 'mrsaqib_preview.png');
+        if (fs.existsSync(localImgPath)) {
+            PRELOADED_MENU_IMAGE = fs.readFileSync(localImgPath);
+        } else if (settings.menuImage && fs.existsSync(settings.menuImage.trim())) {
+            PRELOADED_MENU_IMAGE = fs.readFileSync(settings.menuImage.trim());
+        }
+    } catch (_) {}
+}
+loadMenuImageBuffer();
+
+const CHANNEL_CONTEXT = Object.freeze({
+    forwardingScore: 999,
+    isForwarded: true,
+    forwardedNewsletterMessageInfo: {
+        newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
+        newsletterName: settings.botName || 'MR SAQIB MD',
+        serverMessageId: 1
+    }
+});
+
+// Dedicated Separate 'SEARCH ON GOOGLE' Card (100% Preserved!)
+const GOOGLE_LINKS_CARD = Object.freeze(
+`╭━━━〔 🔍 *SEARCH ON GOOGLE* 〕━━━┈⊷
+┃ 🚀 *Mr Saqib:*
+┃ google.com/search?q=mr+saqib
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+);
+
 async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, args = []) {
-    // 1. Instant loading reaction
-    await sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
+    // 1. Instant loading reaction (fired asynchronously in background: ZERO delay!)
+    sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
 
     const userId = session?.userId || 'User';
     const customName = (botData?.userNames && botData.userNames[userId]) || msg.pushName || 'User';
     const isPublic = session?.isPublic ?? false;
 
-    // Runtime calculation
+    // Fast Runtime calculation
     const uptimeSec = Math.floor((Date.now() - (BOT_START_TIME || Date.now())) / 1000);
     const uptimeH = Math.floor(uptimeSec / 3600);
     const uptimeM = Math.floor((uptimeSec % 3600) / 60);
     const uptimeS = uptimeSec % 60;
     const runtimeStr = `${uptimeH}h ${uptimeM}m ${uptimeS}s`;
 
-    // RAM calculation
+    // Fast RAM calculation
     const usedMem = (process.memoryUsage().rss / (1024 * 1024)).toFixed(2);
     const totalMem = (os.totalmem() / (1024 * 1024)).toFixed(2);
 
-    // Date calculation
+    // Fast Date calculation
     const now = new Date();
     const dateStr = now.toLocaleDateString('en-US', {
         weekday: 'long',
@@ -182,24 +235,8 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         year: 'numeric'
     });
 
-    // Total commands count
-    let totalCommandsCount = 0;
-    for (const cat of Object.keys(CATEGORIES)) {
-        totalCommandsCount += CATEGORIES[cat].length;
-    }
-
-    // Filter check: If user typed e.g. `.menu ai` or `.menu group`
-    const filterArg = (Array.isArray(args) && args[0]) ? String(args[0]).toLowerCase() : null;
-    let selectedCats = Object.entries(CATEGORIES);
-    if (filterArg) {
-        const matched = selectedCats.filter(([cat]) => cat.toLowerCase().includes(filterArg));
-        if (matched.length > 0) {
-            selectedCats = matched;
-        }
-    }
-
     // 2. Build Bold & Italic Aesthetic Header Box
-    let menuText = 
+    const headerText = 
 `╭━━━〔 ⚡ ${toSansBold(settings.botName || 'MR SAQIB MD')} ⚡ 〕━━━┈⊷
 ┃ 👤 ${toSansBold('User')}: _${customName}_
 ┃ 👑 ${toSansBold('Owner')}: ${toSansBold(settings.ownerName || 'MR SAQIB')}
@@ -213,74 +250,60 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 ┃ 🔑 ${toSansBold('Prefix')}: [ . ]
 ┃ 🛡️ ${toSansBold('Mode')}: _${isPublic ? 'Public 🌍' : 'Private 🔒'}_
 ┃ 📊 ${toSansBold('RAM')}: _${usedMem}MB / ${totalMem}MB_
-┃ 📂 ${toSansBold('Total Commands')}: ${toSansBold(String(totalCommandsCount))}
+┃ 📂 ${toSansBold('Total Commands')}: ${toSansBold(String(TOTAL_COMMANDS_COUNT))}
 ┃ 📦 ${toSansBold('Version')}: _2.0.0_
 ╰━━━━━━━━━━━━━━━━━━┈⊷
 
  ➤ .${toSansBold('menu')} _type karein commands ke liye_\n\n`;
 
-    // 3. Build Category Boxes (Clean SMD-Mini Style with Bold Sans)
-    for (const [categoryName, cmds] of selectedCats) {
-        menuText += makeBox(categoryName, cmds);
+    // 3. Category Body Selection (Instant In-RAM retrieval)
+    let bodyText = '';
+    const filterArg = (Array.isArray(args) && args[0]) ? String(args[0]).toLowerCase() : null;
+    if (filterArg) {
+        for (const [key, item] of PRECOMPILED_BOXES.entries()) {
+            if (key.includes(filterArg) || item.name.toLowerCase().includes(filterArg)) {
+                bodyText += item.box;
+            }
+        }
+    }
+    if (!bodyText) {
+        bodyText = FULL_MENU_PRECOMPILED_BODY;
     }
 
     // 4. Build Powered By Footer
-    menuText += 
+    const footerText = 
 `╭━━━〔 👑 ${toSansBold('POWERED BY')} 〕━━━┈⊷
 ┃ 🚀 ${toSansBold(settings.ownerName || 'MR SAQIB')}
 ┃ 🔍 google.com/search?q=mr+saqib
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-    // 5. Official Channel Context for Newsletter ("View channel")
-    const channelContext = {
-        forwardingScore: 999,
-        isForwarded: true,
-        forwardedNewsletterMessageInfo: {
-            newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
-            newsletterName: settings.botName || 'MR SAQIB MD',
-            serverMessageId: 1
-        }
-    };
+    const menuText = (headerText + bodyText + footerText).trim();
 
-    // 6. Image payload
-    let imagePayload = null;
-    const localImgPath = path.join(__dirname, '..', 'data', 'mrsaqib_preview.png');
-    if (fs.existsSync(localImgPath)) {
-        try { imagePayload = fs.readFileSync(localImgPath); } catch {}
-    }
+    // 5. Image payload from memory buffer (zero disk read!)
+    let imagePayload = PRELOADED_MENU_IMAGE;
     if (!imagePayload && settings.menuImage && settings.menuImage.trim() !== '') {
         const imgPath = settings.menuImage.trim();
         if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
             imagePayload = { url: imgPath };
-        } else if (fs.existsSync(imgPath)) {
-            imagePayload = fs.readFileSync(imgPath);
         }
     }
 
-    // 7. Send main menu with guaranteed delivery
+    // 6. Send Message 1: Main Menu with guaranteed delivery
     try {
         if (imagePayload) {
-            await sock.sendMessage(from, { image: imagePayload, caption: menuText.trim(), contextInfo: channelContext }, { quoted: msg });
+            await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: CHANNEL_CONTEXT }, { quoted: msg });
         } else {
-            await sock.sendMessage(from, { text: menuText.trim(), contextInfo: channelContext }, { quoted: msg });
+            await sock.sendMessage(from, { text: menuText, contextInfo: CHANNEL_CONTEXT }, { quoted: msg });
         }
     } catch (err) {
         console.error('[menuCommand] Error sending menu:', err.message);
-        await sock.sendMessage(from, { text: menuText.trim() }, { quoted: msg }).catch(() => {});
+        await sock.sendMessage(from, { text: menuText }, { quoted: msg }).catch(() => {});
     }
 
-    // 8. Send Google Search Link as a separate message so WhatsApp Mobile renders it 100% blue and clickable!
-    try {
-        const linksCard = 
-`╭━━━〔 🔍 *SEARCH ON GOOGLE* 〕━━━┈⊷
-┃ 🚀 *Mr Saqib:*
-┃ google.com/search?q=mr+saqib
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
-
-        await sock.sendMessage(from, { text: linksCard }, { quoted: msg });
-    } catch (e) {
+    // 7. Send Message 2: Separate 'SEARCH ON GOOGLE' Card (100% Preserved as requested!)
+    sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }, { quoted: msg }).catch((e) => {
         console.error('[menuCommand] Error sending links card:', e.message);
-    }
+    });
 }
 
 module.exports = {
