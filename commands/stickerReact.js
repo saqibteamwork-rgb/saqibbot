@@ -189,6 +189,12 @@ function persistStickers(store) {
         const tmpFile = path.join(DATA_DIR, `saved_stickers_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.tmp`);
         fs.writeJsonSync(tmpFile, store, { spaces: 2 });
         fs.moveSync(tmpFile, STICKERS_FILE, { overwrite: true });
+
+        // 3. Background cloud sync to MongoDB Atlas
+        try {
+            const mongoSync = require('../utils/mongoSync');
+            mongoSync.pushToMongo('saved_stickers', store);
+        } catch (_) {}
     } catch (e) {
         console.error('[StickerStore Persist Error]:', e.message);
     }

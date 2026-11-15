@@ -21,6 +21,7 @@ const TelegramBot = require('node-telegram-bot-api');
 const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, downloadContentFromMessage, jidNormalizedUser, Browsers, delay } = require('@whiskeysockets/baileys');
 const P = require('pino');
 const { OpenAI } = require('openai');
+const mongoSync = require('./utils/mongoSync');
 
 // Import Commands
 const commands = {
@@ -641,6 +642,7 @@ function saveBotData() {
         saveBotDataTimer = null;
         try {
             await fs.writeJson(DATA_FILE, botData, { spaces: 2 });
+            mongoSync.pushToMongo('bot_data', botData);
         } catch (e) {
             console.error('[saveBotData Async Error]:', e.message);
         }
@@ -2421,6 +2423,9 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
 
         // Auto-purge junk backups, temp media, and dead files on boot
         cleanDiskGarbage();
+
+        // Connect and sync with MongoDB Atlas Cloud
+        mongoSync.initMongo().catch(() => {});
 
         // Auto-load sessions
         loadExistingSessions();

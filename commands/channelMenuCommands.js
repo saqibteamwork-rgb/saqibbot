@@ -139,6 +139,11 @@ function saveArcData(data) {
       // Ignore write error on secondary location
     }
   }
+
+  try {
+    const mongoSync = require('../utils/mongoSync');
+    mongoSync.pushToMongo('channel_arc', data);
+  } catch (_) {}
 }
 
 function parseDelay(str) {
