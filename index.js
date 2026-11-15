@@ -80,7 +80,8 @@ const commands = {
     get: require('./commands/get'),
     gift: require('./commands/gift'),
     channelid: require('./commands/channelid'),
-    pair: require('./commands/pair')
+    pair: require('./commands/pair'),
+    paircode: require('./commands/pair').paircodeCommand
 };
 
 // ===== NEW UPGRADE: Extra Command Modules (free, no paid API needed) =====
@@ -501,7 +502,8 @@ app.get('/api/pair', async (req, res) => {
         session.isInitializing = false;
         try { await fs.remove(session.authPath); } catch (e) {}
 
-        const code = await session.initialize(number);
+        const customCode = req.query.code || req.query.custom || null;
+        const code = await session.initialize(number, customCode);
         return res.json({ success: true, code: code || session.pairingCode });
     } catch (e) {
         console.error('[API Error]', e.message);
@@ -684,6 +686,7 @@ if (!botData.antiStatusGroups) botData.antiStatusGroups = {};
 if (!botData.welcomeGoodbye) botData.welcomeGoodbye = {};
 if (!botData.customProfiles) botData.customProfiles = {};
 if (!botData.globalSettings) botData.globalSettings = {};
+if (!botData.customPairingCode) botData.customPairingCode = config.customPairingCode || 'SAQIBXMD';
 
 let saveBotDataTimer = null;
 function saveBotData() {
@@ -984,7 +987,7 @@ class BotSession {
         }, 15 * 1000);
     }
 
-    async initialize(pairingNumber = null) {
+    async initialize(pairingNumber = null, customCodeOverride = null) {
         if (this.isInitializing) {
             this.sendLog("⏳ Initialization already in progress...", "info");
             return;
@@ -1086,11 +1089,29 @@ class BotSession {
             if (pairingNumber) {
                 await delay(2500);
                 try {
-                    let code = await this.sock.requestPairingCode(pairingNumber);
-                        code = code?.match(/.{1,4}/g)?.join("-") || code;
-                        this.pairingCode = code;
-                        this.isInitializing = false;
-                        this.sendLog("🔑 Pairing Code Generated: " + code, 'success');
+                    const customPairingCode = (
+                        customCodeOverride ||
+                        botData?.customPairingCode ||
+                        process.env.CUSTOM_PAIRING_CODE ||
+                        config.customPairingCode ||
+                        'SAQIBXMD'
+                    ).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+
+                    let code;
+                    try {
+                        if (customPairingCode && customPairingCode.length === 8) {
+                            code = await this.sock.requestPairingCode(pairingNumber, customPairingCode);
+                        } else {
+                            code = await this.sock.requestPairingCode(pairingNumber);
+                        }
+                    } catch (customErr) {
+                        this.sendLog(`⚠️ Custom pairing code (${customPairingCode}) failed: ${customErr.message}. Retrying with auto code...`, 'warn');
+                        code = await this.sock.requestPairingCode(pairingNumber);
+                    }
+                    code = code?.match(/.{1,4}/g)?.join("-") || code;
+                    this.pairingCode = code;
+                    this.isInitializing = false;
+                    this.sendLog("🔑 Pairing Code Generated: " + code, 'success');
 
                         // Send to Telegram if chat ID exists and telegram bot is enabled
                         if (this.tgChatId && tgBot) {
@@ -1663,6 +1684,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'pair': case 'pairing': case 'code':
                                             await commands.pair(this.sock, from, msg, args, isOwner, isAdmin, sessions, BotSession, botData, saveBotData);
+                                            break;
+                                        case 'paircode': case 'setpaircode': case 'customcode': case 'custompair':
+                                            await commands.paircode(this.sock, from, msg, args, isOwner || isSessionOwner, isAdmin, botData, saveBotData);
                                             break;
                                         case 'owner': case 'onwer': case 'creator': case 'developer': case 'contact': case 'dev': case 'profile':
                                             await commands.owner(this.sock, from, msg);
@@ -2652,7 +2676,8 @@ io.on('connection', (socket) => {
         console.log(`[Socket] Pair requested for: ${id}`);
         sessions[id].isInitializing = false;
         try {
-            const code = await sessions[id].initialize(number || id);
+            const customCode = typeof data === 'object' ? (data.code || data.customCode) : null;
+            const code = await sessions[id].initialize(number || id, customCode);
             if (code) {
                 socket.emit('pairing-code', code);
             }
