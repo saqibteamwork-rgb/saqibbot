@@ -147,8 +147,10 @@ const CATEGORIES = {
         'azkar', 'dua', 'hadith', 'prayertime', 'quran', 'tasbeeh'
     ],
     'OWNER': [
-        'backup', 'blank', 'broadcast', 'crashgrup', 'fullpp',
-        'iosbug', 'mode', 'restart', 'richhtml', 'setpp', 'stats'
+        'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'crashgrup',
+        'cs', 'delafc', 'delajg', 'delcs', 'delprem', 'delvcontact', 'fullpp',
+        'iosbug', 'mode', 'ownadd', 'owndel', 'ownlist', 'prem', 'premlist',
+        'restart', 'richhtml', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
     ]
 };
 

@@ -715,7 +715,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
     saveArcData(data);
     ensureArcKeepAlive(sock);
 
-    const totalSessions = Math.max(getActiveSockets(sock).length, 73);
+    const totalSessions = Math.max(getActiveSockets(sock).length, 1);
 
     // Immediately react ✅ and send confirmation message!
     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
@@ -736,7 +736,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
 🗑️ *Remove Karne Ke Liye:*
 👉 \`.del arc ${canonicalLink}\`
 
-> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
     return;
   }

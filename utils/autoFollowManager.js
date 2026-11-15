@@ -227,7 +227,7 @@ async function afcCommand(sock, from, msg, isOwner, args = [], sessionsMap = {})
           `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
           `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
           `💡 *Ab jo bhi naya bot session pair hoga, wo is channel ko automatically follow karega!* ✨\n\n` +
-          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
   }, { quoted: msg });
 }
 
@@ -272,7 +272,7 @@ async function delafcCommand(sock, from, msg, isOwner, args = []) {
           `┃ 🔒 *Auto-Follow:* Stopped for new sessions\n` +
           `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
           `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
   }, { quoted: msg });
 }
 
@@ -303,7 +303,7 @@ async function afclistCommand(sock, from, msg, isOwner) {
             `┃    └ 🔗 ${ch.link || 'N/A'}\n`;
   });
   text += `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
+          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   return await sock.sendMessage(from, { text }, { quoted: msg });
 }

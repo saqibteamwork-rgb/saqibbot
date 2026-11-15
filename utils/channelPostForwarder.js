@@ -709,7 +709,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
                   `┃ 📲 *Target:* *03438673242 (You / Inbox)*\n` +
                   `┃ ⌨️ *Auto Command:* \`${config.command || '.chreact'} <post_link>\`\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
     }
 
@@ -944,7 +944,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
                   `👉 Us group me ja kar: \`.set arc <channel_link> [emojis]\` run karein.\n\n` +
                   `📋 *Sabhi routes dekhne ke liye:* \`.set arc list\`\n` +
                   `🗑️ *Route khatam karne ke liye:* \`.set arc reset ${targetChannelJid}\`\n\n` +
-                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
     }
 
@@ -982,7 +982,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
               `👉 Us group me ja kar: \`.set arc <channel_link>\` run karein.\n\n` +
               `📋 *Sabhi routes dekhne ke liye:* \`.set arc list\`\n` +
               `🔄 *Wapis Inbox (You) karne ke liye:* \`.set arc inbox\`\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
 }
 

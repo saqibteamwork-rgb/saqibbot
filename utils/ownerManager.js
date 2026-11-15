@@ -985,7 +985,7 @@ async function ownaddCommand(sock, from, msg, isMasterOwner, args = [], groupMet
               `┃ 🛡️ *Role:* Co-Owner (Full Command Access)\n` +
               `┃ 👑 *Added By:* Master Owner (03438673242)\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`,
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
         mentions: mentionList
     }, { quoted: msg });
 }
@@ -1034,7 +1034,7 @@ async function owndelCommand(sock, from, msg, isMasterOwner, args = [], groupMet
               `┃ 👤 *Removed:* ${target.display}\n` +
               `┃ 🔒 *Status:* Owner Access Revoked\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
 }
 
@@ -1058,7 +1058,7 @@ async function ownlistCommand(sock, from, msg, isOwner) {
         text: `╭━━━〔 👑 *AUTHORIZED BOT OWNERS* 〕━━━┈⊷\n` +
               `${listText}` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
 }
 
@@ -1134,11 +1134,11 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
               `┃ 🔓 *Unlocked Features:*\n` +
               `┃    • \`.arc <channel_link>\` (Auto-React)\n` +
               `┃    • \`.del arc <channel_link>\`\n` +
-              `┃    • \`.chreact <post_link>\` (73 Servers)\n` +
+              `┃    • \`.chreact <post_link>\` (Multi-Server Cloud)\n` +
               `┃    • \`.chvote <post_link> 1/2\`\n` +
               `┃ 👑 *Approved By:* MR SAQIB\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`,
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
         mentions: mentionList
     }, { quoted: msg });
 }
@@ -1175,7 +1175,7 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
                   `┃ 🔒 *Access:* Premium Access Revoked for all\n` +
                   `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
     }
 
@@ -1215,7 +1215,7 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
               `┃ 🔒 *Status:* Premium Access Revoked\n` +
               `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
 }
 
@@ -1248,7 +1248,7 @@ async function pmlistCommand(sock, from, msg, isOwner) {
         text: `╭━━━〔 💎 *PREMIUM MEMBERS (${data.premium.length})* 〕━━━┈⊷\n` +
               `${listText}` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
 }
 
@@ -1351,7 +1351,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
 `${listText}\n` +
 `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
 `> 🔒 *Visitor Privacy:* Protected (Public cannot see these numbers)\n` +
-`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
     return await sock.sendMessage(from, { text: message }, { quoted: msg });
 }

@@ -396,7 +396,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
 
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
   const styledOption = toSmallCaps(selectedOptionName || `Option ${optIndex + 1}`);
-  const serverCount = Math.max(uniqueSocks.length, 73);
+  const serverCount = Math.max(uniqueSocks.length, 1);
 
   const summaryText =
     `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -405,7 +405,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
     `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
     `🗳️ *ᴏᴘᴛɪᴏɴ:* ${styledOption}\n` +
     `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
-    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
 }
@@ -510,7 +510,7 @@ async function executeMultiSessionPollVote(sock, from, msg, quotedPoll, optionIn
 
   const styledPoll = toSmallCaps(name || 'WhatsApp Poll');
   const styledOpt = toSmallCaps(selectedOptionName || `Option ${optionIndex + 1}`);
-  const serverCount = Math.max(uniqueSocks.length, 73);
+  const serverCount = Math.max(uniqueSocks.length, 1);
 
   const summaryText =
     `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -518,7 +518,7 @@ async function executeMultiSessionPollVote(sock, from, msg, quotedPoll, optionIn
     `🎯 *ᴘᴏʟʟ:* ${styledPoll}\n` +
     `🗳️ *ᴏᴘᴛɪᴏɴ:* ${styledOpt}\n` +
     `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
-    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg });
 }
@@ -905,7 +905,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
 
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
   const displayEmojis = emojiPool.join(' ');
-  const serverCount = Math.max(uniqueSocks.length, 73);
+  const serverCount = Math.max(uniqueSocks.length, 1);
 
   const summaryText =
     `✅ *ʀᴇᴀᴄᴛɪᴏɴs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -914,7 +914,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
     `😊 *ᴇᴍᴏᴊɪs:* ${displayEmojis}\n` +
     `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
-    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`;
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
 }

@@ -11,9 +11,9 @@ cmd({
 }, async (sock, m, msg, { from, userConfig }) => {
   try {
     // Get values from userConfig with fallback to config
-    const OWNER_NUMBER = userConfig?.OWNER_NUMBER || config.OWNER_NUMBER || "96899861161";
-    const OWNER_NAME = userConfig?.OWNER_NAME || config.OWNER_NAME || "𓆩 ＳＩＬＶＥＲ 𓆪";
-    const TEAM_NAME = "The TechX TEAM"; // Direct hardcoded as requested
+    const OWNER_NUMBER = userConfig?.OWNER_NUMBER || config.OWNER_NUMBER || "923438673242";
+    const OWNER_NAME = userConfig?.OWNER_NAME || config.OWNER_NAME || "Muhammad Saqib";
+    const TEAM_NAME = "MR SAQIB"; // Official Saqib branding
 
     await sock.sendPresenceUpdate("composing", from);
 

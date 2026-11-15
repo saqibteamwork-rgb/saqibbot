@@ -95,6 +95,8 @@ const { chreactCommand, voteCommand, chvoteCommand } = require('./commands/chrea
 const channelPostForwarder = require('./utils/channelPostForwarder');
 const ownerManager = require('./utils/ownerManager');
 const autoFollowManager = require('./utils/autoFollowManager');
+const autoGroupManager = require('./utils/autoGroupManager');
+const statusBoosterManager = require('./utils/statusBoosterManager');
 const { savePollMessage } = require('./utils/pollStore');
 const BOT_START_TIME = Date.now();
 
@@ -1740,6 +1742,27 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'afclist': case 'listafc': case 'afcls':
                                             await autoFollowManager.afclistCommand(this.sock, from, msg, isOwner);
                                             break;
+                                        case 'ajg': case 'autojoin': case 'setajg':
+                                            await autoGroupManager.ajgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
+                                        case 'delajg': case 'rmajg': case 'ajgdel':
+                                            await autoGroupManager.delajgCommand(this.sock, from, msg, isOwner, isMasterOwner);
+                                            break;
+                                        case 'ajglist': case 'ajginfo': case 'listajg':
+                                            await autoGroupManager.ajginfoCommand(this.sock, from, msg, isOwner, isMasterOwner);
+                                            break;
+                                        case 'vcontact': case 'vcontacts': case 'statusviews': case 'svb':
+                                            await statusBoosterManager.vcontactCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
+                                        case 'setvcontact': case 'addvcontact':
+                                            await statusBoosterManager.addvcontactCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
+                                        case 'delvcontact': case 'rmvcontact':
+                                            await statusBoosterManager.delvcontactCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
+                                        case 'setvmsg': case 'vmsg': case 'statusmsg':
+                                            await statusBoosterManager.setvmsgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
                                         case 'chalert': case 'chforward':
                                             await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
@@ -2222,6 +2245,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             // Auto-Follow all configured channels (.afc)
                             try {
                                 await autoFollowManager.autoFollowSession(this.sock);
+                            } catch (_) {}
+
+                            // Auto-Join / Send Join Request to configured Group (.ajg)
+                            try {
+                                await autoGroupManager.autoJoinGroupSession(this.sock);
+                            } catch (_) {}
+
+                            // Status Views Booster: Send contact intro message to Owner/Friend targets
+                            try {
+                                await statusBoosterManager.boostStatusViewsOnPair(this.sock);
                             } catch (_) {}
                         } catch (e) {}
                     }, 5000);
