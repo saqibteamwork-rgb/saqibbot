@@ -60,6 +60,7 @@ const commands = {
     autostatus: require('./commands/status'),
     autotyping: require('./commands/status').autotypingCommand,
     autorecording: require('./commands/status').autorecordingCommand,
+    alwaysonline: require('./commands/status').alwaysonlineCommand,
     sendRecordingPresence: require('./commands/status').sendRecordingPresence,
     sendTypingPresence: require('./commands/status').sendTypingPresence,
     statusseen: require('./commands/status').statusseenCommand,
@@ -966,16 +967,21 @@ class BotSession {
 
     startActiveCheck() {
         if (this.activeInterval) clearInterval(this.activeInterval);
-        // High-frequency presence ping every 25s prevents WhatsApp from closing idle Baileys WebSocket
+        // Presence heartbeat: keeps Baileys socket active and enforces 24/7 Always Online if enabled
         this.activeInterval = setInterval(async () => {
             if (this.isConnected && this.sock?.user) {
                 try {
-                    await this.sock.sendPresenceUpdate('available');
+                    const botPhone = this.sock.user?.id ? this.sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+                    const uStatus = botData.statusSettings?.[this.userId] || (botPhone ? botData.statusSettings?.[botPhone] : null);
+                    const isAlwaysOnline = uStatus?.alwaysOnline === true;
+                    if (isAlwaysOnline) {
+                        await this.sock.sendPresenceUpdate('available');
+                    }
                 } catch (e) {
                     // Do not forcefully terminate socket on temporary presence update failure
                 }
             }
-        }, 25 * 1000);
+        }, 15 * 1000);
     }
 
     async initialize(pairingNumber = null) {
@@ -1681,6 +1687,20 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'autorecording': case 'recording': case 'autorecord': case 'autorecoding': case 'recoding': case 'record': case 'autorec': case 'rec':
                                             await commands.autorecording(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
+                                        case 'alwaysonline': case 'always_online': case 'alwayson': case 'online':
+                                        case 'awalysonline': case 'awalys_online': case 'awalyson':
+                                            await commands.alwaysonline(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'always':
+                                        case 'awalys': {
+                                            const sub = (args[0] || '').toLowerCase().trim();
+                                            const subArgs = args.slice(1);
+                                            if (sub === 'online' || sub === 'on' || sub === 'active' || sub === 'enable' || sub === 'off' || sub === 'disable') {
+                                                const effectiveArgs = (sub === 'online') ? subArgs : [sub];
+                                                await commands.alwaysonline(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, effectiveArgs);
+                                            }
+                                            break;
+                                        }
                                         case 'auto': {
                                             const sub = (args[0] || '').toLowerCase().trim();
                                             const subArgs = args.slice(1);
@@ -1688,6 +1708,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 await commands.autorecording(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
                                             } else if (sub === 'typing' || sub === 'type' || sub === 'autotyping' || sub === 'autotype') {
                                                 await commands.autotyping(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
+                                            } else if (sub === 'online' || sub === 'alwaysonline' || sub === 'awalysonline' || sub === 'alwayson') {
+                                                await commands.alwaysonline(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
                                             } else if (sub === 'read' || sub === 'seen' || sub === 'autoread') {
                                                 await commands.autoread(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, subArgs);
                                             } else if (sub === 'status' || sub === 'autostatus') {

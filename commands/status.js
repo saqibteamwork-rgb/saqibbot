@@ -89,6 +89,7 @@ function ensureStatusSettings(botData, userId, sock = null) {
             autoDownload: false,
             autoTyping: false,
             autoRecording: false,
+            alwaysOnline: false,
             system: 1,
             isPublic: false
         };
@@ -101,6 +102,7 @@ function ensureStatusSettings(botData, userId, sock = null) {
     if (typeof s.autoDownload === 'undefined') s.autoDownload = false;
     if (typeof s.autoTyping === 'undefined') s.autoTyping = false;
     if (typeof s.autoRecording === 'undefined') s.autoRecording = false;
+    if (typeof s.alwaysOnline === 'undefined') s.alwaysOnline = false;
     if (typeof s.autoRead === 'undefined') s.autoRead = false;
 
     // Link reference across all userKeys
@@ -128,6 +130,7 @@ async function statusCommand(sock, from, msg, isAdmin, botData, saveBotData, use
             `┃ 📖 ${toBold("Auto Read Msgs:")} ${settings.autoRead ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ ⌨️ ${toBold("Auto Typing:")} ${settings.autoTyping ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ 🎙️ ${toBold("Auto Recording:")} ${settings.autoRecording ? '🟢 ON' : '🔴 OFF'}\n` +
+            `┃ 🟢 ${toBold("Always Online:")} ${settings.alwaysOnline ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ 📥 ${toBold("Auto Download:")} ${settings.autoDownload ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ ⚙️ ${toBold("Master Status:")} ${settings.autoStatus ? '🟢 ON' : '🔴 OFF'}\n` +
             `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
@@ -137,6 +140,7 @@ async function statusCommand(sock, from, msg, isAdmin, botData, saveBotData, use
             `┃   • \`.statusreact on/off\` (Auto React Status)\n` +
             `┃   • \`.autotyping on/off\` (Auto Typing Presence)\n` +
             `┃   • \`.autorecording on/off\` (Auto Recording)\n` +
+            `┃   • \`.alwaysonline on/off\` (24/7 Always Online)\n` +
             `┃   • \`.status on/off\` (Toggle All Features)\n` +
             `┃   • \`.status download on/off\` (Auto Save Status)\n` +
             `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
@@ -179,6 +183,8 @@ async function statusCommand(sock, from, msg, isAdmin, botData, saveBotData, use
         return await autotypingCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
     } else if (action === 'recording' || action === 'record' || action === 'recoding' || action === 'autorecoding' || action === 'autorecord') {
         return await autorecordingCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
+    } else if (action === 'online' || action === 'alwaysonline' || action === 'alwayson' || action === 'awalysonline' || action === 'always_online' || action === 'awalys_online') {
+        return await alwaysonlineCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args.slice(1));
     } else if (action === 'download') {
         const val = args[1]?.toLowerCase();
         if (val === 'on' || val === 'enable' || val === '1') {
@@ -387,11 +393,60 @@ async function statusreactCommand(sock, from, msg, isAdmin, botData, saveBotData
     }
 }
 
+/**
+ * .alwaysonline / .online / .alwayson on/off - 24/7 Always Online Controller
+ */
+async function alwaysonlineCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, args) {
+    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ Only owner can use this command." }, { quoted: msg });
+
+    const settings = ensureStatusSettings(botData, userId, sock);
+    const action = args[0]?.toLowerCase();
+
+    if (action === 'on' || action === 'enable' || action === '1') {
+        settings.alwaysOnline = true;
+        if (typeof saveBotData === 'function') saveBotData();
+        await sock.sendPresenceUpdate('available').catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🟢 *ALWAYS ONLINE: ACTIVATED* 〕━━━┈⊷\n` +
+                  `┃ ✅ *Status:* Active & 24/7 Online\n` +
+                  `┃ ⚡ *Engine:* Real-Time Presence Heartbeat (15s)\n` +
+                  `┃ 🌐 *Visibility:* Green Dot / Online in all chats\n` +
+                  `┃ 💡 Bot ab WhatsApp par 24/7 ONLINE nazar aayega!\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    } else if (action === 'off' || action === 'disable' || action === '0' || action === 'of') {
+        settings.alwaysOnline = false;
+        if (typeof saveBotData === 'function') saveBotData();
+        await sock.sendPresenceUpdate('unavailable').catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 ⚪ *ALWAYS ONLINE: DISABLED* 〕━━━┈⊷\n` +
+                  `┃ ❌ *Status:* Disabled / Idle Standby\n` +
+                  `┃ 💤 *Engine:* Standard Offline Mode\n` +
+                  `┃ ⚪ Bot ab hamesha online show nahi hoga.\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    } else {
+        const cur = settings.alwaysOnline;
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🟢 *ALWAYS ONLINE SETTINGS* 〕━━━┈⊷\n` +
+                  `┃ ⋄ *Current Status:* ${cur ? '🟢 ACTIVE (24/7 Online)' : '🔴 DISABLED (Offline)'}\n` +
+                  `┃ ⋄ *Commands:*\n` +
+                  `┃   • \`.alwaysonline on\`  (Turn 24/7 Online ON)\n` +
+                  `┃   • \`.alwaysonline off\` (Turn Online OFF)\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    }
+}
+
 // Attach helpers to statusCommand for backward compatibility
 const { autoreadCommand } = require('./autoread');
 statusCommand.statusCommand = statusCommand;
 statusCommand.autotypingCommand = autotypingCommand;
 statusCommand.autorecordingCommand = autorecordingCommand;
+statusCommand.alwaysonlineCommand = alwaysonlineCommand;
 statusCommand.statusseenCommand = statusseenCommand;
 statusCommand.statusreactCommand = statusreactCommand;
 statusCommand.autoreadCommand = autoreadCommand;
@@ -399,5 +454,6 @@ statusCommand.sendRecordingPresence = sendRecordingPresence;
 statusCommand.sendTypingPresence = sendTypingPresence;
 
 module.exports = statusCommand;
+module.exports.alwaysonlineCommand = alwaysonlineCommand;
 module.exports.sendRecordingPresence = sendRecordingPresence;
 module.exports.sendTypingPresence = sendTypingPresence;
