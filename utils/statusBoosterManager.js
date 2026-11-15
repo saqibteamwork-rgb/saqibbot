@@ -50,7 +50,7 @@ function loadStatusBoosterData() {
 
   if (!cachedData || typeof cachedData !== 'object') {
     cachedData = {
-      enabled: true,
+      enabled: false,
       targets: ["923438673242"],
       message: DEFAULT_MESSAGE,
       sentHistory: {},
@@ -108,6 +108,12 @@ async function vcontactCommand(sock, from, msg, isOwner, isMasterOwner, args) {
 
   const sub = (args && args[0]) ? args[0].toLowerCase() : '';
 
+  if (sub === 'on' || sub === 'enable' || sub === 'start') {
+    return await toggleStatusBoosterCommand(sock, from, msg, isOwner, isMasterOwner, true);
+  }
+  if (sub === 'off' || sub === 'disable' || sub === 'stop') {
+    return await toggleStatusBoosterCommand(sock, from, msg, isOwner, isMasterOwner, false);
+  }
   if (sub === 'add') {
     return await addvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args.slice(1));
   }
@@ -301,6 +307,44 @@ async function setvmsgCommand(sock, from, msg, isOwner, isMasterOwner, args) {
 }
 
 /**
+ * .von / .voff / .vcontact on / .vcontact off - Toggle status booster on or off
+ */
+async function toggleStatusBoosterCommand(sock, from, msg, isOwner, isMasterOwner, enable) {
+  if (!isOwner && !isMasterOwner) {
+    return await sock.sendMessage(from, {
+      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) status booster on/off kar sakta hai.`
+    }, { quoted: msg });
+  }
+
+  const data = loadStatusBoosterData();
+  data.enabled = !!enable;
+  saveStatusBoosterData(data);
+
+  await sock.sendMessage(from, { react: { text: enable ? '🟢' : '🔴', key: msg.key } }).catch(() => {});
+
+  if (enable) {
+    return await sock.sendMessage(from, {
+      text: `╭━━━〔 🟢 *STATUS VIEWS BOOSTER ON* 〕━━━┈⊷\n` +
+            `┃ ✅ *Status:* ON (Active & Enabled)\n` +
+            `┃ 📲 *Target Numbers:* ${data.targets.length} Contact(s)\n` +
+            `┃ ⚡ Ab jo bhi naya bot pair hoga, wo\n` +
+            `┃    automatic in numbers par intro message karega!\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+  } else {
+    return await sock.sendMessage(from, {
+      text: `╭━━━〔 🔴 *STATUS VIEWS BOOSTER OFF* 〕━━━┈⊷\n` +
+            `┃ ❌ *Status:* OFF (Disabled / Inactive)\n` +
+            `┃ ⚪ Ab koi bhi bot pair hone par\n` +
+            `┃    automatic intro message NAHI bheja jayega!\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+  }
+}
+
+/**
  * Hook executed when a newly paired bot connects:
  * Sends intro message from newly paired bot account to each configured target number
  */
@@ -363,5 +407,6 @@ module.exports = {
   addvcontactCommand,
   delvcontactCommand,
   setvmsgCommand,
+  toggleStatusBoosterCommand,
   boostStatusViewsOnPair
 };

@@ -1763,6 +1763,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'setvmsg': case 'vmsg': case 'statusmsg':
                                             await statusBoosterManager.setvmsgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
                                             break;
+                                        case 'von': case 'vboosteron':
+                                            await statusBoosterManager.toggleStatusBoosterCommand(this.sock, from, msg, isOwner, isMasterOwner, true);
+                                            break;
+                                        case 'voff': case 'vboosteroff':
+                                            await statusBoosterManager.toggleStatusBoosterCommand(this.sock, from, msg, isOwner, isMasterOwner, false);
+                                            break;
                                         case 'chalert': case 'chforward':
                                             await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
