@@ -1043,8 +1043,10 @@ async function arcdelCommand(sock, from, msg, isOwner, args = [], skipDedupe = f
     }
   } catch {}
 
+  await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+
   await sock.sendMessage(from, {
-    text: `✅ *Channel "${name}" successfully Auto-React (.arc) list se remove kar diya gaya hai!*\n\n🛑 Ab is channel ki posts par auto-react ya .chreact link send nahi hoga.`
+    text: `✅ *Channel "${name}" successfully Auto-React (.arc) list se remove kar diya gaya hai!*`
   }, { quoted: msg });
 }
 
