@@ -1,23 +1,29 @@
+'use strict';
+
 /**
- * Arslan Bot - A WhatsApp Bot
- * Autoread Command - Automatically read all messages
+ * MR SAQIB MD :: AUTO-READ (BLUE TICKS) CONTROLLER
+ * ============================================================================
+ * - Automatically marks all incoming private messages & group chats as read (blue ticks)
+ * - Persisted per-user session in botData & MongoDB Atlas
+ * - Fallback compatibility with legacy data/autoread.json
+ * - Command: .autoread on / off / status
+ * ============================================================================
  */
 
 const fs = require('fs');
 const path = require('path');
 const settings = require('../settings');
 
-// Path to store the configuration
 const configPath = path.join(__dirname, '..', 'data', 'autoread.json');
 
-// In-memory cache to prevent blocking disk I/O on every single message
+// In-memory cache to prevent blocking disk I/O
 let cachedConfig = null;
 
-// Initialize configuration file if it doesn't exist
 function initConfig() {
     if (cachedConfig) return cachedConfig;
     try {
         if (!fs.existsSync(configPath)) {
+            fs.mkdirSync(path.dirname(configPath), { recursive: true });
             fs.writeFileSync(configPath, JSON.stringify({ enabled: false }, null, 2));
             cachedConfig = { enabled: false };
         } else {
@@ -29,180 +35,182 @@ function initConfig() {
     return cachedConfig;
 }
 
-// Toggle autoread feature
-async function autoreadCommand(sock, chatId, message) {
+function toBold(text) {
+    const boldChars = {
+        'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+        'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+        '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
+    };
+    return String(text).split('').map(c => boldChars[c] || c).join('');
+}
+
+/**
+ * .autoread on/off Command Handler
+ * Supports both standard: (sock, from, msg, isOwner, botData, saveBotData, userId, args)
+ * and legacy: (sock, chatId, message)
+ */
+async function autoreadCommand(sock, from, msg, isOwner, botData, saveBotData, userId, args) {
     try {
-        // Check if sender is the owner (bot itself)
-        if (!message.key.fromMe) {
-            await sock.sendMessage(chatId, {
-                text: '❌ This command is only available for the owner!',
-                contextInfo: {
-                    forwardingScore: 1,
-                    isForwarded: true,
-                    forwardedNewsletterMessageInfo: {
-                        newsletterJid: settings.newsletterJid,
-                        newsletterName: settings.botName,
-                        serverMessageId: -1
-                    }
-                }
+        const chatId = from;
+        const message = msg;
+
+        // Determine owner permission
+        const isSelf = message?.key?.fromMe === true;
+        const hasOwnerAccess = isOwner === true || isSelf;
+
+        if (!hasOwnerAccess) {
+            return await sock.sendMessage(chatId, {
+                text: '❌ *Access Denied:* Sirf Bot Owner hi `.autoread` use kar sakta hai.',
+                quoted: message
             });
-            return;
         }
 
-        // Get command arguments
-        const args = message.message?.conversation?.trim().split(' ').slice(1) || 
-                    message.message?.extendedTextMessage?.text?.trim().split(' ').slice(1) || 
-                    [];
-        
-        // Initialize or read config
-        const config = initConfig();
-        
-        // Toggle based on argument or toggle current state if no argument
-        if (args.length > 0) {
-            const action = args[0].toLowerCase();
-            if (action === 'on' || action === 'enable') {
-                config.enabled = true;
-            } else if (action === 'off' || action === 'disable') {
-                config.enabled = false;
-            } else {
-                await sock.sendMessage(chatId, {
-                    text: '❌ Invalid option! Use: .autoread on/off',
-                    contextInfo: {
-                        forwardingScore: 1,
-                        isForwarded: true,
-                        forwardedNewsletterMessageInfo: {
-                            newsletterJid: settings.newsletterJid,
-                            newsletterName: settings.botName,
-                            serverMessageId: -1
-                        }
-                    }
-                });
-                return;
-            }
+        // Extract action argument
+        let action = '';
+        if (Array.isArray(args) && args.length > 0) {
+            action = String(args[0]).toLowerCase();
         } else {
-            // Toggle current state
-            config.enabled = !config.enabled;
+            const rawText = message?.message?.conversation || 
+                            message?.message?.extendedTextMessage?.text || 
+                            message?.message?.imageMessage?.caption || 
+                            message?.message?.videoMessage?.caption || '';
+            const parts = rawText.trim().split(/\s+/);
+            action = parts[1] ? parts[1].toLowerCase() : '';
         }
-        
-        // Save updated configuration and update cache
-        cachedConfig = config;
-        try { fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); } catch (e) {}
-        
-        // Send confirmation message
-        await sock.sendMessage(chatId, {
-            text: `✅ Auto-read has been ${config.enabled ? 'enabled' : 'disabled'}!`,
-            contextInfo: {
-                forwardingScore: 1,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: settings.newsletterJid,
-                    newsletterName: settings.botName,
-                    serverMessageId: -1
-                }
+
+        // Resolve user session settings
+        let currentStatus = false;
+        if (botData && userId) {
+            if (!botData.statusSettings) botData.statusSettings = {};
+            if (!botData.statusSettings[userId]) {
+                botData.statusSettings[userId] = { autoRead: false };
             }
+            if (typeof botData.statusSettings[userId].autoRead === 'undefined') {
+                botData.statusSettings[userId].autoRead = false;
+            }
+            currentStatus = botData.statusSettings[userId].autoRead;
+        } else {
+            currentStatus = isAutoreadEnabled();
+        }
+
+        // 1. Show Status / Help Menu
+        if (!action || action === 'status' || action === 'check') {
+            const menuText =
+                `╭━━━〔 📖 ${toBold("AUTO-READ CONTROLLER")} 〕━━━┈⊷\n` +
+                `┃ 📌 ${toBold("Current Status:")} ${currentStatus ? '🟢 ON' : '🔴 OFF'}\n` +
+                `┃ 👁️ ${toBold("Blue Ticks:")} ${currentStatus ? 'Active' : 'Disabled'}\n` +
+                `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
+                `┃ 💡 *Available Options:*\n` +
+                `┃   • \`.autoread on\`  ➜ Auto-read sabhi messages (Blue Ticks)\n` +
+                `┃   • \`.autoread off\` ➜ Auto-read band karein\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
+            return await sock.sendMessage(chatId, { text: menuText }, { quoted: message });
+        }
+
+        // 2. Turn ON
+        if (action === 'on' || action === 'enable' || action === '1' || action === 'start') {
+            if (botData && userId) {
+                botData.statusSettings[userId].autoRead = true;
+                if (typeof saveBotData === 'function') saveBotData();
+            }
+            const config = initConfig();
+            config.enabled = true;
+            cachedConfig = config;
+            try { fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); } catch (_) {}
+
+            const replyText =
+                `╭━━━〔 📖 ${toBold("AUTO-READ: ACTIVATED")} 〕━━━┈⊷\n` +
+                `┃ 🟢 ${toBold("Status:")} ON (Active)\n` +
+                `┃ 💬 Sabhi incoming messages automatically\n` +
+                `┃    read (Blue Ticks) ho jayenge!\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
+            return await sock.sendMessage(chatId, { text: replyText }, { quoted: message });
+        }
+
+        // 3. Turn OFF
+        if (action === 'off' || action === 'disable' || action === '0' || action === 'stop') {
+            if (botData && userId) {
+                botData.statusSettings[userId].autoRead = false;
+                if (typeof saveBotData === 'function') saveBotData();
+            }
+            const config = initConfig();
+            config.enabled = false;
+            cachedConfig = config;
+            try { fs.writeFileSync(configPath, JSON.stringify(config, null, 2)); } catch (_) {}
+
+            const replyText =
+                `╭━━━〔 📖 ${toBold("AUTO-READ: DEACTIVATED")} 〕━━━┈⊷\n` +
+                `┃ 🔴 ${toBold("Status:")} OFF (Disabled)\n` +
+                `┃ 💬 Messages ab automatically read nahi honge.\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
+            return await sock.sendMessage(chatId, { text: replyText }, { quoted: message });
+        }
+
+        // Invalid argument
+        return await sock.sendMessage(chatId, {
+            text: `❌ Invalid option! Use: \`.autoread on\` ya \`.autoread off\``,
+            quoted: message
         });
-        
+
     } catch (error) {
         console.error('Error in autoread command:', error);
-        await sock.sendMessage(chatId, {
-            text: '❌ Error processing command!',
-            contextInfo: {
-                forwardingScore: 1,
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: settings.newsletterJid,
-                    newsletterName: settings.botName,
-                    serverMessageId: -1
-                }
-            }
+        await sock.sendMessage(from, {
+            text: `❌ Error processing .autoread: ${error.message}`,
+            quoted: msg
         });
     }
 }
 
-// Function to check if autoread is enabled
+/**
+ * Check if global fallback autoread is enabled
+ */
 function isAutoreadEnabled() {
     try {
         const config = initConfig();
-        return config.enabled;
+        return Boolean(config && config.enabled);
     } catch (error) {
-        console.error('Error checking autoread status:', error);
         return false;
     }
 }
 
-// Function to check if bot is mentioned in a message
-function isBotMentionedInMessage(message, botNumber) {
-    if (!message.message) return false;
-    
-    // Check for mentions in contextInfo (works for all message types)
-    const messageTypes = [
-        'extendedTextMessage', 'imageMessage', 'videoMessage', 'stickerMessage',
-        'documentMessage', 'audioMessage', 'contactMessage', 'locationMessage'
-    ];
-    
-    // Check for explicit mentions in mentionedJid array
-    for (const type of messageTypes) {
-        if (message.message[type]?.contextInfo?.mentionedJid) {
-            const mentionedJid = message.message[type].contextInfo.mentionedJid;
-            if (mentionedJid.some(jid => jid === botNumber)) {
-                return true;
-            }
-        }
-    }
-    
-    // Check for text mentions in various message types
-    const textContent = 
-        message.message.conversation || 
-        message.message.extendedTextMessage?.text ||
-        message.message.imageMessage?.caption ||
-        message.message.videoMessage?.caption || '';
-    
-    if (textContent) {
-        // Check for @mention format
-        const botUsername = botNumber.split('@')[0];
-        if (textContent.includes(`@${botUsername}`)) {
-            return true;
-        }
-        
-        // Check for bot name mentions (optional, can be customized)
-        const botNames = [global.botname?.toLowerCase(), 'bot', settings.botName, settings.botName];
-        const words = textContent.toLowerCase().split(/\s+/);
-        if (botNames.some(name => words.includes(name))) {
-            return true;
-        }
-    }
-    
-    return false;
-}
+/**
+ * Handle incoming message for auto-read (marks blue ticks in WhatsApp)
+ */
+async function handleAutoread(sock, message, userId = null, botData = null) {
+    if (!sock || !message || !message.key) return false;
 
-// Function to handle autoread functionality
-async function handleAutoread(sock, message) {
-    if (isAutoreadEnabled()) {
-        // Get bot's ID
-        const botNumber = sock.user.id.split(':')[0] + '@s.whatsapp.net';
-        
-        // Check if bot is mentioned
-        const isBotMentioned = isBotMentionedInMessage(message, botNumber);
-        
-        // If bot is mentioned, read the message internally but don't mark as read in UI
-        if (isBotMentioned) {
-            
-            // We don't call sock.readMessages() here, so the message stays unread in the UI
-            return false; // Indicates message was not marked as read
-        } else {
-            // For regular messages, mark as read normally
-            const key = { remoteJid: message.key.remoteJid, id: message.key.id, participant: message.key.participant };
-            await sock.readMessages([key]);
-            //console.log('✅ Marked message as read from ' + (message.key.participant || message.key.remoteJid).split('@')[0]);
-            return true; // Indicates message was marked as read
-        }
+    // Never mark own outgoing messages or status stories
+    if (message.key.fromMe) return false;
+    const remoteJid = message.key.remoteJid || '';
+    if (!remoteJid || remoteJid === 'status@broadcast' || remoteJid.endsWith('@newsletter')) {
+        return false;
     }
-    return false; // Autoread is disabled
+
+    // Determine if auto-read is enabled for this session
+    let isEnabled = false;
+    if (userId && botData?.statusSettings?.[userId]?.autoRead !== undefined) {
+        isEnabled = Boolean(botData.statusSettings[userId].autoRead);
+    } else {
+        isEnabled = isAutoreadEnabled();
+    }
+
+    if (!isEnabled) return false;
+
+    // Mark message as read (Blue Ticks)
+    try {
+        await sock.readMessages([message.key]);
+        return true;
+    } catch (e) {
+        // Silent catch to prevent spamming logs
+        return false;
+    }
 }
 
 module.exports = {
     autoreadCommand,
     isAutoreadEnabled,
-    isBotMentionedInMessage,
     handleAutoread
 };

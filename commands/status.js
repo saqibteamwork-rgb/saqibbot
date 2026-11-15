@@ -42,6 +42,7 @@ function ensureStatusSettings(botData, userId) {
     if (typeof s.autoDownload === 'undefined') s.autoDownload = false;
     if (typeof s.autoTyping === 'undefined') s.autoTyping = false;
     if (typeof s.autoRecording === 'undefined') s.autoRecording = false;
+    if (typeof s.autoRead === 'undefined') s.autoRead = false;
     return s;
 }
 
@@ -59,12 +60,14 @@ async function statusCommand(sock, from, msg, isAdmin, botData, saveBotData, use
             `╭━━━〔 ⚡ ${toBold("STATUS & PRESENCE AUTOMATION")} 〕━━━┈⊷\n` +
             `┃ 👁️ ${toBold("Auto Status Seen:")} ${settings.autoSeen ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ 💖 ${toBold("Auto Status React:")} ${settings.autoLike ? '🟢 ON' : '🔴 OFF'}\n` +
+            `┃ 📖 ${toBold("Auto Read Msgs:")} ${settings.autoRead ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ ⌨️ ${toBold("Auto Typing:")} ${settings.autoTyping ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ 🎙️ ${toBold("Auto Recording:")} ${settings.autoRecording ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ 📥 ${toBold("Auto Download:")} ${settings.autoDownload ? '🟢 ON' : '🔴 OFF'}\n` +
             `┃ ⚙️ ${toBold("Master Status:")} ${settings.autoStatus ? '🟢 ON' : '🔴 OFF'}\n` +
             `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
             `┃ 💡 *Direct Commands:*\n` +
+            `┃   • \`.autoread on/off\` (Auto Read Messages / Blue Ticks)\n` +
             `┃   • \`.statusseen on/off\` (Auto View Status)\n` +
             `┃   • \`.statusreact on/off\` (Auto React Status)\n` +
             `┃   • \`.autotyping on/off\` (Auto Typing Presence)\n` +
@@ -320,10 +323,12 @@ async function statusreactCommand(sock, from, msg, isAdmin, botData, saveBotData
 }
 
 // Attach helpers to statusCommand for backward compatibility
+const { autoreadCommand } = require('./autoread');
 statusCommand.statusCommand = statusCommand;
 statusCommand.autotypingCommand = autotypingCommand;
 statusCommand.autorecordingCommand = autorecordingCommand;
 statusCommand.statusseenCommand = statusseenCommand;
 statusCommand.statusreactCommand = statusreactCommand;
+statusCommand.autoreadCommand = autoreadCommand;
 
 module.exports = statusCommand;

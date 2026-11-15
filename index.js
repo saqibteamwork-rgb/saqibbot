@@ -1248,7 +1248,7 @@ class BotSession {
 
                         // Handle Autoread, Autotyping, Autorecording (non-blocking for ultra-fast response)
                         if (!isMe && !isStatus) {
-                            handleAutoread(this.sock, msg).catch(() => {});
+                            handleAutoread(this.sock, msg, this.userId, botData).catch(() => {});
                             storeMessage(msg).catch(() => {});
 
                             // Live presence updates: Autotyping & Autorecording
@@ -1767,7 +1767,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                                         // New Command Handlers
                                         case 'apk': await commands.apk(this.sock, from, msg); break;
-                                        case 'autoread': await commands.autoread(this.sock, from, msg); break;
+                                        case 'autoread': case 'read': case 'autoreadmsg': case 'autoreadmessage':
+                                            await commands.autoread(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            break;
                                         case 'character': await commands.character(this.sock, from, msg); break;
                                         case 'emojimix': await commands.emojimix(this.sock, from, msg); break;
                                         case 'facebook': case 'fb': await commands.facebook(this.sock, from, msg); break;
