@@ -27,6 +27,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const settings = require('../settings');
+const { getEffectiveProfile } = require('./customProfile');
 const {
     sendInteractiveButtons,
     quickReplyButton,
@@ -115,8 +116,9 @@ const CATEGORIES = {
         'trackip', 'truecaller', 'vcf', 'was', 'wiki'
     ],
     'GENERAL': [
-        'alive', 'botstatus', 'calc', 'dp', 'help', 'owner',
-        'pair', 'ping', 'runtime', 'speed', 'tmp', 'tmpib',
+        'alive', 'botstatus', 'calc', 'dp', 'help', 'myprofile', 'owner',
+        'pair', 'ping', 'profileinfo', 'resetmenu', 'runtime', 'setbotname',
+        'setmenupic', 'setownername', 'speed', 'tmp', 'tmpib',
         'tmprst', 'translate', 'vv', 'wame', 'weather'
     ],
     'GROUP': [
@@ -150,7 +152,8 @@ const CATEGORIES = {
         'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'crashgrup',
         'cs', 'delafc', 'delajg', 'delcs', 'delprem', 'delvcontact', 'fullpp',
         'iosbug', 'mode', 'ownadd', 'owndel', 'ownlist', 'prem', 'premlist',
-        'restart', 'richhtml', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
+        'resetmenu', 'restart', 'richhtml', 'setbotname', 'setmenupic',
+        'setownername', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
     ]
 };
 
@@ -189,13 +192,13 @@ function loadMenuImageBuffer() {
 }
 loadMenuImageBuffer();
 
-function getMenuChannelContext() {
+function getMenuChannelContext(botName = null) {
     return {
         forwardingScore: 999,
         isForwarded: true,
         forwardedNewsletterMessageInfo: {
             newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
-            newsletterName: settings.botName || 'MR SAQIB MD',
+            newsletterName: botName || settings.botName || 'MR SAQIB MD',
             serverMessageId: 1
         }
     };
@@ -213,6 +216,9 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
 
     const userId = session?.userId || 'User';
+    const profile = getEffectiveProfile(botData, userId);
+    const effectiveBotName = profile.botName;
+    const effectiveOwnerName = profile.ownerName;
     const customName = (botData?.userNames && botData.userNames[userId]) || msg.pushName || 'User';
     const isPublic = session?.isPublic ?? false;
 
@@ -238,9 +244,9 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 
     // 2. Build Bold & Italic Aesthetic Header Box
     const headerText = 
-`╭━━━〔 ⚡ ${toSansBold(settings.botName || 'MR SAQIB MD')} ⚡ 〕━━━┈⊷
+`╭━━━〔 ⚡ ${toSansBold(effectiveBotName)} ⚡ 〕━━━┈⊷
 ┃ 👤 ${toSansBold('User')}: _${customName}_
-┃ 👑 ${toSansBold('Owner')}: ${toSansBold(settings.ownerName || 'MR SAQIB')}
+┃ 👑 ${toSansBold('Owner')}: ${toSansBold(effectiveOwnerName)}
 ┃ 🟢 ${toSansBold('Status')}: ${toSansBold('Connected')} 🟢
 ┃ ⚙️ ${toSansBold('System')}: ${toSansBold('Active')} ⚡
 ┃ 🌐 ${toSansBold('Server')}: ${toSansBold('Running')} 🚀
@@ -274,14 +280,22 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     // 4. Build Powered By Footer
     const footerText = 
 `╭━━━〔 👑 ${toSansBold('POWERED BY')} 〕━━━┈⊷
-┃ 🚀 ${toSansBold(settings.ownerName || 'MR SAQIB')}
+┃ 🚀 ${toSansBold(effectiveOwnerName)}
 ┃ 🔍 google.com/search?q=mr+saqib
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
     const menuText = (headerText + bodyText + footerText).trim();
 
-    // 5. Image payload from memory buffer (zero disk read!)
-    let imagePayload = PRELOADED_MENU_IMAGE;
+    // 5. Image payload resolution (Custom session image -> Custom global image -> Preloaded RAM buffer -> Settings URL)
+    let imagePayload = null;
+    if (profile.menuImage) {
+        try {
+            imagePayload = fs.readFileSync(profile.menuImage);
+        } catch (_) {}
+    }
+    if (!imagePayload) {
+        imagePayload = PRELOADED_MENU_IMAGE;
+    }
     if (!imagePayload && settings.menuImage && settings.menuImage.trim() !== '') {
         const imgPath = settings.menuImage.trim();
         if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
@@ -291,7 +305,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 
     // 6. Send Message 1: Main Menu with guaranteed delivery
     try {
-        const channelContext = getMenuChannelContext();
+        const channelContext = getMenuChannelContext(effectiveBotName);
         if (imagePayload) {
             await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
         } else {

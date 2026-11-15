@@ -110,6 +110,13 @@ const { storeMessage, handleMessageRevocation } = require('./commands/antidelete
 const settings = require('./settings');
 const { menuCommand } = require('./commands/menu');
 const { setppCommand, setgppCommand } = require('./commands/setpp');
+const {
+    setbotnameCommand,
+    setownernameCommand,
+    setmenupicCommand,
+    resetprofileCommand,
+    profileinfoCommand
+} = require('./commands/customProfile');
 
 // Newly integrated modules from D:\Mmm-main & D:\Server2-main
 const { stickerCommand, takeCommand } = require('./commands/sticker');
@@ -659,12 +666,16 @@ let botData = {
     antiDelete: {},
     userNames: {},
     antiCall: {},
+    customProfiles: {},
+    globalSettings: {},
     tgUserNumbers: {} // { "<telegram chatId>": ["923xxxxxxxxx", "923yyyyyyyyy"] }
 };
 if (fs.existsSync(DATA_FILE)) {
     try { botData = fs.readJsonSync(DATA_FILE); } catch (e) {}
 }
 if (!botData.tgUserNumbers) botData.tgUserNumbers = {};
+if (!botData.customProfiles) botData.customProfiles = {};
+if (!botData.globalSettings) botData.globalSettings = {};
 
 let saveBotDataTimer = null;
 function saveBotData() {
@@ -1632,7 +1643,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         await this.sock.sendMessage(from, { text: helpText }, { quoted: msg });
                                         break;
                                         case 'ping': case 'pong': case 'speed': case 'latency': case 'p':
-                                            await commands.ping(this.sock, from, msg);
+                                            await commands.ping(this.sock, from, msg, this, botData);
                                             break;
                                         case 'pair': case 'pairing': case 'code':
                                             await commands.pair(this.sock, from, msg, args, isOwner, isAdmin, sessions, BotSession, botData, saveBotData);
@@ -1727,7 +1738,25 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         }
                                         case 'hidetag': await commands.hidetag(this.sock, from, msg, isAdmin, q); break;
                                         case 'tagall': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
-                                        case 'setname': await commands.setname(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, q); break;
+
+                                        // ══════════════════════════════════════════════════════════════
+                                        // CUSTOM PROFILE & BRANDING COMMANDS (.setbotname, .setownername, .setmenupic, .resetmenu, .myprofile)
+                                        // ══════════════════════════════════════════════════════════════
+                                        case 'setbotname': case 'setname':
+                                            await setbotnameCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId, args, q);
+                                            break;
+                                        case 'setownername': case 'setownname':
+                                            await setownernameCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId, args, q);
+                                            break;
+                                        case 'setmenupic': case 'setmenuimg': case 'setmenudp':
+                                            await setmenupicCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'resetmenu': case 'resetprofile':
+                                            await resetprofileCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId);
+                                            break;
+                                        case 'myprofile': case 'profileinfo':
+                                            await profileinfoCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, this.userId);
+                                            break;
                                         case 'insta': case 'ig': await commands.insta(this.sock, from, msg, q); break;
                                         case 'tiktok': case 'tt': case 'tik': case 'tktok': case 'ttdl':
                                         case 'tiktok1': case 'tt1': case 'ttdl1':

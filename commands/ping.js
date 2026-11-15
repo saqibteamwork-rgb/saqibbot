@@ -2,8 +2,9 @@
 
 const os = require('os');
 const settings = require('../settings');
+const { getEffectiveProfile } = require('./customProfile');
 
-async function pingCommand(sock, from, msg) {
+async function pingCommand(sock, from, msg, session = null, botData = null) {
     const start = Date.now();
 
     // Send instant reaction asynchronously in background (zero blocking delay!)
@@ -13,22 +14,27 @@ async function pingCommand(sock, from, msg) {
     const speedMs = Math.max(1, end - start);
     const speedSec = (speedMs / 1000).toFixed(3);
 
+    const userId = session?.userId;
+    const profile = getEffectiveProfile(botData, userId);
+    const effectiveBotName = profile.botName;
+    const effectiveOwnerName = profile.ownerName;
+
     const channelContext = {
         forwardingScore: 999,
         isForwarded: true,
         forwardedNewsletterMessageInfo: {
             newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
-            newsletterName: settings.botName || 'MR SAQIB MD',
+            newsletterName: effectiveBotName || settings.botName || 'MR SAQIB MD',
             serverMessageId: 1
         }
     };
 
     const text = 
-`╭━━━〔 ⚡ *${settings.botName || 'MR SAQIB MD'} ULTRA-SONIC SPEED* 〕━━━┈⊷
+`╭━━━〔 ⚡ *${effectiveBotName} ULTRA-SONIC SPEED* 〕━━━┈⊷
 ┃ 🚀 *Response Speed:* ${speedMs}ms (${speedSec}s)
 ┃ ⚡ *Engine:* Ultra-Sonic V8 Performance Engine
 ┃ 🟢 *Server Status:* 100% Online & Lightning Fast
-┃ 👑 *Owner:* ${settings.ownerName || 'MR SAQIB'}
+┃ 👑 *Owner:* ${effectiveOwnerName}
 ┃ ⚙️ *Platform:* Node.js (${process.version})
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
