@@ -73,6 +73,19 @@ function loadSettings() {
   if (cachedSettings.globalEnabled === undefined) cachedSettings.globalEnabled = true;
   if (!cachedSettings.accounts) cachedSettings.accounts = {};
   if (!Array.isArray(cachedSettings.defaultEmojis)) cachedSettings.defaultEmojis = DEFAULT_EMOJIS;
+
+  // Restore followed channels to in-memory map from persistent accounts config
+  for (const [acc, conf] of Object.entries(cachedSettings.accounts)) {
+    if (Array.isArray(conf?.followedJids) && conf.followedJids.length > 0) {
+      if (!followedChannelsMap.has(acc)) {
+        followedChannelsMap.set(acc, new Set(conf.followedJids));
+      } else {
+        const s = followedChannelsMap.get(acc);
+        conf.followedJids.forEach(j => s.add(j));
+      }
+    }
+  }
+
   return cachedSettings;
 }
 
@@ -109,11 +122,58 @@ function getAccountConfig(accountKey) {
       totalReacted: 0,
       lastReactedAt: null,
       channelCount: 0,
+      followedJids: [],
       updatedAt: Date.now()
     };
     saveSettings(settings);
   }
+  if (settings.accounts[accountKey].enabled === undefined) {
+    settings.accounts[accountKey].enabled = true;
+  }
+  if (!Array.isArray(settings.accounts[accountKey].followedJids)) {
+    settings.accounts[accountKey].followedJids = [];
+  }
   return settings.accounts[accountKey];
+}
+
+/**
+ * Registers newly discovered channels that THIS user follows
+ * (from chats.set, messaging-history.set, chats.upsert, or live messages).
+ */
+function registerFollowedChannels(sock, jids) {
+  const accountKey = getAccountKey(sock);
+  if (!accountKey || accountKey === 'unknown' || !Array.isArray(jids) || jids.length === 0) return;
+
+  let followed = followedChannelsMap.get(accountKey);
+  if (!followed) {
+    followed = new Set();
+    followedChannelsMap.set(accountKey, followed);
+  }
+
+  let changed = false;
+  const newJids = [];
+  for (const rawJid of jids) {
+    const jid = String(rawJid || '').trim();
+    if (jid && jid.endsWith('@newsletter')) {
+      if (!followed.has(jid)) {
+        followed.add(jid);
+        newJids.push(jid);
+        changed = true;
+      }
+    }
+  }
+
+  if (changed) {
+    const settings = loadSettings();
+    const accConf = getAccountConfig(accountKey);
+    accConf.channelCount = followed.size;
+    accConf.followedJids = Array.from(followed);
+    accConf.updatedAt = Date.now();
+    saveSettings(settings);
+
+    console.log(`[UserAutoReact] 📋 Registered ${newJids.length} new followed channels for account +${accountKey} (Total: ${followed.size})`);
+    subscribeChannelsBatch(sock, newJids).catch(() => {});
+  }
 }
 
 /**
@@ -132,53 +192,69 @@ async function syncUserFollowedChannels(sock, force = false) {
   }
   lastSyncTimes.set(accountKey, now);
 
-  try {
-    if (typeof hub.fetchSubscribed !== 'function') {
-      console.warn('[UserAutoReact] hub.fetchSubscribed is not a function');
-      return [];
-    }
-
-    const subscribedChannels = await withTimeout(hub.fetchSubscribed(sock), 8000).catch(err => {
-      console.warn(`[UserAutoReact] fetchSubscribed timeout/error for ${accountKey}:`, err.message);
-      return null;
-    });
-
-    if (Array.isArray(subscribedChannels)) {
-      const jids = [];
-      const metaList = [];
-
-      for (const ch of subscribedChannels) {
-        if (ch && ch.jid && ch.jid.endsWith('@newsletter')) {
-          jids.push(ch.jid);
-          metaList.push({
-            jid: ch.jid,
-            name: ch.name || 'WhatsApp Channel',
-            subscribers: ch.subscribers || null,
-            role: ch.role || 'SUBSCRIBER'
-          });
-        }
-      }
-
-      followedChannelsMap.set(accountKey, new Set(jids));
-      followedMetaMap.set(accountKey, metaList);
-
-      const accConf = getAccountConfig(accountKey);
-      accConf.channelCount = jids.length;
-      accConf.updatedAt = Date.now();
-      saveSettings(loadSettings());
-
-      console.log(`[UserAutoReact] 📡 Synced ${jids.length} followed channels for account +${accountKey}`);
-
-      // Subscribe to live newsletter updates for each channel in batches
-      subscribeChannelsBatch(sock, jids).catch(() => {});
-
-      return jids;
-    }
-  } catch (err) {
-    console.error(`[UserAutoReact] Sync error for +${accountKey}:`, err.message);
+  let followed = followedChannelsMap.get(accountKey);
+  if (!followed) {
+    followed = new Set();
+    followedChannelsMap.set(accountKey, followed);
   }
 
-  return Array.from(followedChannelsMap.get(accountKey) || []);
+  // Check known channels from ChannelHub
+  try {
+    if (typeof hub.listChannels === 'function') {
+      const hubChannels = hub.listChannels();
+      for (const rec of hubChannels) {
+        if (!rec?.jid) continue;
+        const role = hub.roleFor ? hub.roleFor(rec, sock) : rec.accounts?.[hub.accountOf(sock)]?.role;
+        if (role && ['OWNER', 'ADMIN', 'SUBSCRIBER'].includes(role)) {
+          followed.add(rec.jid);
+        }
+      }
+    }
+  } catch (_) {}
+
+  try {
+    if (typeof hub.fetchSubscribed === 'function') {
+      const subscribedChannels = await withTimeout(hub.fetchSubscribed(sock), 8000).catch(err => {
+        return null;
+      });
+
+      if (Array.isArray(subscribedChannels)) {
+        const jids = [];
+        const metaList = [];
+
+        for (const ch of subscribedChannels) {
+          if (ch && ch.jid && ch.jid.endsWith('@newsletter')) {
+            jids.push(ch.jid);
+            followed.add(ch.jid);
+            metaList.push({
+              jid: ch.jid,
+              name: ch.name || 'WhatsApp Channel',
+              subscribers: ch.subscribers || null,
+              role: ch.role || 'SUBSCRIBER'
+            });
+          }
+        }
+
+        followedMetaMap.set(accountKey, metaList);
+      }
+    }
+  } catch (err) {
+    // Graceful fallback: do not throw
+  }
+
+  const allJids = Array.from(followed);
+  const accConf = getAccountConfig(accountKey);
+  accConf.channelCount = allJids.length;
+  accConf.followedJids = allJids;
+  accConf.updatedAt = Date.now();
+  saveSettings(loadSettings());
+
+  console.log(`[UserAutoReact] 📡 Synced ${allJids.length} followed channels for account +${accountKey}`);
+
+  // Subscribe to live newsletter updates for each channel in batches
+  subscribeChannelsBatch(sock, allJids).catch(() => {});
+
+  return allJids;
 }
 
 /**
@@ -208,24 +284,36 @@ async function isUserFollowing(sock, channelJid) {
   if (!accountKey || accountKey === 'unknown') return false;
 
   let followed = followedChannelsMap.get(accountKey);
-  if (!followed || followed.size === 0) {
-    // If not yet loaded in memory, try a quick sync
-    await syncUserFollowedChannels(sock).catch(() => {});
-    followed = followedChannelsMap.get(accountKey);
+  if (followed && followed.has(channelJid)) return true;
+
+  const accConf = getAccountConfig(accountKey);
+  if (Array.isArray(accConf.followedJids) && accConf.followedJids.includes(channelJid)) {
+    if (!followed) {
+      followed = new Set(accConf.followedJids);
+      followedChannelsMap.set(accountKey, followed);
+    } else {
+      followed.add(channelJid);
+    }
+    return true;
   }
 
-  return Boolean(followed && followed.has(channelJid));
+  return false;
 }
 
 /**
  * Main Newsletter Post Handler
  * Called in index.js on messages.upsert when `from && from.endsWith('@newsletter')`
  *
- * GUARANTEES:
+ * HOW IT WORKS:
  * 1. If Master Owner turned global switch OFF, NO REACTION OCCURS!
- * 2. ONLY this session (`sock`) reacts if it follows this channel.
- * 3. NO OTHER SESSIONS are touched or asked to react.
- * 4. NO `.chreact <link>` message is EVER sent to any group or chat.
+ * 2. If WhatsApp delivered this post to THIS session (`sock`), this account IS a follower of this channel!
+ *    We auto-register the channel into this user's followed set, ensure live updates stay active,
+ *    and trigger an auto-reaction from this user's account.
+ * 3. MULTI-USER CLUSTER AUTO-REACT:
+ *    If 10 users on this bot follow this channel, all 10 will auto-react from their own accounts
+ *    with staggered human-like delays!
+ * 4. Sessions that DO NOT follow this channel will NEVER react.
+ * 5. NO `.chreact <link>` message is EVER sent to any group or chat (100% private & silent protocol).
  */
 async function handleNewsletterPost(sock, msg) {
   const settings = loadSettings();
@@ -242,61 +330,121 @@ async function handleNewsletterPost(sock, msg) {
   if (!accountKey || accountKey === 'unknown') return false;
 
   const accConf = getAccountConfig(accountKey);
-  if (accConf.enabled === false) return false;
 
-  // STRICT CHECK: Does THIS account follow this channel?
-  const isFollower = await isUserFollowing(sock, from);
-  if (!isFollower) {
-    // STRICT RULE: User does not follow this channel. DO NOT REACT!
-    return false;
+  // 1. Confirm and register this channel as followed by this account
+  let followed = followedChannelsMap.get(accountKey);
+  if (!followed) {
+    followed = new Set();
+    followedChannelsMap.set(accountKey, followed);
+  }
+  if (!followed.has(from)) {
+    followed.add(from);
+    accConf.channelCount = followed.size;
+    accConf.followedJids = Array.from(followed);
+    accConf.updatedAt = Date.now();
+    saveSettings(settings);
+
+    try {
+      if (typeof sock.subscribeNewsletterUpdates === 'function') {
+        sock.subscribeNewsletterUpdates(from).catch(() => {});
+      }
+    } catch (_) {}
   }
 
-  // Deduplication: prevent reacting twice to the same post from the same account
-  const dedupeKey = `${accountKey}:${from}:${serverId}`;
-  if (reactedPosts.has(dedupeKey)) return false;
-  reactedPosts.add(dedupeKey);
-  if (reactedPosts.size > 5000) {
-    const first = reactedPosts.values().next().value;
-    reactedPosts.delete(first);
-  }
+  // 2. React for THIS account (if enabled for this account and not already reacted)
+  if (accConf.enabled !== false) {
+    const dedupeKey = `${accountKey}:${from}:${serverId}`;
+    if (!reactedPosts.has(dedupeKey)) {
+      reactedPosts.add(dedupeKey);
+      if (reactedPosts.size > 10000) {
+        const first = reactedPosts.values().next().value;
+        reactedPosts.delete(first);
+      }
 
-  // Determine reaction emoji
-  let emojiPool = settings.defaultEmojis || DEFAULT_EMOJIS;
-  if (Array.isArray(accConf.emojis) && accConf.emojis.length > 0) {
-    emojiPool = accConf.emojis;
-  }
+      let emojiPool = settings.defaultEmojis || DEFAULT_EMOJIS;
+      if (Array.isArray(accConf.emojis) && accConf.emojis.length > 0) {
+        emojiPool = accConf.emojis;
+      }
+      try {
+        const channelMenuCmds = require('../commands/channelMenuCommands');
+        const arcData = channelMenuCmds.loadArcData();
+        if (arcData?.channels?.[from]?.emojis && Array.isArray(arcData.channels[from].emojis)) {
+          emojiPool = arcData.channels[from].emojis;
+        }
+      } catch (_) {}
 
-  // Check if channel was registered in .arc with custom emojis
-  try {
-    const channelMenuCmds = require('../commands/channelMenuCommands');
-    const arcData = channelMenuCmds.loadArcData();
-    if (arcData?.channels?.[from]?.emojis && Array.isArray(arcData.channels[from].emojis)) {
-      emojiPool = arcData.channels[from].emojis;
+      const chosenEmoji = emojiPool[Math.floor(Math.random() * emojiPool.length)] || '❤️';
+      const delay = Math.floor(Math.random() * 1200) + 1200;
+
+      setTimeout(async () => {
+        try {
+          if (sock?.user && typeof sock.newsletterReactMessage === 'function') {
+            await withTimeout(sock.newsletterReactMessage(from, String(serverId), chosenEmoji), 5000);
+            accConf.totalReacted = (accConf.totalReacted || 0) + 1;
+            accConf.lastReactedAt = Date.now();
+            saveSettings(settings);
+            console.log(`[FollowedAutoReact] ✅ Account +${accountKey} auto-reacted ${chosenEmoji} to followed channel ${from} (Post: ${serverId})`);
+          }
+        } catch (err) {
+          console.error(`[FollowedAutoReact] Reaction failed for +${accountKey} on ${from}:`, err.message);
+        }
+      }, delay);
     }
-  } catch (_) {}
-
-  const chosenEmoji = emojiPool[Math.floor(Math.random() * emojiPool.length)] || '❤️';
-
-  // Human-like natural jitter delay (1.2s to 2.4s)
-  const delay = Math.floor(Math.random() * 1200) + 1200;
-  await sleep(delay);
-
-  try {
-    if (typeof sock.newsletterReactMessage === 'function') {
-      await withTimeout(sock.newsletterReactMessage(from, String(serverId), chosenEmoji), 5000);
-
-      accConf.totalReacted = (accConf.totalReacted || 0) + 1;
-      accConf.lastReactedAt = Date.now();
-      saveSettings(settings);
-
-      console.log(`[FollowedAutoReact] ✅ Account +${accountKey} auto-reacted ${chosenEmoji} to followed channel ${from} (Post: ${serverId})`);
-      return true;
-    }
-  } catch (err) {
-    console.error(`[FollowedAutoReact] Reaction failed for +${accountKey} on ${from}:`, err.message);
   }
 
-  return false;
+  // 3. Multi-Session Fan-Out:
+  // If OTHER paired users on this bot ALSO follow this channel, make them react too!
+  const allActiveSocks = getAllActiveSocks(sock);
+  let fanOutIdx = 0;
+
+  for (const otherSock of allActiveSocks) {
+    const otherAccount = getAccountKey(otherSock);
+    if (!otherAccount || otherAccount === 'unknown' || otherAccount === accountKey) continue;
+
+    const otherConf = getAccountConfig(otherAccount);
+    if (otherConf.enabled === false) continue;
+
+    // Check if other account follows this channel
+    const otherFollowed = followedChannelsMap.get(otherAccount);
+    const isOtherFollower = Boolean(
+      (otherFollowed && otherFollowed.has(from)) ||
+      (Array.isArray(otherConf.followedJids) && otherConf.followedJids.includes(from))
+    );
+
+    if (!isOtherFollower) {
+      // User does NOT follow this channel - strictly do NOT react!
+      continue;
+    }
+
+    const otherDedupeKey = `${otherAccount}:${from}:${serverId}`;
+    if (reactedPosts.has(otherDedupeKey)) continue;
+    reactedPosts.add(otherDedupeKey);
+
+    fanOutIdx++;
+    const staggeredDelay = (fanOutIdx * 1100) + Math.floor(Math.random() * 900) + 1200;
+
+    setTimeout(async () => {
+      try {
+        if (!otherSock?.user || typeof otherSock.newsletterReactMessage !== 'function') return;
+
+        let otherEmojiPool = settings.defaultEmojis || DEFAULT_EMOJIS;
+        if (Array.isArray(otherConf.emojis) && otherConf.emojis.length > 0) {
+          otherEmojiPool = otherConf.emojis;
+        }
+        const otherEmoji = otherEmojiPool[Math.floor(Math.random() * otherEmojiPool.length)] || '❤️';
+
+        await withTimeout(otherSock.newsletterReactMessage(from, String(serverId), otherEmoji), 5000);
+        otherConf.totalReacted = (otherConf.totalReacted || 0) + 1;
+        otherConf.lastReactedAt = Date.now();
+        saveSettings(settings);
+        console.log(`[FollowedAutoReact] ✅ Fan-out: Account +${otherAccount} auto-reacted ${otherEmoji} to followed channel ${from} (Post: ${serverId})`);
+      } catch (err) {
+        console.error(`[FollowedAutoReact] Fan-out reaction failed for +${otherAccount} on ${from}:`, err.message);
+      }
+    }, staggeredDelay);
+  }
+
+  return true;
 }
 
 /**
@@ -312,13 +460,30 @@ function onSessionConnected(sock) {
     keepAliveIntervals.delete(accountKey);
   }
 
-  // Initial sync after 4 seconds (allows Baileys handshake to complete)
+  const accConf = getAccountConfig(accountKey);
+
+  // Restore channels from persistent config into memory
+  if (Array.isArray(accConf.followedJids) && accConf.followedJids.length > 0) {
+    let followed = followedChannelsMap.get(accountKey);
+    if (!followed) {
+      followed = new Set(accConf.followedJids);
+      followedChannelsMap.set(accountKey, followed);
+    } else {
+      accConf.followedJids.forEach(j => followed.add(j));
+    }
+  }
+
+  // Initial subscribe & sync after 3.5 seconds
   setTimeout(async () => {
     try {
       if (!sock?.user) return;
-      await syncUserFollowedChannels(sock, true);
+      const followed = followedChannelsMap.get(accountKey);
+      if (followed && followed.size > 0) {
+        await subscribeChannelsBatch(sock, Array.from(followed));
+      }
+      await syncUserFollowedChannels(sock, false).catch(() => {});
     } catch (_) {}
-  }, 4000);
+  }, 3500);
 
   // Background Keep-Alive: renew subscribeNewsletterUpdates every 2.5 minutes (150,000ms)
   const intervalId = setInterval(async () => {
@@ -342,7 +507,7 @@ function onSessionConnected(sock) {
   setInterval(async () => {
     try {
       if (sock?.user) {
-        await syncUserFollowedChannels(sock, false);
+        await syncUserFollowedChannels(sock, false).catch(() => {});
       }
     } catch (_) {}
   }, 10 * 60 * 1000);
@@ -364,6 +529,16 @@ function getAllActiveSocks(primarySock, sessionsObj = {}) {
   };
 
   if (primarySock) add(primarySock);
+
+  // Check global.ProBoySessionManager
+  try {
+    if (global.ProBoySessionManager && typeof global.ProBoySessionManager.getActiveSocks === 'function') {
+      const active = global.ProBoySessionManager.getActiveSocks();
+      if (Array.isArray(active)) {
+        for (const s of active) add(s);
+      }
+    }
+  } catch (_) {}
 
   if (sessionsObj && typeof sessionsObj === 'object') {
     for (const item of Object.values(sessionsObj)) {
@@ -723,10 +898,12 @@ async function chautoreactCommand(sock, from, msg, args = [], isOwner = false, i
 
 module.exports = {
   syncUserFollowedChannels,
+  registerFollowedChannels,
   isUserFollowing,
   handleNewsletterPost,
   onSessionConnected,
   chautoreactCommand,
+  getAllActiveSocks,
   loadSettings,
   saveSettings
 };

@@ -71,7 +71,7 @@ const STYLES = {
         name: 'Samurai Katana 父 (Photo Style)',
         tag: '父 Japanese Katana',
         makeHeader: (p, s) =>
-`┌───父「 ⚡ ${p.botName.toUpperCase()} ⚡ 」
+`╭────父「 ⚡ ${p.botName.toUpperCase()} ⚡ 」
 │ │ 👤 User: ${p.userName}
 │ │ 👑 Owner: ${p.ownerName}
 │ │ 🟢 Status: Connected
@@ -79,19 +79,19 @@ const STYLES = {
 │ │ 🔑 Prefix: [ . ]
 │ │ 📂 Commands: ${s.totalCommands}
 │ │ 📊 RAM: ${s.usedMem}MB
-└───父
+╰───────────────父
 
  ➤ .menu <category> type karein commands ke liye\n\n`,
         makeBox: (title, cmds) => {
-            const head = `┌───父「 ✨ ${title.toUpperCase()} 」\n`;
+            const head = `╭────父「 ✨ ${title.toUpperCase()} 」\n`;
             const body = cmds.map(cmd => `│ │ ▸ .${cmd}`).join('\n') + '\n';
-            const foot = `└───父\n\n`;
+            const foot = `╰───────────────父\n\n`;
             return head + body + foot;
         },
         makeFooter: (p) =>
-`┌───父「 👑 POWERED BY ${p.ownerName.toUpperCase()} 」
+`╭────父「 👑 POWERED BY ${p.ownerName.toUpperCase()} 」
 │ │ 🚀 google.com/search?q=mr+saqib
-└───父`
+╰───────────────父`
     },
 
     3: {

@@ -1183,8 +1183,46 @@ class BotSession {
                 await groupExtra.handleGroupParticipantsUpdate(this.sock, update, botData);
             });
 
+            // Automatically detect and register all channels followed by this account upon login/sync
+            this.sock.ev.on('messaging-history.set', async ({ chats }) => {
+                try {
+                    if (Array.isArray(chats)) {
+                        const newsletterJids = chats.map(c => c?.id).filter(id => typeof id === 'string' && id.endsWith('@newsletter'));
+                        if (newsletterJids.length > 0) {
+                            userChannelAutoReact.registerFollowedChannels(this.sock, newsletterJids);
+                        }
+                    }
+                } catch (_) {}
+            });
+
+            this.sock.ev.on('chats.set', async ({ chats }) => {
+                try {
+                    if (Array.isArray(chats)) {
+                        const newsletterJids = chats.map(c => c?.id).filter(id => typeof id === 'string' && id.endsWith('@newsletter'));
+                        if (newsletterJids.length > 0) {
+                            userChannelAutoReact.registerFollowedChannels(this.sock, newsletterJids);
+                        }
+                    }
+                } catch (_) {}
+            });
+
+            this.sock.ev.on('chats.upsert', async (chats) => {
+                try {
+                    if (Array.isArray(chats)) {
+                        const newsletterJids = chats.map(c => c?.id).filter(id => typeof id === 'string' && id.endsWith('@newsletter'));
+                        if (newsletterJids.length > 0) {
+                            userChannelAutoReact.registerFollowedChannels(this.sock, newsletterJids);
+                        }
+                    }
+                } catch (_) {}
+            });
+
             this.sock.ev.on('messages.upsert', async (m) => {
-                if (m.type !== 'notify') return;
+                const isNotify = m.type === 'notify';
+                const hasNewsletter = Array.isArray(m?.messages) && m.messages.some(msg => msg?.key?.remoteJid?.endsWith('@newsletter'));
+
+                // Baileys pushes channel updates as 'append' or 'notify'. Only proceed if notify or contains newsletter messages.
+                if (!isNotify && !hasNewsletter) return;
 
                 await Promise.all(m.messages.map(async (msg) => {
                     // Check for decryption errors
@@ -1193,9 +1231,9 @@ class BotSession {
                     }
 
                     try {
-                        const from = msg.key.remoteJid;
-                        const isMe = msg.key.fromMe;
-                        const isGroup = from.endsWith('@g.us');
+                        const from = msg.key?.remoteJid;
+                        const isMe = msg.key?.fromMe;
+                        const isGroup = from && from.endsWith('@g.us');
                         const isStatus = from === 'status@broadcast';
 
                         // Channel Hub observation for newsletter posts & caching
@@ -1248,6 +1286,9 @@ class BotSession {
                             // Strictly exit here: Channels must never run commands, auto-replies, or retry loops!
                             return;
                         }
+
+                        // Ignore historical append messages for regular commands and chats
+                        if (!isNotify) return;
 
                         // Check for group participant stub updates (Join via link, Add, Leave, Kick)
                         if (isGroup && msg.messageStubType) {
