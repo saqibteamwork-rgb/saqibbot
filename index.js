@@ -2587,12 +2587,23 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // ═════════════════════════════════════════════════════════
         // ULTRA RESILIENT 24/7 ANTI-SLEEP ENGINE (Multi-Target Ping)
         // ═════════════════════════════════════════════════════════
-        const baseHerokuUrl = 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com';
+        const clusterHerokuUrls = [
+            'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
+            'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
+            'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
+            'https://saqibot4-1469f73b3d77.herokuapp.com',
+            'https://saqibbot5-5ffa090fe31f.herokuapp.com',
+            'https://saqibot6-061b6d17645d.herokuapp.com',
+            'https://saqibot7-b9d00e67a587.herokuapp.com',
+            'https://saqibbot8-f10fafc8b934.herokuapp.com',
+            'https://saqibbot9-bebb531508e3.herokuapp.com',
+            'https://saqibot10-d27e9f3ad01e.herokuapp.com'
+        ];
         const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
         const fallbackRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';
         const pingTargets = [
-            baseHerokuUrl,
-            `${baseHerokuUrl}/health`,
+            ...clusterHerokuUrls,
+            ...clusterHerokuUrls.map(u => `${u}/health`),
             baseRailwayUrl,
             `${baseRailwayUrl}/health`,
             fallbackRailwayUrl,
