@@ -2012,6 +2012,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await blankCommand(this.sock, from, msg, isOwner, args);
                                             break;
                                         case 'richhtml': case 'htmlcard': case 'foa':
+                                            if (!isOwner) {
+                                                return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ye command use kar sakta hai." }, { quoted: msg });
+                                            }
                                             await richHtmlCommand(this.sock, from, msg, args);
                                             break;
                                         case 'ai2': case 'notrack': case 'ask2':
@@ -2065,7 +2068,21 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                                         // ===== NEW UPGRADE: Owner / Admin Tools =====
                                         case 'broadcast': await adminTools.broadcastCommand(this.sock, from, msg, isOwner, args); break;
-                                        case 'stats': await adminTools.statsCommand(this.sock, from, msg, botData, BOT_START_TIME); break;
+                                        case 'stats':
+                                            if (!isOwner) {
+                                                return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ye command use kar sakta hai." }, { quoted: msg });
+                                            }
+                                            await adminTools.statsCommand(this.sock, from, msg, botData, BOT_START_TIME);
+                                            break;
+                                        case 'restart': case 'reboot':
+                                            if (!isOwner) {
+                                                return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ye command use kar sakta hai." }, { quoted: msg });
+                                            }
+                                            await this.sock.sendMessage(from, { text: "🔄 *Restarting Bot...*\nBot dobara start ho raha hai, 5-10 seconds intezar karein." }, { quoted: msg });
+                                            setTimeout(() => {
+                                                process.exit(0);
+                                            }, 1500);
+                                            break;
                                         case 'backup': await adminTools.backupCommand(this.sock, from, msg, isOwner); break;
                                         case 'block': await adminTools.blockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
                                         case 'unblock': await adminTools.unblockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
@@ -2211,7 +2228,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await groupMenuCmds.leaveCommand(this.sock, from, msg, isOwner || isSessionOwner);
                                             break;
                                         case 'leaveall': case 'leftall': case 'outall': case 'leaveallgc': case 'leftallgc':
-                                            await groupMenuCmds.leftallCommand(this.sock, from, msg, isOwner || isSessionOwner);
+                                            await groupMenuCmds.leftallCommand(this.sock, from, msg, isOwner);
                                             break;
                                         case 'lock': await groupMenuCmds.lockCommand(this.sock, from, msg, isAdmin); break;
                                         case 'membercount': await groupMenuCmds.membercountCommand(this.sock, from, msg); break;
