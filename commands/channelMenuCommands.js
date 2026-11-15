@@ -272,10 +272,6 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
     const s = uniqueSocks[i];
     const emoji = emojis[i % emojis.length];
     try {
-      if (typeof s.newsletterFollow === 'function') {
-        await withTimeout(s.newsletterFollow(channelJid), 4000).catch(() => {});
-        await sleep(300);
-      }
       if (typeof s.newsletterReactMessage === 'function') {
         await withTimeout(s.newsletterReactMessage(channelJid, String(serverId), emoji), 5000);
         successCount++;
@@ -383,7 +379,6 @@ function ensureArcKeepAlive(primarySock) {
             delete data.channels[keyJid];
             activeJid = resolvedJid;
             dirty = true;
-            joinChannelAcrossAllSessions(socks[0], resolvedJid, code).catch(() => {});
           } else {
             continue;
           }
@@ -743,9 +738,6 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
 
 > *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
-
-    // Auto Follow/Join across all connected bot accounts in background (non-blocking)
-    joinChannelAcrossAllSessions(sock, targetJid, inviteCode).catch(() => {});
     return;
   }
 

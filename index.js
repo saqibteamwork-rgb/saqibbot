@@ -94,6 +94,7 @@ const { chfollowCommand, chunfollowCommand } = require('./commands/chfollow');
 const { chreactCommand, voteCommand, chvoteCommand } = require('./commands/chreact');
 const channelPostForwarder = require('./utils/channelPostForwarder');
 const ownerManager = require('./utils/ownerManager');
+const autoFollowManager = require('./utils/autoFollowManager');
 const { savePollMessage } = require('./utils/pollStore');
 const BOT_START_TIME = Date.now();
 
@@ -1730,6 +1731,15 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'chunfollow': case 'unfollowall':
                                             await chunfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
                                             break;
+                                        case 'afc': case 'autofollow': case 'addafc':
+                                            await autoFollowManager.afcCommand(this.sock, from, msg, isOwner, args, sessions);
+                                            break;
+                                        case 'delafc': case 'rmafc': case 'afcdel':
+                                            await autoFollowManager.delafcCommand(this.sock, from, msg, isOwner, args);
+                                            break;
+                                        case 'afclist': case 'listafc': case 'afcls':
+                                            await autoFollowManager.afclistCommand(this.sock, from, msg, isOwner);
+                                            break;
                                         case 'chalert': case 'chforward':
                                             await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
@@ -2202,15 +2212,17 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             if (arcData.enabled && arcData.channels) {
                                 for (const [chJid, chConf] of Object.entries(arcData.channels)) {
                                     if (chConf && chConf.enabled !== false && !arcData.blocked?.[chJid]) {
-                                        if (typeof this.sock.newsletterFollow === 'function') {
-                                            await this.sock.newsletterFollow(chJid).catch(() => {});
-                                        }
                                         if (typeof this.sock.subscribeNewsletterUpdates === 'function') {
                                             await this.sock.subscribeNewsletterUpdates(chJid).catch(() => {});
                                         }
                                     }
                                 }
                             }
+
+                            // Auto-Follow all configured channels (.afc)
+                            try {
+                                await autoFollowManager.autoFollowSession(this.sock);
+                            } catch (_) {}
                         } catch (e) {}
                     }, 5000);
 

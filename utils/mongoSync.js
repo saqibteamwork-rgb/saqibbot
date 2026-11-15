@@ -82,7 +82,8 @@ async function initialSync() {
         { key: 'bot_data', file: path.join(DATA_DIR, 'bot_data.json') },
         { key: 'channel_arc', file: path.join(DATA_DIR, 'channel_arc.json') },
         { key: 'saved_stickers', file: path.join(DATA_DIR, 'saved_stickers.json') },
-        { key: 'owners_data', file: path.join(DATA_DIR, 'owners.json') }
+        { key: 'owners_data', file: path.join(DATA_DIR, 'owners.json') },
+        { key: 'auto_follow', file: path.join(DATA_DIR, 'auto_follow.json') }
     ];
 
     for (const target of syncTargets) {

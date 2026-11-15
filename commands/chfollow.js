@@ -64,8 +64,16 @@ module.exports = {
   ownerOnly: true,
 
   async execute(sock, msg, args, extra) {
-    const { reply, react, isOwner, isAdmin } = extra;
-    if (!isOwner && !isAdmin) return reply('🔒 Owner only.');
+    const { reply, react, isOwner } = extra;
+    if (!isOwner) {
+      return reply(
+        `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+        `┃ ❌ *Access Denied!*\n` +
+        `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+        `┃ Channel Follow/Boost kar sakta hai!\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+      );
+    }
 
     const input = args[0];
     if (!input) {
@@ -187,8 +195,16 @@ module.exports = {
   },
 
   async executeUnfollow(sock, msg, args, extra) {
-    const { reply, react, isOwner, isAdmin } = extra;
-    if (!isOwner && !isAdmin) return reply('🔒 Owner only.');
+    const { reply, react, isOwner } = extra;
+    if (!isOwner) {
+      return reply(
+        `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+        `┃ ❌ *Access Denied!*\n` +
+        `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+        `┃ Channel Unfollow kar sakta hai!\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+      );
+    }
 
     const input = args[0];
     if (!input) {
