@@ -776,6 +776,10 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
     }
     if (!data.channels) data.channels = {};
     const canonicalLink = inviteCode ? `https://whatsapp.com/channel/${inviteCode}` : rawLink;
+    let senderName = msg?.pushName || '';
+    if (!senderName || senderName === 'User') {
+      senderName = isMasterOwner ? 'MR SAQIB' : (senderDigits ? `+${senderDigits}` : 'Admin');
+    }
     data.channels[targetJid] = {
       jid: targetJid,
       name: channelName,
@@ -787,7 +791,8 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
       delayStr: `${Math.round(delayMs / 1000)}s`,
       enabled: true,
       addedAt: Date.now(),
-      addedBy: senderDigits || rawSender,
+      addedBy: senderDigits || rawSender || '923438673242',
+      addedByName: senderName,
       lastPostId: null
     };
 
@@ -849,6 +854,71 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
   await sock.sendMessage(from, { text }, { quoted: msg });
 }
 
+/**
+ * Resolves the Adder's Name & Number with Rank Badge. Never returns 'Unknown'!
+ */
+function formatAdderDisplay(c, ownersData = null) {
+  if (!ownersData) {
+    try {
+      const ownerManager = require('../utils/ownerManager');
+      ownersData = ownerManager.loadOwnersData();
+    } catch {
+      ownersData = { owners: [], premium: [] };
+    }
+  }
+
+  const masterDigits = '923438673242';
+  const rawAddedBy = c?.addedBy ? String(c.addedBy).trim() : '';
+  const digits = rawAddedBy.replace(/[^0-9]/g, '') || masterDigits;
+  const isMaster = (digits === masterDigits || digits.endsWith('3438673242'));
+
+  let name = c?.addedByName || '';
+  if (!name || name === 'User') {
+    if (isMaster) {
+      name = 'MR SAQIB';
+    } else {
+      const isCoOwner = (ownersData.owners || []).find(o => {
+        const oDig = String(o.digits || '').replace(/[^0-9]/g, '');
+        return oDig && (oDig === digits || oDig.endsWith(digits.slice(-10)));
+      });
+      if (isCoOwner) {
+        name = isCoOwner.name || 'Co-Owner';
+      } else {
+        const pm = (ownersData.premium || []).find(p => {
+          const pDig = String(p.digits || '').replace(/[^0-9]/g, '');
+          return pDig && (pDig === digits || pDig.endsWith(digits.slice(-10)));
+        });
+        if (pm) {
+          name = pm.name || 'Premium Member';
+        } else {
+          name = 'Admin';
+        }
+      }
+    }
+  }
+
+  if (isMaster) {
+    return `👑 ${name} (+${digits})`;
+  }
+
+  const isCoOwner = (ownersData.owners || []).some(o => {
+    const oDig = String(o.digits || '').replace(/[^0-9]/g, '');
+    return oDig && (oDig === digits || oDig.endsWith(digits.slice(-10)));
+  });
+  if (isCoOwner) return `🛡️ ${name} (+${digits})`;
+
+  const pm = (ownersData.premium || []).find(p => {
+    const pDig = String(p.digits || '').replace(/[^0-9]/g, '');
+    return pDig && (pDig === digits || pDig.endsWith(digits.slice(-10)));
+  });
+  if (pm) {
+    const isExpired = pm.expiresAt && pm.expiresAt <= Date.now();
+    return isExpired ? `⚠️ ${name} (+${digits}) [Expired]` : `💎 ${name} (+${digits})`;
+  }
+
+  return `👤 ${name} (+${digits})`;
+}
+
 // 2. .arclist - List all monitored channels
 async function arclistCommand(sock, from, msg) {
   const data = loadArcData();
@@ -878,7 +948,7 @@ async function arclistCommand(sock, from, msg) {
 
     const targetLabel = c.targetName || (c.targetJid ? (c.targetJid.endsWith('@g.us') ? 'WhatsApp Group' : 'Custom Chat') : null);
     const targetDisplay = targetLabel ? `🎯 Target: *${targetLabel}*` : '🎯 Target: Default (Inbox / Group)';
-    const addedInfo = c.addedBy ? `\n┃    👤 Added By: +${c.addedBy}` : '';
+    const addedInfo = `\n┃    👤 Added By: ${formatAdderDisplay(c)}`;
 
     text += `┃\n`;
     text += `┃ ${idx + 1}. *${c.name || 'Channel'}* (${state})\n`;
@@ -1474,28 +1544,6 @@ async function chstatusCommand(sock, from, msg, isOwner) {
     ownersData = ownerManager.loadOwnersData();
   } catch {}
 
-  const masterDigits = '923438673242';
-  const getAdderBadge = (addedBy) => {
-    if (!addedBy) return '👤 Unknown';
-    const digits = String(addedBy).replace(/[^0-9]/g, '');
-    if (digits === masterDigits || digits.endsWith('3438673242')) return '👑 Master Owner';
-    const isCoOwner = (ownersData.owners || []).some(o => {
-      const oDig = String(o.digits || '').replace(/[^0-9]/g, '');
-      return oDig && (oDig === digits || oDig.endsWith(digits.slice(-10)));
-    });
-    if (isCoOwner) return `🛡️ Co-Owner (+${digits})`;
-
-    const pm = (ownersData.premium || []).find(p => {
-      const pDig = String(p.digits || '').replace(/[^0-9]/g, '');
-      return pDig && (pDig === digits || pDig.endsWith(digits.slice(-10)));
-    });
-    if (pm) {
-      const isExpired = pm.expiresAt && pm.expiresAt <= Date.now();
-      return isExpired ? `⚠️ Expired Prem (+${digits})` : `💎 Premium (+${digits})`;
-    }
-    return `👤 User (+${digits})`;
-  };
-
   let arcSection = '';
   if (totalArc === 0) {
     arcSection = `┃ 📭 Koi channel Auto-React me add nahi hai.\n┃ 👉 Add karne ke liye: \`.arc <channel_link>\`\n`;
@@ -1506,7 +1554,7 @@ async function chstatusCommand(sock, from, msg, isOwner) {
       const state = (c.enabled !== false && c.active !== false) ? '🟢 Active' : '⏸️ Paused';
       const emojis = (c.emojis || []).join(' ') || '❤️';
       const delay = c.delayStr || `${Math.round((c.delayMs || 5000) / 1000)}s`;
-      const adder = getAdderBadge(c.addedBy);
+      const adder = formatAdderDisplay(c, ownersData);
       const link = c.link ? `\n┃    🔗 ${c.link}` : '';
       const targetRoute = c.targetName ? `\n┃    🎯 Forward: *${c.targetName}*` : '';
 
