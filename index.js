@@ -80,8 +80,7 @@ const commands = {
     get: require('./commands/get'),
     gift: require('./commands/gift'),
     channelid: require('./commands/channelid'),
-    pair: require('./commands/pair'),
-    paircode: require('./commands/pair').paircodeCommand
+    pair: require('./commands/pair')
 };
 
 // ===== NEW UPGRADE: Extra Command Modules (free, no paid API needed) =====
@@ -502,8 +501,7 @@ app.get('/api/pair', async (req, res) => {
         session.isInitializing = false;
         try { await fs.remove(session.authPath); } catch (e) {}
 
-        const customCode = req.query.code || req.query.custom || null;
-        const code = await session.initialize(number, customCode);
+        const code = await session.initialize(number);
         return res.json({ success: true, code: code || session.pairingCode });
     } catch (e) {
         console.error('[API Error]', e.message);
@@ -686,7 +684,6 @@ if (!botData.antiStatusGroups) botData.antiStatusGroups = {};
 if (!botData.welcomeGoodbye) botData.welcomeGoodbye = {};
 if (!botData.customProfiles) botData.customProfiles = {};
 if (!botData.globalSettings) botData.globalSettings = {};
-if (!botData.customPairingCode) botData.customPairingCode = config.customPairingCode || 'SAQIBXMD';
 
 let saveBotDataTimer = null;
 function saveBotData() {
@@ -970,24 +967,19 @@ class BotSession {
 
     startActiveCheck() {
         if (this.activeInterval) clearInterval(this.activeInterval);
-        // Presence heartbeat: keeps Baileys socket active and enforces 24/7 Always Online if enabled
+        // High-frequency presence ping every 25s prevents WhatsApp from closing idle Baileys WebSocket
         this.activeInterval = setInterval(async () => {
             if (this.isConnected && this.sock?.user) {
                 try {
-                    const botPhone = this.sock.user?.id ? this.sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
-                    const uStatus = botData.statusSettings?.[this.userId] || (botPhone ? botData.statusSettings?.[botPhone] : null);
-                    const isAlwaysOnline = uStatus?.alwaysOnline === true;
-                    if (isAlwaysOnline) {
-                        await this.sock.sendPresenceUpdate('available');
-                    }
+                    await this.sock.sendPresenceUpdate('available');
                 } catch (e) {
                     // Do not forcefully terminate socket on temporary presence update failure
                 }
             }
-        }, 15 * 1000);
+        }, 25 * 1000);
     }
 
-    async initialize(pairingNumber = null, customCodeOverride = null) {
+    async initialize(pairingNumber = null) {
         if (this.isInitializing) {
             this.sendLog("⏳ Initialization already in progress...", "info");
             return;
@@ -1089,25 +1081,7 @@ class BotSession {
             if (pairingNumber) {
                 await delay(2500);
                 try {
-                    const customPairingCode = (
-                        customCodeOverride ||
-                        botData?.customPairingCode ||
-                        process.env.CUSTOM_PAIRING_CODE ||
-                        config.customPairingCode ||
-                        'SAQIBXMD'
-                    ).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
-
-                    let code;
-                    try {
-                        if (customPairingCode && customPairingCode.length === 8) {
-                            code = await this.sock.requestPairingCode(pairingNumber, customPairingCode);
-                        } else {
-                            code = await this.sock.requestPairingCode(pairingNumber);
-                        }
-                    } catch (customErr) {
-                        this.sendLog(`⚠️ Custom pairing code (${customPairingCode}) failed: ${customErr.message}. Retrying with auto code...`, 'warn');
-                        code = await this.sock.requestPairingCode(pairingNumber);
-                    }
+                    let code = await this.sock.requestPairingCode(pairingNumber);
                     code = code?.match(/.{1,4}/g)?.join("-") || code;
                     this.pairingCode = code;
                     this.isInitializing = false;
@@ -1684,9 +1658,6 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'pair': case 'pairing': case 'code':
                                             await commands.pair(this.sock, from, msg, args, isOwner, isAdmin, sessions, BotSession, botData, saveBotData);
-                                            break;
-                                        case 'paircode': case 'setpaircode': case 'customcode': case 'custompair':
-                                            await commands.paircode(this.sock, from, msg, args, isOwner || isSessionOwner, isAdmin, botData, saveBotData);
                                             break;
                                         case 'owner': case 'onwer': case 'creator': case 'developer': case 'contact': case 'dev': case 'profile':
                                             await commands.owner(this.sock, from, msg);
@@ -2676,8 +2647,7 @@ io.on('connection', (socket) => {
         console.log(`[Socket] Pair requested for: ${id}`);
         sessions[id].isInitializing = false;
         try {
-            const customCode = typeof data === 'object' ? (data.code || data.customCode) : null;
-            const code = await sessions[id].initialize(number || id, customCode);
+            const code = await sessions[id].initialize(number || id);
             if (code) {
                 socket.emit('pairing-code', code);
             }
