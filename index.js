@@ -104,6 +104,8 @@ const { chreactCommand, voteCommand, chvoteCommand } = require('./commands/chrea
 const channelPostForwarder = require('./utils/channelPostForwarder');
 const ownerManager = require('./utils/ownerManager');
 const autoFollowManager = require('./utils/autoFollowManager');
+const userChannelAutoReact = require('./utils/userChannelAutoReact');
+const { chautoreactCommand } = require('./commands/chautoreact');
 const autoGroupManager = require('./utils/autoGroupManager');
 const statusBoosterManager = require('./utils/statusBoosterManager');
 const { savePollMessage } = require('./utils/pollStore');
@@ -1199,10 +1201,16 @@ class BotSession {
                         // Channel Hub observation for newsletter posts & caching
                         channelHub.observe(this.sock, msg).catch(() => {});
 
-                        // Auto Channel Reaction (ARC) & Self-Inbox .chreact Forwarder (ONLY for channels added via .arc)
+                        // User Followed Channels Auto-Reaction (ONLY reacts for user who actually follows this channel)
                         if (from && from.endsWith('@newsletter')) {
                             try { savePollMessage(msg); } catch (e) {}
                             try {
+                                // 1. Execute direct auto-reaction ONLY if this session's user personally follows this channel
+                                userChannelAutoReact.handleNewsletterPost(this.sock, msg).catch(err => {
+                                    console.error('[FollowedAutoReact Error]:', err.message);
+                                });
+
+                                // 2. Track ARC metadata & lastPostId if channel was configured in .arc
                                 const arcData = channelMenuCmds.loadArcData();
                                 if (arcData.enabled && !arcData.blocked?.[from]) {
                                     let conf = arcData.channels?.[from];
@@ -1228,23 +1236,14 @@ class BotSession {
                                     }
                                     if (conf && conf.enabled !== false) {
                                         const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
-                                        if (serverId) {
-                                            if (!conf.lastPostId || Number(serverId) > Number(conf.lastPostId)) {
-                                                conf.lastPostId = String(serverId);
-                                                channelMenuCmds.saveArcData(arcData);
-                                            }
-                                            // Send ".chreact <post_link>" to inbox/group AND execute our bot's ARC multi-session auto-reaction
-                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).catch(err => {
-                                                console.error('[ChannelForwarder Error]:', err.message);
-                                            });
-                                            channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(err => {
-                                                console.error('[ARC AutoReaction Error]:', err.message);
-                                            });
+                                        if (serverId && (!conf.lastPostId || Number(serverId) > Number(conf.lastPostId))) {
+                                            conf.lastPostId = String(serverId);
+                                            channelMenuCmds.saveArcData(arcData);
                                         }
                                     }
                                 }
                             } catch (arcErr) {
-                                console.error('[ARC Upsert Error]:', arcErr.message);
+                                console.error('[Newsletter AutoReact Error]:', arcErr.message);
                             }
                             // Strictly exit here: Channels must never run commands, auto-replies, or retry loops!
                             return;
@@ -1982,6 +1981,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'chreact': case 'chreaction': case 'channelreact':
                                             await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium);
                                             break;
+                                        case 'chautoreact': case 'autoreactch': case 'chreactauto': case 'afreact':
+                                            await chautoreactCommand(this.sock, from, msg, args, isOwner, isSessionOwner);
+                                            break;
                                         case 'vote1': case 'v1':
                                             await voteCommand(this.sock, from, msg, args, isOwner, isAdmin, 1);
                                             break;
@@ -2490,6 +2492,11 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             // Auto-Follow all configured channels (.afc)
                             try {
                                 await autoFollowManager.autoFollowSession(this.sock);
+                            } catch (_) {}
+
+                            // Auto-Sync and Subscribe to user's followed channels for auto-reaction (.chautoreact)
+                            try {
+                                userChannelAutoReact.onSessionConnected(this.sock);
                             } catch (_) {}
 
                             // Auto-Join / Send Join Request to configured Group (.ajg)

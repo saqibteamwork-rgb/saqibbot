@@ -301,6 +301,15 @@ async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
   let successCount = 0;
   for (let i = 0; i < targetCount; i++) {
     const s = uniqueSocks[i];
+    // Only react from sessions that actually follow this channel
+    try {
+      const userAutoReact = require('../utils/userChannelAutoReact');
+      const follows = await userAutoReact.isUserFollowing(s, channelJid);
+      if (!follows) {
+        continue;
+      }
+    } catch (_) {}
+
     const emoji = emojis[i % emojis.length];
     try {
       if (typeof s.newsletterReactMessage === 'function') {
@@ -445,18 +454,12 @@ function ensureArcKeepAlive(primarySock) {
               dirty = true;
 
               if (postTimeMs > 0 && addedAtMs > 0 && postTimeMs >= (addedAtMs - 15000)) {
-                const fwd = require('../utils/channelPostForwarder');
-                const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId };
-                fwd.handleNewsletterPost(socks[0], syntheticMsg, conf).catch(() => {});
                 executeArcAutoReaction(socks[0], activeJid, newestId, conf).catch(() => {});
               }
             } else if (Number(newestId) > Number(conf.lastPostId)) {
               conf.lastPostId = newestId;
               dirty = true;
 
-              const fwd = require('../utils/channelPostForwarder');
-              const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId };
-              fwd.handleNewsletterPost(socks[0], syntheticMsg, conf).catch(() => {});
               executeArcAutoReaction(socks[0], activeJid, newestId, conf).catch(() => {});
             }
           }

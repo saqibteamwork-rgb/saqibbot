@@ -476,7 +476,13 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     recentRelays.set(`${targetDestJid}|${postLink}|${emojiPart}`, Date.now());
 
     try {
-        console.log(`[ChannelForwarder] 📢 ARC Post in "${channelName}"! Route: ${isCustomRoute ? '🎯 Custom' : '🌐 Default'} ➔ Sending to "${targetName}" (${targetDestJid}): ${cmdText}`);
+        console.log(`[ChannelForwarder] 📢 ARC Post in "${channelName}"! Route: ${isCustomRoute ? '🎯 Custom' : '🌐 Default'}`);
+        // Do NOT send .chreact command link to groups or chats (strictly prevents other bots from reacting and stops spam)
+        if (isTargetGroup || !config.allowCmdForward) {
+            console.log(`[ChannelForwarder] 📢 Suppressed .chreact command message to "${targetName}" to prevent other bots triggering.`);
+            return true;
+        }
+
         const preferredDigits = isTargetGroup ? (config.senderAccount || '923438673242') : targetDestJid.split('@')[0];
         const { sentMsg, usedSock } = await sendWithFallbackSockets(sock, targetDestJid, cmdText, preferredDigits);
         if (!usedSock) return false;
