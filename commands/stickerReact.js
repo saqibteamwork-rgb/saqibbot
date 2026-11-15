@@ -2,16 +2,25 @@
 'use strict';
 
 /**
- * MR SAQIB MD :: Sticker Saver & Multi-Sticker Reaction Engine
+ * MR SAQIB MD :: Sticker Saver & Multi-Sticker Reaction Engine (V2 User Isolated)
  * ============================================================================
- * Commands:
- * - .sts <name>        : Save any quoted sticker with custom name (Personal to sender)
- * - .sts list          : View all saved stickers (Personal vs Global)
- * - .sts del <name>    : Delete a saved sticker (Owner/Admin protected)
- * - .rs [count]        : React with sender's own saved stickers (Auto Mixup/Combo!)
- * - .rs <name> [count] : React with specific saved sticker (e.g. .rs dog 5)
- * - .rs10              : Quick 10x reaction using sender's own saved stickers
- * - .rs global [count] : React with global pool of all stickers
+ * Features:
+ * - 100% User Personal Isolation:
+ *   User A's saved stickers belong ONLY to User A.
+ *   User B can NEVER access, react with, view, or delete User A's stickers!
+ * - Zero Memory Loss:
+ *   - Auto-resolves and links WhatsApp LID <-> Phone JID permanently.
+ *   - Auto-merges stickers if user saved via LID and later messages via Phone.
+ *   - Atomic disk writes with rolling backup recovery (.bak) prevents data wipe.
+ *   - Per-user sticker naming (User A's .sts dog & User B's .sts dog never collide).
+ * - Commands:
+ *   - .sts <name>        : Save replied sticker to your personal collection
+ *   - .sts list          : View your personal saved stickers
+ *   - .sts del <name>    : Delete a sticker from your personal collection
+ *   - .rs [count]        : React with your personal saved stickers (Auto Mixup/Combo!)
+ *   - .rs <name> [count] : React with your specific saved sticker (e.g. .rs dog 5)
+ *   - .rs10              : Quick 10x reaction using your personal saved stickers
+ *   - .was [name]        : Single sticker reaction using your saved sticker
  * ============================================================================
  */
 
@@ -22,8 +31,13 @@ const { downloadContentFromMessage, jidNormalizedUser } = require('@whiskeysocke
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const STICKERS_DIR = path.join(DATA_DIR, 'stickers');
 const STICKERS_FILE = path.join(DATA_DIR, 'saved_stickers.json');
+const STICKERS_BAK_FILE = path.join(DATA_DIR, 'saved_stickers.bak.json');
 
 fs.ensureDirSync(STICKERS_DIR);
+
+// In-memory group metadata cache (TTL: 5 minutes) to avoid socket flood
+const groupMetaCache = new Map();
+const GROUP_META_TTL_MS = 5 * 60 * 1000;
 
 function toBase64(val) {
     if (!val) return '';
@@ -41,26 +55,6 @@ function ensureBuffer(val) {
     return null;
 }
 
-function loadSavedStickers() {
-    try {
-        if (fs.existsSync(STICKERS_FILE)) {
-            return fs.readJsonSync(STICKERS_FILE) || {};
-        }
-    } catch (e) {
-        console.error('[StickerStore Load Error]:', e.message);
-    }
-    return {};
-}
-
-function persistStickers(data) {
-    try {
-        fs.ensureDirSync(DATA_DIR);
-        fs.writeJsonSync(STICKERS_FILE, data, { spaces: 2 });
-    } catch (e) {
-        console.error('[StickerStore Save Error]:', e.message);
-    }
-}
-
 async function streamToBuffer(stream) {
     let buffer = Buffer.alloc(0);
     for await (const chunk of stream) {
@@ -70,10 +64,141 @@ async function streamToBuffer(stream) {
 }
 
 /**
- * Extracts and normalizes all potential user identity markers (Phone JID, LID, digits)
- * so that stickers saved by a user match whether the message comes with JID or LID.
+ * Migrates old flat schema to V2 User-Isolated schema without losing any existing stickers
  */
-async function extractUserIdentifiers(sock, from, msg) {
+function migrateToV2(raw) {
+    if (raw && raw._version === 2 && raw.users && typeof raw.users === 'object') {
+        raw.identityMap = raw.identityMap || {};
+        return raw;
+    }
+
+    console.log('[StickerStore] Migrating legacy sticker database to V2 User-Isolated format...');
+
+    const store = {
+        _version: 2,
+        users: {},
+        identityMap: {
+            '251655740244113': '923468616487',
+            '139028410163392': '923478936242'
+        }
+    };
+
+    if (raw && typeof raw === 'object') {
+        // Collect identity mappings from raw if any
+        if (raw._userLatest && typeof raw._userLatest === 'object') {
+            for (const [k, v] of Object.entries(raw._userLatest)) {
+                if (/^\d+$/.test(k)) {
+                    // valid user digit key
+                }
+            }
+        }
+
+        // Migrate each sticker into its owner's personal collection
+        for (const [key, item] of Object.entries(raw)) {
+            if (key.startsWith('_') || !item || typeof item !== 'object') continue;
+
+            const digitsCandidate = (
+                item.savedByDigits ||
+                item.savedByPhone ||
+                item.savedByLid ||
+                item.savedBy ||
+                ''
+            ).replace(/[^0-9]/g, '');
+
+            let ownerDigits = store.identityMap[digitsCandidate] || digitsCandidate || 'default';
+
+            if (!store.users[ownerDigits]) {
+                store.users[ownerDigits] = {
+                    canonicalId: ownerDigits,
+                    phone: item.savedByPhone || '',
+                    lid: item.savedByLid || '',
+                    latest: key,
+                    stickers: {}
+                };
+            }
+
+            store.users[ownerDigits].stickers[key] = {
+                ...item,
+                name: key,
+                savedByDigits: ownerDigits
+            };
+            store.users[ownerDigits].latest = key;
+        }
+    }
+
+    // Immediately persist migrated store
+    persistStickers(store);
+    console.log(`[StickerStore] Migration completed successfully. Loaded ${Object.keys(store.users).length} isolated user pools.`);
+    return store;
+}
+
+/**
+ * Loads sticker store with automatic corruption recovery from rolling backup
+ */
+function loadSavedStickers() {
+    try {
+        if (fs.existsSync(STICKERS_FILE)) {
+            const data = fs.readJsonSync(STICKERS_FILE);
+            if (data && typeof data === 'object') {
+                return migrateToV2(data);
+            }
+        }
+    } catch (e) {
+        console.error('[StickerStore Load Error - Attempting recovery from backup]:', e.message);
+        try {
+            if (fs.existsSync(STICKERS_BAK_FILE)) {
+                const bakData = fs.readJsonSync(STICKERS_BAK_FILE);
+                if (bakData && typeof bakData === 'object') {
+                    console.log('[StickerStore] Successfully recovered from backup file!');
+                    return migrateToV2(bakData);
+                }
+            }
+        } catch (bakErr) {
+            console.error('[StickerStore Backup Recovery Failed]:', bakErr.message);
+        }
+    }
+
+    return {
+        _version: 2,
+        users: {},
+        identityMap: {
+            '251655740244113': '923468616487',
+            '139028410163392': '923478936242'
+        }
+    };
+}
+
+/**
+ * Atomic persistent disk write:
+ * 1. Creates backup of current good file
+ * 2. Writes to temporary file
+ * 3. Atomically moves temporary file to destination
+ */
+function persistStickers(store) {
+    try {
+        fs.ensureDirSync(DATA_DIR);
+
+        // 1. Maintain rolling backup
+        if (fs.existsSync(STICKERS_FILE)) {
+            try {
+                fs.copyFileSync(STICKERS_FILE, STICKERS_BAK_FILE);
+            } catch (_) {}
+        }
+
+        // 2. Atomic write
+        const tmpFile = path.join(DATA_DIR, `saved_stickers_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.tmp`);
+        fs.writeJsonSync(tmpFile, store, { spaces: 2 });
+        fs.moveSync(tmpFile, STICKERS_FILE, { overwrite: true });
+    } catch (e) {
+        console.error('[StickerStore Persist Error]:', e.message);
+    }
+}
+
+/**
+ * Extracts normalized user identity markers and resolves canonical user ID.
+ * Links WhatsApp LID <-> Phone Number so stickers saved under LID are never lost.
+ */
+async function extractUserIdentifiers(sock, from, msg, store = null) {
     const rawSender = msg?.key?.participant || msg?.participant || (msg?.key?.fromMe ? sock?.user?.id : from) || '';
     let cleanRaw = String(rawSender).split(':')[0];
     let phoneJid = '';
@@ -86,44 +211,95 @@ async function extractUserIdentifiers(sock, from, msg) {
     }
 
     if (msg?.key?.fromMe && sock?.user) {
-        if (sock.user.id) {
-            phoneJid = jidNormalizedUser(sock.user.id);
-        }
-        if (sock.user.lid) {
-            lidJid = jidNormalizedUser(sock.user.lid);
-        }
+        if (sock.user.id) phoneJid = jidNormalizedUser(sock.user.id);
+        if (sock.user.lid) lidJid = jidNormalizedUser(sock.user.lid);
     }
 
-    // In group chats, resolve both phone JID and LID from group metadata if available
+    let phoneDigits = phoneJid ? phoneJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+    let lidDigits = lidJid ? lidJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+    let rawDigits = cleanRaw.split('@')[0].replace(/[^0-9]/g, '');
+
+    // In group chats, inspect group metadata to link Phone JID <-> LID
     if (from && from.endsWith('@g.us') && sock?.groupMetadata) {
         try {
-            const meta = await sock.groupMetadata(from).catch(() => null);
-            if (meta?.participants) {
-                const p = meta.participants.find(part => {
-                    const pId = (part.id || '').split(':')[0];
-                    const pLid = (part.lid || '').split(':')[0];
-                    return (pId && (pId === cleanRaw || pId === phoneJid)) ||
-                           (pLid && (pLid === cleanRaw || pLid === lidJid));
-                });
-                if (p) {
-                    if (p.id) phoneJid = jidNormalizedUser(p.id);
-                    if (p.lid) lidJid = jidNormalizedUser(p.lid);
+            const now = Date.now();
+            let meta = groupMetaCache.get(from);
+            if (!meta || (now - meta.cachedAt) > GROUP_META_TTL_MS) {
+                const fresh = await sock.groupMetadata(from).catch(() => null);
+                if (fresh) {
+                    meta = { data: fresh, cachedAt: now };
+                    groupMetaCache.set(from, meta);
                 }
             }
-        } catch {}
+
+            if (meta?.data?.participants) {
+                for (const part of meta.data.participants) {
+                    const pPhone = (part.id || '').split(':')[0].replace(/[^0-9]/g, '');
+                    const pLid = (part.lid || '').split(':')[0].replace(/[^0-9]/g, '');
+
+                    // Auto-record Phone <-> LID mapping into identity map
+                    if (store && pPhone && pLid && pPhone !== pLid) {
+                        store.identityMap[pLid] = pPhone;
+                    }
+
+                    // Check if this participant is the sender
+                    const pRawId = (part.id || '').split(':')[0];
+                    const pRawLid = (part.lid || '').split(':')[0];
+                    if (
+                        (pRawId && (pRawId === cleanRaw || pPhone === phoneDigits || pPhone === rawDigits)) ||
+                        (pRawLid && (pRawLid === cleanRaw || pLid === lidDigits || pLid === rawDigits))
+                    ) {
+                        if (part.id) {
+                            phoneJid = jidNormalizedUser(part.id);
+                            phoneDigits = phoneJid.split('@')[0].replace(/[^0-9]/g, '');
+                        }
+                        if (part.lid) {
+                            lidJid = jidNormalizedUser(part.lid);
+                            lidDigits = lidJid.split('@')[0].replace(/[^0-9]/g, '');
+                        }
+                    }
+                }
+            }
+        } catch (_) {}
     }
 
-    const phoneDigits = phoneJid ? phoneJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
-    const lidDigits = lidJid ? lidJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
-    const rawDigits = cleanRaw ? cleanRaw.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+    // Resolve canonical user ID using persistent identity map
+    const activeStore = store || loadSavedStickers();
+    if (lidDigits && activeStore.identityMap?.[lidDigits]) {
+        phoneDigits = phoneDigits || activeStore.identityMap[lidDigits];
+    }
+    if (phoneDigits && lidDigits && phoneDigits !== lidDigits && activeStore.identityMap) {
+        activeStore.identityMap[lidDigits] = phoneDigits;
+    }
+
+    // Canonical ID is phone digits if known, otherwise LID digits or raw digits
+    const canonicalId = phoneDigits || (lidDigits ? (activeStore.identityMap?.[lidDigits] || lidDigits) : rawDigits) || 'unknown';
+
+    // Auto-merge: if user previously saved stickers under LID, merge into Phone ID account
+    if (phoneDigits && lidDigits && phoneDigits !== lidDigits && activeStore.users) {
+        if (activeStore.users[lidDigits] && !activeStore.users[phoneDigits]) {
+            activeStore.users[phoneDigits] = {
+                ...activeStore.users[lidDigits],
+                canonicalId: phoneDigits,
+                phone: phoneJid || `${phoneDigits}@s.whatsapp.net`
+            };
+            delete activeStore.users[lidDigits];
+            persistStickers(activeStore);
+        } else if (activeStore.users[lidDigits] && activeStore.users[phoneDigits]) {
+            Object.assign(activeStore.users[phoneDigits].stickers, activeStore.users[lidDigits].stickers);
+            delete activeStore.users[lidDigits];
+            persistStickers(activeStore);
+        }
+    }
 
     const allIds = new Set(
-        [cleanRaw, phoneJid, lidJid, phoneDigits, lidDigits, rawDigits]
+        [cleanRaw, phoneJid, lidJid, phoneDigits, lidDigits, rawDigits, canonicalId]
             .filter(Boolean)
             .map(s => String(s).toLowerCase())
     );
 
     return {
+        canonicalId,
         rawSender: cleanRaw,
         phoneJid,
         lidJid,
@@ -135,168 +311,172 @@ async function extractUserIdentifiers(sock, from, msg) {
 }
 
 /**
- * Checks if a saved sticker record belongs to a specific user
+ * Retrieves the isolated user record from the store
+ */
+function getUserRecord(store, canonicalId) {
+    if (!store.users) store.users = {};
+    if (!store.users[canonicalId]) {
+        store.users[canonicalId] = {
+            canonicalId,
+            stickers: {},
+            latest: null
+        };
+    }
+    return store.users[canonicalId];
+}
+
+/**
+ * Returns sticker keys belonging strictly to the specified user
+ */
+function getUserStickers(storeOrStickers, userIdsOrCanonicalId) {
+    let canonicalId = null;
+    if (typeof userIdsOrCanonicalId === 'string') {
+        canonicalId = userIdsOrCanonicalId;
+    } else if (userIdsOrCanonicalId?.canonicalId) {
+        canonicalId = userIdsOrCanonicalId.canonicalId;
+    }
+
+    // If passed a V2 store object
+    if (storeOrStickers?.users) {
+        if (canonicalId && storeOrStickers.users[canonicalId]?.stickers) {
+            return Object.keys(storeOrStickers.users[canonicalId].stickers);
+        }
+        // If userIds has allIds set, try matching
+        if (userIdsOrCanonicalId?.allIds) {
+            for (const id of userIdsOrCanonicalId.allIds) {
+                if (storeOrStickers.users[id]?.stickers) {
+                    return Object.keys(storeOrStickers.users[id].stickers);
+                }
+            }
+        }
+        return [];
+    }
+
+    // Fallback if raw stickers object was passed
+    if (storeOrStickers && typeof storeOrStickers === 'object') {
+        const keys = Object.keys(storeOrStickers).filter(k => !k.startsWith('_'));
+        if (!userIdsOrCanonicalId) return keys;
+        return keys.filter(k => isStickerOwnedByUser(storeOrStickers[k], userIdsOrCanonicalId));
+    }
+
+    return [];
+}
+
+/**
+ * Checks if a specific sticker item belongs to a user
  */
 function isStickerOwnedByUser(s, userIds) {
-    if (!s || !userIds || !userIds.allIds) return false;
+    if (!s) return false;
+    const sDigits = (s.savedByDigits || s.savedByPhone || s.savedByLid || s.savedBy || '').replace(/[^0-9]/g, '');
+    if (!sDigits) return false;
 
-    const sSavedBy = String(s.savedBy || '').toLowerCase().split(':')[0];
-    const sSavedByLid = String(s.savedByLid || '').toLowerCase().split(':')[0];
-    const sSavedByPhone = String(s.savedByPhone || '').toLowerCase().split(':')[0];
-    const sSavedByDigits = String(s.savedByDigits || '').replace(/[^0-9]/g, '');
-
-    const candidates = [
-        sSavedBy,
-        sSavedByLid,
-        sSavedByPhone,
-        sSavedByDigits,
-        sSavedBy.split('@')[0].replace(/[^0-9]/g, ''),
-        sSavedByLid.split('@')[0].replace(/[^0-9]/g, ''),
-        sSavedByPhone.split('@')[0].replace(/[^0-9]/g, '')
-    ].filter(Boolean);
-
-    for (const c of candidates) {
-        if (userIds.allIds.has(c)) {
-            return true;
-        }
+    if (typeof userIds === 'string') {
+        return sDigits === userIds.replace(/[^0-9]/g, '');
     }
+
+    if (userIds?.canonicalId && sDigits === userIds.canonicalId) {
+        return true;
+    }
+
+    if (userIds?.allIds && userIds.allIds.has(sDigits)) {
+        return true;
+    }
+
     return false;
 }
 
 /**
- * Retrieves valid sticker keys belonging to a specific user
- */
-function getUserStickers(stickers, userIds) {
-    const keys = Object.keys(stickers).filter(k => !k.startsWith('_') && stickers[k] && (stickers[k].url || stickers[k].directPath || stickers[k].fileSha256));
-    const userKeys = [];
-    const seen = new Set();
-
-    for (const k of keys) {
-        const s = stickers[k];
-        if (isStickerOwnedByUser(s, userIds)) {
-            const hash = s.fileSha256 || s.url || k;
-            if (!seen.has(hash)) {
-                seen.add(hash);
-                userKeys.push(k);
-            }
-        }
-    }
-    return userKeys;
-}
-
-/**
- * .sts / .savesticker
- * Saves a quoted sticker to database with sender identity tagging
+ * .sts / .savesticker / .ss
+ * Saves replied sticker into caller's private personal sticker pool
  */
 async function saveStickerCommand(sock, from, msg, args = []) {
     try {
         const rawArgs = (args || []).map(a => String(a).trim()).filter(Boolean);
         const firstArg = (rawArgs[0] || '').toLowerCase();
 
-        const stickers = loadSavedStickers();
-        const userIds = await extractUserIdentifiers(sock, from, msg);
+        const store = loadSavedStickers();
+        const userIds = await extractUserIdentifiers(sock, from, msg, store);
+        const userRecord = getUserRecord(store, userIds.canonicalId);
+        userRecord.phone = userIds.phoneJid || userRecord.phone || '';
+        userRecord.lid = userIds.lidJid || userRecord.lid || '';
 
-        // 1. List saved stickers (Separating User's own stickers from Global ones)
-        if (['list', 'all', 'ls'].includes(firstArg)) {
-            const allKeys = Object.keys(stickers).filter(k => !k.startsWith('_') && stickers[k]?.url);
-            const myKeys = getUserStickers(stickers, userIds);
-            const otherKeys = allKeys.filter(k => !myKeys.includes(k));
+        // 1. LIST MY STICKERS (.sts list)
+        if (['list', 'all', 'ls', 'my'].includes(firstArg)) {
+            const myStickerKeys = Object.keys(userRecord.stickers || {});
 
-            if (allKeys.length === 0) {
+            if (myStickerKeys.length === 0) {
                 return await sock.sendMessage(from, {
                     text:
-`╭━━━〔 💾 *SAVED STICKERS* 〕━━━┈⊷
-┃ 📭 Abhi tak koi sticker save nahi kiya gaya.
+`╭━━━〔 💾 *SAVED STICKERS MANAGER* 〕━━━┈⊷
+┃ 📭 *Aapke personal collection mein abhi koi sticker nahi hai.*
 ┃
 ┃ 💡 *Sticker Save Karne Ka Tarika:*
 ┃ 1️⃣ Kisi bhi sticker ko *Reply* karein.
-┃ 2️⃣ Type karein: *.sts <name>*  (e.g. *.sts dog*)
+┃ 2️⃣ Type karein: *.sts <name>*  (e.g. *.sts dog* ya sirf *.sts*)
 ┃ 3️⃣ Phir message ko reply karke likhein: *.rs 5*
 ┃    ➜ *Aapke apne stickers react honge!*
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
                 }, { quoted: msg });
             }
 
-            let listText = `╭━━━〔 💾 *SAVED STICKERS MANAGER* 〕━━━┈⊷\n`;
-
-            if (myKeys.length > 0) {
-                listText += `┃ 👤 *Aapke Personal Stickers (${myKeys.length}):*\n`;
-                myKeys.forEach((k, idx) => {
-                    const s = stickers[k];
-                    const typeLabel = s.isAnimated ? 'Animated' : 'Static';
-                    listText += `┃  ${idx + 1}. *${k}* ➜ _${typeLabel}_\n`;
-                });
-                listText += `┃\n`;
-            } else {
-                listText += `┃ 👤 *Aapke Personal Stickers:* _(Koi nahi mila)_\n`;
-                listText += `┃    👉 *Save karein:* Sticker ko reply karke *.sts <name>*\n┃\n`;
-            }
-
-            if (otherKeys.length > 0) {
-                listText += `┃ 🌐 *Public / Other Stickers (${otherKeys.length}):*\n`;
-                const displayOthers = otherKeys.slice(0, 10);
-                displayOthers.forEach((k, idx) => {
-                    listText += `┃  • *${k}*\n`;
-                });
-                if (otherKeys.length > 10) {
-                    listText += `┃  _...aur ${otherKeys.length - 10} mazeed stickers_\n`;
-                }
-            }
+            let listText = `╭━━━〔 💾 *AAPKE PERSONAL STICKERS* 〕━━━┈⊷\n`;
+            listText += `┃ 👤 *Total Stickers:* ${myStickerKeys.length}\n`;
+            listText += `┃\n`;
+            myStickerKeys.forEach((k, idx) => {
+                const s = userRecord.stickers[k];
+                const typeLabel = s.isAnimated ? 'Animated' : 'Static';
+                listText += `┃  ${idx + 1}. *${k}* ➜ _${typeLabel}_\n`;
+            });
             listText += `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n`;
             listText += `💡 *React Karne Ke Tareeqay:*\n`;
-            if (myKeys.length > 0) {
-                listText += `👉 *.rs 5*  _(Aapke apne ${myKeys.length} stickers ka Mixup combo!)_\n`;
-                listText += `👉 *.rs 10*  _(10 bar aapke stickers ka combo react)_\n`;
-            } else {
-                listText += `👉 *.rs dog 5*  _(Default dog sticker react)_\n`;
-            }
-            listText += `👉 *.rs global 5*  _(Tamam stickers ka global mixup)_\n`;
-            listText += `👉 *.was*  _(Single sticker reaction)_`;
+            listText += `👉 *.rs 5*  _(Aapke apne ${myStickerKeys.length} stickers ka Mixup combo!)_\n`;
+            listText += `👉 *.rs 10*  _(10 bar aapke stickers ka combo react)_\n`;
+            const sampleKey = myStickerKeys[0];
+            listText += `👉 *.rs ${sampleKey} 5*  _(Sirf ${sampleKey} react hoga)_\n`;
+            listText += `👉 *.was*  _(Single sticker reaction)_\n`;
+            listText += `👉 *.sts del ${sampleKey}*  _(Sticker delete karne ke liye)_`;
 
             return await sock.sendMessage(from, { text: listText }, { quoted: msg });
         }
 
-        // 2. Delete sticker (Protected: Only the owner or bot admin can delete)
+        // 2. DELETE STICKER (.sts del <name>)
         if (['del', 'delete', 'remove', 'rm'].includes(firstArg)) {
-            const targetName = (rawArgs[1] || '').toLowerCase();
+            const targetName = (rawArgs[1] || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
             if (!targetName) {
                 return await sock.sendMessage(from, {
-                    text: "❌ *Usage:* `.sts del <sticker_name>`"
+                    text: "❌ *Usage:* `.sts del <sticker_name>`\n\n💡 Example: `.sts del dog`"
                 }, { quoted: msg });
             }
-            const s = stickers[targetName];
-            if (!s) {
+
+            if (!userRecord.stickers || !userRecord.stickers[targetName]) {
                 return await sock.sendMessage(from, {
-                    text: `❌ Sticker *"${targetName}"* save nahi mila.`
+                    text: `❌ Sticker *"${targetName}"* aapke personal collection mein nahi mila.\n\n💡 Apne saved stickers dekhne ke liye likhein: *.sts list*`
                 }, { quoted: msg });
             }
 
-            const isOwner = isStickerOwnedByUser(s, userIds);
-            const isBotAdmin = msg.key.fromMe || (sock.user?.id && userIds.allIds.has(jidNormalizedUser(sock.user.id).split('@')[0]));
-
-            if (!isOwner && !isBotAdmin) {
-                return await sock.sendMessage(from, {
-                    text: `❌ *Permission Denied!* Aap sirf apne save kiye hue stickers delete kar sakte hain.`
-                }, { quoted: msg });
+            // Remove local file if present
+            const localFile = userRecord.stickers[targetName].localFile;
+            if (localFile) {
+                try {
+                    await fs.remove(path.join(STICKERS_DIR, localFile));
+                } catch (_) {}
             }
 
-            const filePath = path.join(STICKERS_DIR, `${targetName}.webp`);
-            try { await fs.remove(filePath); } catch {}
-
-            delete stickers[targetName];
-            if (stickers._latest === targetName) {
-                const remaining = Object.keys(stickers).filter(k => !k.startsWith('_'));
-                stickers._latest = remaining[0] || null;
+            delete userRecord.stickers[targetName];
+            if (userRecord.latest === targetName) {
+                const remaining = Object.keys(userRecord.stickers);
+                userRecord.latest = remaining[remaining.length - 1] || null;
             }
-            persistStickers(stickers);
+
+            persistStickers(store);
 
             await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
             return await sock.sendMessage(from, {
-                text: `✅ Sticker *"${targetName}"* successfully delete ho gaya!`
+                text: `✅ Sticker *"${targetName}"* aapke personal collection se kamyabi se delete ho gaya!`
             }, { quoted: msg });
         }
 
-        // 3. Save new sticker
+        // 3. SAVE STICKER (.sts [name])
         let quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
         if (quoted?.ephemeralMessage?.message) quoted = quoted.ephemeralMessage.message;
         if (quoted?.viewOnceMessage?.message) quoted = quoted.viewOnceMessage.message;
@@ -312,42 +492,60 @@ async function saveStickerCommand(sock, from, msg, args = []) {
 ┃ 📌 *Sticker Save Karne Ka Tarika:*
 ┃ 1️⃣ Apne phone ke kisi bhi sticker ko *Reply* karein.
 ┃ 2️⃣ Type karein: *.sts <name>*
-┃    Example: *.sts dog* ya *.sts fire*
+┃    Example: *.sts dog* ya *.sts fire* ya sirf *.sts*
 ┃
-┃ ⚡ *Auto Personal Isolation:*
-┃    Jo sticker aap save karenge, *.rs* likhne par
-┃    sirf *Aapke Apne* stickers react honge!
+┃ 🔒 *100% Personal & Private:*
+┃    Jo sticker aap save karenge wo sirf *Aapke*
+┃    inbox aur account se react hoga (.rs).
+┃    Kisi doosre user ko nahi dikhega!
 ┃
 ┃ 📋 *Commands:*
-┃ 👉 *.sts list* ➜ Saved stickers list
-┃ 👉 *.sts del <name>* ➜ Delete sticker
-┃ 👉 *.rs 5* ➜ React with your saved stickers
+┃ 👉 *.sts list* ➜ Aapke saved stickers
+┃ 👉 *.sts del <name>* ➜ Sticker delete karein
+┃ 👉 *.rs 5* ➜ Apne stickers react karein
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
             }, { quoted: msg });
         }
 
         await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
 
+        // Clean sticker name (alphanumeric, underscore, hyphen)
         let stickerName = (rawArgs[0] || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+        // Auto-generate name personal to this user if not provided
         if (!stickerName) {
-            const count = Object.keys(stickers).filter(k => !k.startsWith('_')).length + 1;
-            stickerName = `stk_${count}`;
+            const userExistingCount = Object.keys(userRecord.stickers || {}).length;
+            let counter = userExistingCount + 1;
+            while (userRecord.stickers && userRecord.stickers[`stk_${counter}`]) {
+                counter++;
+            }
+            stickerName = `stk_${counter}`;
         }
 
+        // Download media into buffer
         let stickerBuffer = null;
         try {
             const stream = await downloadContentFromMessage(targetSticker, 'sticker');
             stickerBuffer = await streamToBuffer(stream);
-            if (stickerBuffer && stickerBuffer.length > 0) {
-                const filePath = path.join(STICKERS_DIR, `${stickerName}.webp`);
-                await fs.writeFile(filePath, stickerBuffer);
+        } catch (dlErr) {
+            console.warn('[StickerDownload Warning]:', dlErr.message);
+        }
+
+        const localFileName = `${userIds.canonicalId}_${stickerName}.webp`;
+        const localFilePath = path.join(STICKERS_DIR, localFileName);
+
+        if (stickerBuffer && stickerBuffer.length > 0) {
+            try {
+                await fs.writeFile(localFilePath, stickerBuffer);
+            } catch (wErr) {
+                console.warn('[StickerFile Write Warning]:', wErr.message);
             }
-        } catch {}
+        }
 
         const finalFileLength = targetSticker.fileLength ? Number(targetSticker.fileLength) : (stickerBuffer?.length || 134248);
 
-        // Save complete WhatsApp CDN payload with full dimensions, byte lengths, and user identity tags
-        stickers[stickerName] = {
+        // Save isolated to this user's record
+        userRecord.stickers[stickerName] = {
             name: stickerName,
             url: targetSticker.url || '',
             fileSha256: toBase64(targetSticker.fileSha256),
@@ -362,23 +560,17 @@ async function saveStickerCommand(sock, from, msg, args = []) {
             isAvatar: !!targetSticker.isAvatar,
             isLottie: !!targetSticker.isLottie,
             savedAt: Date.now(),
-            savedBy: userIds.phoneJid || userIds.rawSender,
-            savedByLid: userIds.lidJid || '',
+            localFile: localFileName,
+            savedByDigits: userIds.canonicalId,
             savedByPhone: userIds.phoneJid || '',
-            savedByDigits: userIds.phoneDigits || userIds.lidDigits || userIds.rawDigits || '',
+            savedByLid: userIds.lidJid || '',
             savedByPushName: msg.pushName || ''
         };
 
-        stickers._latest = stickerName;
-        stickers._userLatest = stickers._userLatest || {};
-        const userKey = userIds.phoneDigits || userIds.lidDigits || userIds.rawDigits;
-        if (userKey) {
-            stickers._userLatest[userKey] = stickerName;
-        }
+        userRecord.latest = stickerName;
+        persistStickers(store);
 
-        persistStickers(stickers);
-
-        const myTotal = getUserStickers(stickers, userIds).length;
+        const myTotal = Object.keys(userRecord.stickers).length;
 
         await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
 
@@ -387,11 +579,11 @@ async function saveStickerCommand(sock, from, msg, args = []) {
 `╭━━━〔 ✅ *STICKER SAVED TO YOUR PERSONAL POOL!* 〕━━━┈⊷
 ┃ 🏷️ *Name:* ${stickerName}
 ┃ ✨ *Type:* ${targetSticker.isAnimated ? 'Animated' : 'Static'}
-┃ 👤 *Aapke Saved Stickers:* ${myTotal} Stickers
+┃ 👤 *Aapke Total Saved Stickers:* ${myTotal} Stickers
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
 💡 *Ab kisi bhi message ko reply karke likhein:*
-👉 *.rs 5*  _(Aapke save kiye hue stickers ka Mixup/Combo react hoga!)_
+👉 *.rs 5*  _(Aapke save kiye hue ${myTotal} stickers ka Mixup/Combo react hoga!)_
 👉 *.rs 10*  _(10 bar Mixup combo reaction)_
 👉 *.rs ${stickerName} 5*  _(Sirf ${stickerName} react hoga)_
 👉 *.was*  _(Single sticker reaction)_`
@@ -406,13 +598,11 @@ async function saveStickerCommand(sock, from, msg, args = []) {
 
 /**
  * .rs / .rs10 / .sreact
- * Sends WhatsApp native sticker reaction (associationType: 11) onto the target message.
- * User Isolation:
- * - If user types .rs or .rs <count>, it uses ONLY stickers saved by THAT USER!
- * - If user has 1 sticker, repeats that sticker.
- * - If user has multiple stickers, cycles/mixes through only that user's stickers!
- * - If user specifically requests a sticker name (e.g. .rs dog 5), it reacts with that sticker.
- * - If user has no saved stickers, prompts them with instructions or allows .rs dog / .rs global.
+ * Sends WhatsApp native sticker reaction (associationType: 11) onto replied message.
+ * Strict User Isolation:
+ * - Uses ONLY the calling sender's personal stickers!
+ * - Never reacts with other users' stickers.
+ * - Supports mixup combos across user's collection or specific sticker repeat.
  */
 async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs') {
     try {
@@ -433,7 +623,6 @@ async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs'
 ┃ 👉 *.rs 5*  _(Aapke apne saved stickers ka Mixup/Combo react)_
 ┃ 👉 *.rs 10*  _(10 bar aapke stickers ka combo react)_
 ┃ 👉 *.rs <name> <times>*  _(e.g. *.rs dog 5* - Sirf ek sticker)_
-┃ 👉 *.rs global 5*  _(Tamam stickers ka global mixup)_
 ┃ 👉 *.was*  _(Single sticker reaction)_
 ┃
 ┃ 💡 *Saved stickers dekhne ke liye:* *.sts list*
@@ -455,7 +644,7 @@ async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs'
             if (!isNaN(num) && num > 0) {
                 count = num;
             } else if (!specifiedName) {
-                specifiedName = arg.toLowerCase();
+                specifiedName = arg.toLowerCase().replace(/[^a-z0-9_-]/g, '');
             }
         }
 
@@ -479,14 +668,12 @@ async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs'
         }
 
         let isMixupMode = false;
-        let chosenKey = null;
-        let stickerPayload = null;
         let poolPayloads = [];
 
         // 1. Quoted message itself is a sticker!
         if (quotedMsgContent?.stickerMessage && !specifiedName) {
             const sm = quotedMsgContent.stickerMessage;
-            stickerPayload = {
+            const stickerPayload = {
                 url: sm.url,
                 fileSha256: ensureBuffer(sm.fileSha256),
                 fileEncSha256: ensureBuffer(sm.fileEncSha256),
@@ -502,51 +689,64 @@ async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs'
             };
             poolPayloads = [stickerPayload];
         } else {
-            // 2. Load from saved stickers
-            const stickers = loadSavedStickers();
-            const userIds = await extractUserIdentifiers(sock, from, msg);
-            const myStickerKeys = getUserStickers(stickers, userIds);
+            // 2. Load strictly from calling user's personal isolated sticker pool
+            const store = loadSavedStickers();
+            const userIds = await extractUserIdentifiers(sock, from, msg, store);
+            const userRecord = getUserRecord(store, userIds.canonicalId);
+            const userStickers = userRecord.stickers || {};
+            const myKeys = Object.keys(userStickers);
 
-            const allKeys = Object.keys(stickers).filter(k => !k.startsWith('_') && stickers[k] && (stickers[k].url || stickers[k].directPath || stickers[k].fileSha256));
+            // Case A: User has not saved any personal stickers
+            if (myKeys.length === 0) {
+                return await sock.sendMessage(from, {
+                    text:
+`╭━━━〔 ⚠️ *NO PERSONAL STICKERS SAVED* 〕━━━┈⊷
+┃ 👤 *Aapne abhi tak apna koi sticker save nahi kiya!*
+┃
+┃ 💡 *Apna Sticker Save Kaise Karein:*
+┃ 1️⃣ Apne phone ke kisi bhi sticker ko *Reply* karein.
+┃ 2️⃣ Type karein: *.sts*  (ya *.sts <name>*)
+┃ 3️⃣ Phir message ko reply karke likhein: *.rs 5*
+┃    ➜ *Aapke apne save kiye hue stickers react honge!*
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                }, { quoted: msg });
+            }
 
-            // Check if user specifically requested a single sticker by name
-            const isGlobalRequested = ['global', 'all', 'everyone', 'public'].includes(specifiedName);
-            const isPersonalRequested = ['my', 'mine', 'me', 'mix', 'combo', 'random', 'any'].includes(specifiedName);
+            // Case B: User specifically requested a sticker name (e.g. .rs dog 5)
+            if (specifiedName && !['my', 'mine', 'me', 'mix', 'combo', 'random', 'all'].includes(specifiedName)) {
+                let matchedKey = myKeys.find(k => k.toLowerCase() === specifiedName);
 
-            if (specifiedName && !isGlobalRequested && !isPersonalRequested) {
-                // User asked for a specific sticker by name, e.g. .rs dog 5 or .rs stk_5 10
-                if (stickers[specifiedName]) {
-                    chosenKey = specifiedName;
-                } else {
-                    chosenKey = Object.keys(stickers).find(k => k.toLowerCase() === specifiedName);
-                }
-
-                if (!chosenKey || !stickers[chosenKey]) {
+                if (!matchedKey) {
                     return await sock.sendMessage(from, {
                         text:
-`❌ Sticker *"${specifiedName}"* save nahi mila!
+`❌ Sticker *"${specifiedName}"* aapke personal collection mein nahi mila!
 
-💡 *Aapke saved stickers dekhne ke liye:* *.sts list*
-👉 *Apne stickers react karne ke liye:* *.rs 5*
-👉 *Default sticker ke liye:* *.rs dog 5*`
+💡 *Aapke apne stickers dekhne ke liye:* *.sts list*
+👉 *Apne tamam stickers ka combo react karne ke liye:* *.rs 5*`
                     }, { quoted: msg });
                 }
-            } else if (isGlobalRequested) {
-                // Explicitly requested global mixup
-                isMixupMode = true;
-                const seen = new Set();
-                const globalUniqueKeys = [];
-                for (const k of allKeys) {
-                    const s = stickers[k];
-                    const hash = s.fileSha256 || s.url || k;
-                    if (!seen.has(hash)) {
-                        seen.add(hash);
-                        globalUniqueKeys.push(k);
-                    }
-                }
-                for (const k of globalUniqueKeys) {
-                    const s = stickers[k];
-                    if (s) {
+
+                const s = userStickers[matchedKey];
+                poolPayloads = [{
+                    url: s.url || '',
+                    fileSha256: ensureBuffer(s.fileSha256),
+                    fileEncSha256: ensureBuffer(s.fileEncSha256),
+                    mediaKey: ensureBuffer(s.mediaKey),
+                    fileLength: s.fileLength || 134248,
+                    height: 512,
+                    width: 512,
+                    mimetype: s.mimetype || 'image/webp',
+                    directPath: s.directPath || '',
+                    isAnimated: !!s.isAnimated,
+                    isAvatar: false,
+                    isLottie: false
+                }];
+            } else {
+                // Case C: Personal Mixup/Combo across calling user's own stickers
+                isMixupMode = myKeys.length > 1;
+                for (const k of myKeys) {
+                    const s = userStickers[k];
+                    if (s && (s.url || s.fileSha256)) {
                         poolPayloads.push({
                             url: s.url || '',
                             fileSha256: ensureBuffer(s.fileSha256),
@@ -563,69 +763,6 @@ async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs'
                         });
                     }
                 }
-            } else {
-                // USER PERSONAL ISOLATION MODE:
-                // No specific sticker name given or .rs / .rs 5 / .rs my 5
-                // Check if this sender has their own saved stickers!
-                if (myStickerKeys.length > 0) {
-                    isMixupMode = myStickerKeys.length > 1;
-                    for (const k of myStickerKeys) {
-                        const s = stickers[k];
-                        if (s) {
-                            poolPayloads.push({
-                                url: s.url || '',
-                                fileSha256: ensureBuffer(s.fileSha256),
-                                fileEncSha256: ensureBuffer(s.fileEncSha256),
-                                mediaKey: ensureBuffer(s.mediaKey),
-                                fileLength: s.fileLength || 134248,
-                                height: 512,
-                                width: 512,
-                                mimetype: s.mimetype || 'image/webp',
-                                directPath: s.directPath || '',
-                                isAnimated: !!s.isAnimated,
-                                isAvatar: false,
-                                isLottie: false
-                            });
-                        }
-                    }
-                } else {
-                    // Sender has NOT saved any personal stickers yet!
-                    return await sock.sendMessage(from, {
-                        text:
-`╭━━━〔 ⚠️ *NO PERSONAL STICKERS SAVED* 〕━━━┈⊷
-┃ 👤 *Aapne abhi tak apna koi sticker save nahi kiya!*
-┃
-┃ 💡 *Apna Sticker Save Kaise Karein:*
-┃ 1️⃣ Apne phone ke kisi bhi sticker ko *Reply* karein.
-┃ 2️⃣ Type karein: *.sts*  (ya *.sts <name>*)
-┃ 3️⃣ Phir message ko reply karke likhein: *.rs 5*
-┃    ➜ *Aapke apne save kiye hue stickers react honge!*
-┃
-┃ 🌐 *Default / Global Sticker React Karne Ke Liye:*
-┃ 👉 *.rs dog 5*  _(Default animated dog sticker)_
-┃ 👉 *.rs global 5*  _(Tamam stickers ka mixup)_
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
-                    }, { quoted: msg });
-                }
-            }
-
-            if (chosenKey && stickers[chosenKey]) {
-                const s = stickers[chosenKey];
-                stickerPayload = {
-                    url: s.url || '',
-                    fileSha256: ensureBuffer(s.fileSha256),
-                    fileEncSha256: ensureBuffer(s.fileEncSha256),
-                    mediaKey: ensureBuffer(s.mediaKey),
-                    fileLength: s.fileLength || 134248,
-                    height: 512,
-                    width: 512,
-                    mimetype: s.mimetype || 'image/webp',
-                    directPath: s.directPath || '',
-                    isAnimated: !!s.isAnimated,
-                    isAvatar: false,
-                    isLottie: false
-                };
-                poolPayloads = [stickerPayload];
             }
         }
 
@@ -685,7 +822,9 @@ module.exports = {
     saveStickerCommand,
     repeatReactCommand,
     loadSavedStickers,
+    persistStickers,
     extractUserIdentifiers,
     isStickerOwnedByUser,
-    getUserStickers
+    getUserStickers,
+    getUserRecord
 };

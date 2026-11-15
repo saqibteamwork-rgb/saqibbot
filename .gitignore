@@ -36,6 +36,7 @@ lerna-debug.log*
 # 4. RUNTIME USER DATA & DOWNLOADED MEDIA
 data/stickers/
 data/saved_stickers.json
+data/*.bak.json
 data/bot_data.json
 data/channel_arc.json
 data/channel_forwarder.json

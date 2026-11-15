@@ -6,12 +6,13 @@
  * Features:
  * - .was / .lottie / .asticker / .avatar :
  *   Reacts onto the replied message using WhatsApp native Sticker Annotation (associationType 11).
- *   Uses the user's saved sticker (e.g. dog / stk_1) or quoted sticker with live CDN stream!
+ *   Strictly uses the calling user's personal saved sticker or quoted sticker!
+ *   Never leaks other users' stickers.
  * ============================================================================
  */
 
 const { jidNormalizedUser } = require('@whiskeysockets/baileys');
-const { loadSavedStickers, extractUserIdentifiers, getUserStickers } = require('./stickerReact');
+const { loadSavedStickers, extractUserIdentifiers, getUserRecord } = require('./stickerReact');
 
 function ensureBuffer(val) {
     if (!val) return null;
@@ -76,28 +77,34 @@ async function lottieCommand(sock, from, msg, args = []) {
                 isLottie: false
             };
         } else {
-            // 2. Load saved sticker (prioritize user's own saved sticker)
-            const stickers = loadSavedStickers();
-            const requestedKey = (args[0] || '').toLowerCase();
+            // 2. Load saved sticker strictly from caller's private personal pool
+            const store = loadSavedStickers();
+            const userIds = await extractUserIdentifiers(sock, from, msg, store);
+            const userRecord = getUserRecord(store, userIds.canonicalId);
+            const userStickers = userRecord.stickers || {};
+            const myKeys = Object.keys(userStickers);
+
+            const requestedKey = (args[0] || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
             let chosenKey = null;
 
-            if (requestedKey && stickers[requestedKey]) {
-                chosenKey = requestedKey;
+            if (requestedKey) {
+                chosenKey = myKeys.find(k => k.toLowerCase() === requestedKey);
+                if (!chosenKey) {
+                    return await sock.sendMessage(from, {
+                        text: `❌ Sticker *"${requestedKey}"* aapke personal collection mein nahi mila!\n\n💡 Apne saved stickers dekhne ke liye likhein: *.sts list*`
+                    }, { quoted: msg });
+                }
             } else {
-                const userIds = await extractUserIdentifiers(sock, from, msg);
-                const myKeys = getUserStickers(stickers, userIds);
                 if (myKeys.length > 0) {
-                    chosenKey = myKeys[myKeys.length - 1]; // user's latest saved sticker
-                } else if (stickers.dog) {
-                    chosenKey = 'dog';
-                } else if (stickers._latest && stickers[stickers._latest]) {
-                    chosenKey = stickers._latest;
+                    chosenKey = userRecord.latest || myKeys[myKeys.length - 1];
                 } else {
-                    chosenKey = Object.keys(stickers).find(k => !k.startsWith('_')) || 'dog';
+                    return await sock.sendMessage(from, {
+                        text: `⚠️ *Aapke paas koi saved sticker nahi mila!*\n\n💡 Kisi bhi sticker ko reply karke likhein: *.sts*\nPhir *.was* karein!`
+                    }, { quoted: msg });
                 }
             }
 
-            const s = chosenKey ? stickers[chosenKey] : null;
+            const s = chosenKey ? userStickers[chosenKey] : null;
 
             if (s && s.url) {
                 stickerPayload = {
@@ -119,7 +126,7 @@ async function lottieCommand(sock, from, msg, args = []) {
 
         if (!stickerPayload || !stickerPayload.url) {
             return await sock.sendMessage(from, {
-                text: "⚠️ *Koi sticker nahi mila!* Pehle kisi sticker ko reply karke `.sts dog` likhein."
+                text: "⚠️ *Sticker load nahi ho saka!* Pehle kisi sticker ko reply karke `.sts` likhein."
             }, { quoted: msg });
         }
 
@@ -133,7 +140,7 @@ async function lottieCommand(sock, from, msg, args = []) {
             stickerMessage: stickerPayload
         };
 
-        console.log(`[Lottie/WAS] Relaying sticker reaction onto message ${targetKey.id}...`);
+        console.log(`[Lottie/WAS] Relaying personal sticker reaction onto message ${targetKey.id}...`);
         await sock.relayMessage(from, relayPayload, {});
 
     } catch (err) {
