@@ -133,8 +133,8 @@ const CATEGORIES = {
     ],
     'SECURITY': [
         'anticall', 'antidelete', 'antistatus', 'autoreact',
-        'autoread', 'autostatus', 'block', 'kickoffline',
-        'private', 'public', 'unblock'
+        'autoread', 'autorecording', 'autostatus', 'autotyping', 'block', 'kickoffline',
+        'private', 'public', 'statusreact', 'statusseen', 'unblock'
     ],
     'FUN': [
         'advice', 'afternoon', 'cat', 'character', 'coin', 'compliment', 'confess',

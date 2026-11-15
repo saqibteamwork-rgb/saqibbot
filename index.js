@@ -58,6 +58,10 @@ const commands = {
     mf: require('./commands/mf'),
     translate: require('./commands/translate').handleTranslateCommand,
     autostatus: require('./commands/status'),
+    autotyping: require('./commands/status').autotypingCommand,
+    autorecording: require('./commands/status').autorecordingCommand,
+    statusseen: require('./commands/status').statusseenCommand,
+    statusreact: require('./commands/status').statusreactCommand,
 
     // New Commands
     apk: require('./commands/apk'),
@@ -1217,6 +1221,14 @@ class BotSession {
                         if (!isMe && !isStatus) {
                             handleAutoread(this.sock, msg).catch(() => {});
                             storeMessage(msg).catch(() => {});
+
+                            // Live presence updates: Autotyping & Autorecording
+                            const uStatus = botData.statusSettings?.[this.userId];
+                            if (uStatus?.autoRecording) {
+                                this.sock.sendPresenceUpdate('recording', from).catch(() => {});
+                            } else if (uStatus?.autoTyping) {
+                                this.sock.sendPresenceUpdate('composing', from).catch(() => {});
+                            }
                         }
 
                         if (msg.message?.protocolMessage?.type === 0) {
@@ -1259,7 +1271,7 @@ class BotSession {
                         }
 
                         if (isStatus && !isMe) {
-                            await handleStatusUpdate(this.sock, m, botData, this.userId);
+                            await handleStatusUpdate(this.sock, msg, botData, this.userId);
                             return;
                         }
 
@@ -1561,7 +1573,21 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'anticall': await commands.anticall(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
                                         case 'antidelete': await commands.antidelete(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
                                         case 'status':
-                                        case 'autostatus': await commands.autostatus(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args); break;
+                                        case 'autostatus':
+                                            await commands.autostatus(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'statusseen': case 'autostatusseen': case 'statusview': case 'autoview': case 'viewstatus':
+                                            await commands.statusseen(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'statusreact': case 'statusreacts': case 'autostatusreact': case 'statuslike': case 'autolike': case 'likestatus':
+                                            await commands.statusreact(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'autotyping': case 'typing': case 'autotype':
+                                            await commands.autotyping(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'autorecording': case 'recording': case 'autorecord':
+                                            await commands.autorecording(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            break;
                                         case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto':
                                             await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
                                             break;
