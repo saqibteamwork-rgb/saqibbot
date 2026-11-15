@@ -389,6 +389,7 @@ app.get('/api/node-identify', (req, res) => {
 app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     const activeCount = Object.values(sessions).filter(s => s && s.isConnected).length;
+    const totalCount = Object.values(sessions).filter(s => s && (s.isConnected || s.sock)).length;
     res.status(200).json({
         status: 'ok',
         alive: true,
@@ -396,6 +397,7 @@ app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
         uptime: Math.floor(process.uptime()),
         timestamp: Date.now(),
         activeSessions: activeCount,
+        pairedSessions: Math.max(activeCount, totalCount),
         memoryUsageMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
     });
 });
