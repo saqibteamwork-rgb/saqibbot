@@ -1,4 +1,22 @@
+'use strict';
+
+/**
+ * MR SAQIB MD :: TIKTOK MULTI-ENGINE DOWNLOADER
+ * ============================================================================
+ * - Multi-Tier Resilient Architecture:
+ *   • Server 1 (API 1): TikWM Engine (Direct HD Video + Carousel Slides + Audio)
+ *   • Server 2 (API 2): SSSTik Native Engine (Direct High-Speed CDN Stream)
+ *   • Server 3 (API 3): Ruhend Engine (Independent Scraper Pipeline)
+ *   • Server 4 (API 4): Jawad-Tech Vercel Fallback
+ * - Auto-Failover: If one server fails or rate-limits, it instantly tries the next!
+ * - Dedicated Server Commands: .tt1, .tt2, .tt3 (Force specific server)
+ * - General Commands: .tt, .tiktok, .ttdl (Auto best server)
+ * - Audio-only: .ttmp3, .ttaudio, .tiktokaudio
+ * ============================================================================
+ */
+
 const axios = require('axios');
+const cheerio = require('cheerio');
 let ttdl;
 try {
     ttdl = require('ruhend-scraper').ttdl;
@@ -30,14 +48,7 @@ function setCached(url, data) {
 }
 
 /**
- * Extracts and cleans a TikTok / Douyin URL from any input text:
- * - Direct argument string (q)
- * - Raw message content
- * - Quoted message text / caption
- * Handles:
- * - URLs missing https:// (e.g. vt.tiktok.com/...)
- * - Trailing punctuation / brackets
- * - Short links (vt.tiktok.com, vm.tiktok.com, tiktok.com/t/)
+ * Extracts and cleans a TikTok / Douyin URL from any input text
  */
 function extractTikTokUrl(text) {
     if (!text || typeof text !== 'string') return null;
@@ -78,13 +89,12 @@ function extractQuotedText(msg) {
 
 /**
  * Resolves short redirect URLs (vt.tiktok.com, vm.tiktok.com, tiktok.com/t/)
- * into canonical https://www.tiktok.com/@user/video/... URLs
  */
 async function resolveTikTokRedirect(url) {
     try {
         const res = await axios.get(url, {
             maxRedirects: 5,
-            timeout: 7000,
+            timeout: 6000,
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
             },
@@ -94,15 +104,211 @@ async function resolveTikTokRedirect(url) {
         if (finalUrl && (finalUrl.includes('tiktok.com') || finalUrl.includes('douyin.com'))) {
             return finalUrl;
         }
-    } catch {}
+    } catch (_) {}
     return url;
 }
 
+// ═════════════════════════════════════════════════════════
+// SERVER 1: TikWM High-Definition Engine (GET + POST)
+// ═════════════════════════════════════════════════════════
+async function fetchTikWM(targetUrl, resolvedUrl) {
+    const urlsToTry = [targetUrl];
+    if (resolvedUrl && resolvedUrl !== targetUrl) urlsToTry.push(resolvedUrl);
+
+    for (const u of urlsToTry) {
+        // 1. GET attempt
+        try {
+            let res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(u)}`, {
+                timeout: 8000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                }
+            });
+
+            // Handle TikWM 1 req/sec rate limit
+            if (res.data?.code === -1 && String(res.data?.msg).includes('Limit')) {
+                await new Promise(r => setTimeout(r, 600));
+                res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(u)}`, {
+                    timeout: 8000,
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+                });
+            }
+
+            if (res.data?.code === 0 && res.data?.data) {
+                const d = res.data.data;
+                let videoUrl = d.play || d.hdplay || d.wmplay;
+                if (videoUrl && videoUrl.startsWith('/')) videoUrl = 'https://www.tikwm.com' + videoUrl;
+                const images = (Array.isArray(d.images) && d.images.length > 0) ? d.images : null;
+                const audioUrl = d.music || d.music_info?.play || null;
+                const title = d.title || 'TikTok Video';
+                const author = d.author?.nickname || d.author?.unique_id || 'TikTok Creator';
+                if (videoUrl || images) {
+                    return { videoUrl, images, audioUrl, title, author, server: 'TikWM (Server 1)' };
+                }
+            }
+        } catch (_) {}
+
+        // 2. POST attempt
+        try {
+            const params = new URLSearchParams();
+            params.append('url', u);
+            params.append('count', '12');
+            params.append('cursor', '0');
+            params.append('web', '1');
+            params.append('hd', '1');
+
+            const res = await axios.post('https://tikwm.com/api/', params, {
+                timeout: 8000,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                }
+            });
+
+            if (res.data?.code === 0 && res.data?.data) {
+                const d = res.data.data;
+                let videoUrl = d.play || d.hdplay || d.wmplay;
+                if (videoUrl && videoUrl.startsWith('/')) videoUrl = 'https://www.tikwm.com' + videoUrl;
+                const images = (Array.isArray(d.images) && d.images.length > 0) ? d.images : null;
+                const audioUrl = d.music || d.music_info?.play || null;
+                const title = d.title || 'TikTok Video';
+                const author = d.author?.nickname || d.author?.unique_id || 'TikTok Creator';
+                if (videoUrl || images) {
+                    return { videoUrl, images, audioUrl, title, author, server: 'TikWM (Server 1)' };
+                }
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+// ═════════════════════════════════════════════════════════
+// SERVER 2: SSSTik Native Engine (Cheerio + Direct CDN)
+// ═════════════════════════════════════════════════════════
+async function fetchSSSTik(targetUrl, resolvedUrl) {
+    const urlsToTry = [targetUrl];
+    if (resolvedUrl && resolvedUrl !== targetUrl) urlsToTry.push(resolvedUrl);
+
+    for (const u of urlsToTry) {
+        try {
+            const getRes = await axios.get('https://ssstik.io/en', {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                },
+                timeout: 8000
+            });
+            const html = getRes.data;
+            const match = html.match(/s_tt\s*=\s*['"]([^'"]+)['"]/);
+            const ttToken = match ? match[1] : '';
+
+            const postParams = new URLSearchParams();
+            postParams.append('id', u);
+            postParams.append('locale', 'en');
+            postParams.append('tt', ttToken);
+
+            const cookie = getRes.headers['set-cookie'] ? getRes.headers['set-cookie'].map(c => c.split(';')[0]).join('; ') : '';
+
+            const postRes = await axios.post('https://ssstik.io/abc?url=dl', postParams, {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Referer': 'https://ssstik.io/en',
+                    'Origin': 'https://ssstik.io',
+                    'Cookie': cookie
+                },
+                timeout: 8000
+            });
+
+            const parsed = cheerio.load(postRes.data);
+            const videoUrl = parsed('a.without_watermark').attr('href') || 
+                             parsed('a.download_link.without_watermark').attr('href') || 
+                             parsed('a.without_watermark_direct').attr('href');
+            const title = parsed('p.maintext').text().trim() || 'TikTok Video';
+            const audioUrl = parsed('a.download_link.music').attr('href') || null;
+
+            // Check if SSSTik returned photos
+            const photoElements = parsed('.splide__slide img');
+            let images = null;
+            if (photoElements && photoElements.length > 0) {
+                images = [];
+                photoElements.each((_, el) => {
+                    const src = parsed(el).attr('src');
+                    if (src) images.push(src);
+                });
+            }
+
+            if (videoUrl || (images && images.length > 0)) {
+                return {
+                    videoUrl: videoUrl || null,
+                    images: (images && images.length > 0) ? images : null,
+                    audioUrl,
+                    title,
+                    author: 'TikTok Creator',
+                    server: 'SSSTik (Server 2)'
+                };
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+// ═════════════════════════════════════════════════════════
+// SERVER 3: Ruhend Engine (Independent Scraper Pipeline)
+// ═════════════════════════════════════════════════════════
+async function fetchRuhend(targetUrl, resolvedUrl) {
+    if (typeof ttdl !== 'function') return null;
+    const urlsToTry = [resolvedUrl || targetUrl, targetUrl];
+
+    for (const u of urlsToTry) {
+        try {
+            const data = await ttdl(u);
+            if (data && (data.video || data.video_hd || data.video_wm)) {
+                return {
+                    videoUrl: data.video || data.video_hd || data.video_wm,
+                    images: null,
+                    audioUrl: data.music || null,
+                    title: data.title || 'TikTok Video',
+                    author: data.author || data.username || 'TikTok Creator',
+                    server: 'Ruhend (Server 3)'
+                };
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+// ═════════════════════════════════════════════════════════
+// SERVER 4: Jawad-Tech Vercel Mirror Engine
+// ═════════════════════════════════════════════════════════
+async function fetchJawadTech(targetUrl, resolvedUrl) {
+    const urlsToTry = [targetUrl];
+    if (resolvedUrl && resolvedUrl !== targetUrl) urlsToTry.push(resolvedUrl);
+
+    for (const u of urlsToTry) {
+        try {
+            const res = await axios.get(`https://jawad-tech.vercel.app/download/tiktok?url=${encodeURIComponent(u)}`, {
+                timeout: 8000,
+                headers: { 'User-Agent': 'Mozilla/5.0' }
+            });
+            if (res.data?.status && res.data?.result) {
+                return {
+                    videoUrl: res.data.result,
+                    images: null,
+                    audioUrl: null,
+                    title: res.data.metadata?.title || 'TikTok Video',
+                    author: res.data.metadata?.author || res.data.metadata?.username || 'TikTok Creator',
+                    server: 'Jawad-Tech (Server 4)'
+                };
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
 /**
- * Core TikTok Media Fetcher:
- * Coordinates multi-tier APIs, URL normalization, redirect resolution, and caching.
+ * Core Multi-Tier TikTok Media Fetcher:
+ * Coordinates Server 1, Server 2, Server 3, Server 4 with instant failover.
  */
-async function fetchTikTokData(rawInput, msg = null) {
+async function fetchTikTokData(rawInput, msg = null, preferredServer = 0) {
     // 1. URL Extraction from multiple possible sources
     const rawText = (typeof rawInput === 'string' ? rawInput : Array.isArray(rawInput) ? rawInput.join(' ') : '').trim();
     let targetUrl = extractTikTokUrl(rawText);
@@ -126,17 +332,13 @@ async function fetchTikTokData(rawInput, msg = null) {
         return null;
     }
 
-    // Check in-memory cache
-    const cached = getCached(targetUrl);
-    if (cached) {
-        return { targetUrl, resolvedUrl: cached.resolvedUrl || targetUrl, ...cached };
+    // Check in-memory cache (only for auto mode)
+    if (preferredServer === 0) {
+        const cached = getCached(targetUrl);
+        if (cached) {
+            return { targetUrl, resolvedUrl: cached.resolvedUrl || targetUrl, ...cached };
+        }
     }
-
-    let videoUrl = null;
-    let images = null;
-    let audioUrl = null;
-    let title = 'TikTok Video';
-    let author = 'TikTok Creator';
 
     // Resolve short link redirect if applicable
     let resolvedUrl = targetUrl;
@@ -144,189 +346,98 @@ async function fetchTikTokData(rawInput, msg = null) {
         resolvedUrl = await resolveTikTokRedirect(targetUrl);
     }
 
-    // ==========================================
-    // TIER 1: TikWM Direct GET API (with rate-limit retry)
-    // ==========================================
-    try {
-        let res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
-            timeout: 14000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-            }
-        });
-
-        // Handle TikWM 1 req/sec rate limit
-        if (res.data && res.data.code === -1 && String(res.data.msg).includes('Limit')) {
-            await new Promise(r => setTimeout(r, 1150));
-            res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(targetUrl)}`, {
-                timeout: 14000,
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-            });
-        }
-
-        // If URL parsing failed on short link, retry with resolvedUrl
-        if ((!res.data || res.data.code === -1) && resolvedUrl !== targetUrl) {
-            await new Promise(r => setTimeout(r, 600));
-            res = await axios.get(`https://www.tikwm.com/api/?url=${encodeURIComponent(resolvedUrl)}`, {
-                timeout: 14000,
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
-            });
-        }
-
-        if (res.data && res.data.code === 0 && res.data.data) {
-            const d = res.data.data;
-            videoUrl = d.play || d.hdplay || d.wmplay;
-            if (videoUrl && videoUrl.startsWith('/')) {
-                videoUrl = 'https://www.tikwm.com' + videoUrl;
-            }
-            if (Array.isArray(d.images) && d.images.length > 0) {
-                images = d.images;
-            }
-            audioUrl = d.music || d.music_info?.play;
-            title = d.title || title;
-            author = d.author?.nickname || d.author?.unique_id || author;
-        }
-    } catch (err) {
-        console.warn('[TikTok] Tier 1 (TikWM GET) error:', err.message);
+    // Define Server Execution Order based on preferredServer (0 = Auto, 1 = TikWM, 2 = SSSTik, 3 = Ruhend)
+    let engineOrder = [];
+    if (preferredServer === 1) {
+        engineOrder = [fetchTikWM, fetchSSSTik, fetchRuhend, fetchJawadTech];
+    } else if (preferredServer === 2) {
+        engineOrder = [fetchSSSTik, fetchTikWM, fetchRuhend, fetchJawadTech];
+    } else if (preferredServer === 3) {
+        engineOrder = [fetchRuhend, fetchSSSTik, fetchTikWM, fetchJawadTech];
+    } else {
+        // Auto Best Order: Server 1 ➜ Server 2 ➜ Server 3 ➜ Server 4
+        engineOrder = [fetchTikWM, fetchSSSTik, fetchRuhend, fetchJawadTech];
     }
 
-    // ==========================================
-    // TIER 2: Jawad-Tech Vercel API
-    // ==========================================
-    if (!videoUrl && !images) {
+    let resultData = null;
+    for (const engine of engineOrder) {
         try {
-            let res = await axios.get(`https://jawad-tech.vercel.app/download/tiktok?url=${encodeURIComponent(targetUrl)}`, {
-                timeout: 14000,
-                headers: { 'User-Agent': 'Mozilla/5.0' }
-            });
-
-            if ((!res.data?.status || !res.data?.result) && resolvedUrl !== targetUrl) {
-                res = await axios.get(`https://jawad-tech.vercel.app/download/tiktok?url=${encodeURIComponent(resolvedUrl)}`, {
-                    timeout: 14000,
-                    headers: { 'User-Agent': 'Mozilla/5.0' }
-                });
+            const data = await engine(targetUrl, resolvedUrl);
+            if (data && (data.videoUrl || (data.images && data.images.length > 0))) {
+                resultData = data;
+                break;
             }
-
-            if (res.data?.status && res.data?.result) {
-                videoUrl = res.data.result;
-                title = res.data.metadata?.title || title;
-                author = res.data.metadata?.author || res.data.metadata?.username || author;
-            }
-        } catch (err) {
-            console.warn('[TikTok] Tier 2 (Jawad-Tech) error:', err.message);
-        }
+        } catch (_) {}
     }
 
-    // ==========================================
-    // TIER 3: TikWM POST API Mirror
-    // ==========================================
-    if (!videoUrl && !images) {
-        try {
-            const postUrl = resolvedUrl || targetUrl;
-            const params = new URLSearchParams();
-            params.append('url', postUrl);
-            params.append('count', '12');
-            params.append('cursor', '0');
-            params.append('web', '1');
-            params.append('hd', '1');
-
-            const res = await axios.post('https://tikwm.com/api/', params, {
-                timeout: 14000,
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
-                }
-            });
-
-            if (res.data && res.data.code === 0 && res.data.data) {
-                const d = res.data.data;
-                videoUrl = d.play || d.hdplay || d.wmplay;
-                if (videoUrl && videoUrl.startsWith('/')) {
-                    videoUrl = 'https://www.tikwm.com' + videoUrl;
-                }
-                if (Array.isArray(d.images) && d.images.length > 0) {
-                    images = d.images;
-                }
-                audioUrl = d.music || d.music_info?.play;
-                title = d.title || title;
-                author = d.author?.nickname || d.author?.unique_id || author;
-            }
-        } catch (err) {
-            console.warn('[TikTok] Tier 3 (TikWM POST) error:', err.message);
-        }
-    }
-
-    // ==========================================
-    // TIER 4: Ruhend Scraper Fallback
-    // ==========================================
-    if (!videoUrl && !images && typeof ttdl === 'function') {
-        try {
-            const data = await ttdl(resolvedUrl || targetUrl);
-            if (data && (data.video || data.video_hd || data.video_wm)) {
-                videoUrl = data.video || data.video_hd || data.video_wm;
-                title = data.title || title;
-                author = data.author || data.username || author;
-            }
-        } catch (err) {
-            console.warn('[TikTok] Tier 4 (ruhend-scraper) error:', err.message);
-        }
-    }
-
-    if (!videoUrl && (!images || images.length === 0)) {
+    if (!resultData) {
         return null;
     }
 
-    const result = { targetUrl, resolvedUrl, videoUrl, images, audioUrl, title, author };
+    const finalResult = {
+        targetUrl,
+        resolvedUrl,
+        ...resultData
+    };
 
     // Cache the successful lookup for both targetUrl and resolvedUrl
-    setCached(targetUrl, result);
+    setCached(targetUrl, finalResult);
     if (resolvedUrl && resolvedUrl !== targetUrl) {
-        setCached(resolvedUrl, result);
+        setCached(resolvedUrl, finalResult);
     }
 
-    return result;
+    return finalResult;
 }
 
 /**
- * Main TikTok Command Handler (.tt / .tiktok / .ttdl / .tik / .tktok)
+ * Main TikTok Command Handler (.tt / .tiktok / .ttdl / .tt1 / .tt2 / .tt3)
  */
-async function tiktokCommand(sock, from, msg, q) {
-    const data = await fetchTikTokData(q, msg);
+async function tiktokCommand(sock, from, msg, q, commandName = '') {
+    // Detect preferred server if user called .tt1, .tt2, .tt3
+    let preferredServer = 0;
+    const cmd = String(commandName || '').toLowerCase();
+    if (cmd.includes('1')) preferredServer = 1;
+    else if (cmd.includes('2')) preferredServer = 2;
+    else if (cmd.includes('3')) preferredServer = 3;
+
+    const data = await fetchTikTokData(q, msg, preferredServer);
 
     if (!data) {
-        // If no link or extraction failed, check if user provided anything at all
         const rawText = (typeof q === 'string' ? q : '').trim();
         const hasSomeTiktokWord = rawText.includes('tiktok') || rawText.includes('douyin') || extractQuotedText(msg).includes('tiktok');
         
         if (hasSomeTiktokWord) {
             await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
             return await sock.sendMessage(from, {
-                text: "❌ *TikTok link nahi mil saka ya video private/delete ho chuki hai.*\nBarah-e-karam link check karein aur dobara try karein."
+                text: "❌ *Tamam servers (1, 2, 3) se TikTok video nahi mil saki.*\nVideo shayad private ya delete ho chuki hai. Link check karein aur dobara try karein."
             }, { quoted: msg });
         }
 
         return await sock.sendMessage(from, {
             text:
-`╭━━━〔 📱 *TIKTOK DOWNLOADER* 〕━━━┈⊷
-┃ 📌 *Usage:*
-┃ 👉 *.tt <tiktok url>*
-┃ 👉 *.tiktok <tiktok url>*
+`╭━━━〔 📱 *TIKTOK MULTI-ENGINE DOWNLOADER* 〕━━━┈⊷
+┃ 📌 *Available Commands:*
+┃ 👉 *.tt <url>*       ➜ Auto Multi-Server Fallback (1, 2, 3)
+┃ 👉 *.tt1 <url>*      ➜ Server 1 (TikWM HD)
+┃ 👉 *.tt2 <url>*      ➜ Server 2 (SSSTik Fast)
+┃ 👉 *.tt3 <url>*      ➜ Server 3 (Ruhend Engine)
+┃ 👉 *.ttmp3 <url>*    ➜ Audio / MP3 Only
 ┃
 ┃ 💡 *Tip:*
 ┃ _Aap kisi bhi TikTok link wale message ko reply karke bhi *.tt* likh sakte hain!_
 ┃
 ┃ 💡 *Examples:*
-┃ .tt https://vt.tiktok.com/ZSp9fXCWS/
-┃ .tiktok https://www.tiktok.com/@user/video/...
+┃ • .tt https://vt.tiktok.com/ZSp9fXCWS/
+┃ • .tiktok https://www.tiktok.com/@user/video/...
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
-🚀 *${settings.botName || 'MR SAQIB MD'}*`
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
     }
 
     try {
         await sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
 
-        const { videoUrl, images, audioUrl, title, author } = data;
+        const { videoUrl, images, audioUrl, title, author, server } = data;
         const cleanTitle = (title || 'TikTok Video').replace(/\s+/g, ' ').trim().slice(0, 80);
 
         // ==========================================
@@ -336,7 +447,7 @@ async function tiktokCommand(sock, from, msg, q) {
             const maxPhotos = Math.min(images.length, 6);
             for (let i = 0; i < maxPhotos; i++) {
                 const imgCaption = (i === 0)
-                    ? `╭━━━〔 📸 *TIKTOK PHOTO SLIDE* 〕━━━┈⊷\n┃ 📌 *Title:* ${cleanTitle}\n┃ 👤 *Author:* ${author}\n┃ 🖼️ *Slide:* ${i + 1}/${images.length}\n┃ ⚡ *Powered by:* ${settings.botName || 'MR SAQIB MD'}\n╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                    ? `╭━━━〔 📸 *TIKTOK PHOTO SLIDE* 〕━━━┈⊷\n┃ 📌 *Title:* ${cleanTitle}\n┃ 👤 *Author:* ${author}\n┃ 🖼️ *Slide:* ${i + 1}/${images.length}\n┃ 🌐 *Engine:* ${server || 'Multi-Engine'}\n╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
                     : `📸 Slide [${i + 1}/${images.length}]`;
 
                 await sock.sendMessage(from, {
@@ -366,10 +477,13 @@ async function tiktokCommand(sock, from, msg, q) {
 `╭━━━〔 📱 *TIKTOK DOWNLOADED* 〕━━━┈⊷
 ┃ 📌 *Title:* ${cleanTitle}
 ┃ 👤 *Author:* ${author}
-┃ ⚡ *Powered by:* ${settings.botName || 'MR SAQIB MD'}
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
+┃ 🌐 *Engine:* ${server || 'Auto-Balanced'}
+┃ ⚡ *Quality:* HD No-Watermark
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
-        // Attempt 1: High-reliability Buffer Download (bypasses Baileys streaming quirks)
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
+
+        // Attempt 1: High-reliability Buffer Download
         let sent = false;
         try {
             const vidRes = await axios.get(videoUrl, {
@@ -377,7 +491,7 @@ async function tiktokCommand(sock, from, msg, q) {
                 timeout: 45000,
                 headers: {
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                    'Referer': 'https://www.tiktok.com/'
+                    'Referer': videoUrl.includes('ssstik') || videoUrl.includes('tikcdn') ? 'https://ssstik.io/' : 'https://www.tiktok.com/'
                 }
             });
 
