@@ -211,7 +211,7 @@ async function setppCommand(sock, from, msg, isOwner, args = []) {
     try {
         if (!isOwner) {
             return await sock.sendMessage(from, { 
-                text: "❌ *Sirf Bot Owner profile picture change kar sakta hai!*" 
+                text: "❌ *Access Denied:*\nSirf Bot Owner ya is session ka paired user profile picture change kar sakta hai!" 
             }, { quoted: msg });
         }
 

@@ -1407,13 +1407,23 @@ class BotSession {
                         // Premium Member is any user added via .addpm (or any Owner)
                         let isPremium = ownerManager.checkIsPremium(identityCtx);
 
-                        // Check if in Master Owner chat or from Master Owner or from bot self
-                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || isMe;
+                        // Check if in Master Owner chat or from Master Owner (strictly 923438673242)
+                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || (botNumberDigits === '923438673242' && isMe);
                         if (isMasterInbox) {
                             isMasterOwner = true;
                             isOwner = true;
                             isPremium = true;
                         }
+
+                        // Session Owner is the user who paired THIS specific WhatsApp session (or sent fromMe) OR Master Owner / Co-Owner
+                        const sessionPhoneDigits = String(this.userId || '').replace(/[^0-9]/g, '');
+                        const isSessionOwner = Boolean(
+                            isOwner ||
+                            isMe ||
+                            (sessionPhoneDigits && senderDigits && (senderDigits === sessionPhoneDigits || sessionPhoneDigits.endsWith(senderDigits) || senderDigits.endsWith(sessionPhoneDigits))) ||
+                            (!isGroup && from && sessionPhoneDigits && from.startsWith(sessionPhoneDigits)) ||
+                            (this.sock.user?.id && sender && jidNormalizedUser(this.sock.user.id) === sender)
+                        );
 
                         if (isCommand && !isOwner && !isPremium) {
                             isPremium = await ownerManager.verifyPremiumOrOwnerAsync(this.sock, msg, from, groupMetadata);
@@ -1532,7 +1542,7 @@ class BotSession {
                         // 🛑 STRICT PRIVATE GUARD:
                         // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
                         // Any command from any other user or group member is completely ignored.
-                        if (!this.isPublic && !isOwner && !isPremium) {
+                        if (!this.isPublic && !isOwner && !isSessionOwner && !isPremium) {
                             return; // Complete silent ignore — koi response nahi jayega
                         }
 
@@ -1632,23 +1642,23 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'ai': await commands.ai(this.sock, from, msg, isAdmin, this, args); break;
                                         case 'antilink': await commands.antilink(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
-                                        case 'anticall': await commands.anticall(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
-                                        case 'antidelete': await commands.antidelete(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, args); break;
+                                        case 'anticall': await commands.anticall(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
+                                        case 'antidelete': await commands.antidelete(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
                                         case 'status':
                                         case 'autostatus':
-                                            await commands.autostatus(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await commands.autostatus(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'statusseen': case 'autostatusseen': case 'statusview': case 'autoview': case 'viewstatus':
-                                            await commands.statusseen(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await commands.statusseen(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'statusreact': case 'statusreacts': case 'autostatusreact': case 'statuslike': case 'autolike': case 'likestatus':
-                                            await commands.statusreact(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await commands.statusreact(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'autotyping': case 'typing': case 'autotype':
-                                            await commands.autotyping(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await commands.autotyping(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'autorecording': case 'recording': case 'autorecord':
-                                            await commands.autorecording(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await commands.autorecording(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto':
                                             await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
@@ -1660,7 +1670,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'mode':
                                         case 'mod':
                                         case 'worktype': {
-                                            if (!isOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi mode check ya badal sakta hai." }, { quoted: msg });
+                                            if (!isOwner && !isSessionOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ya is session ka paired user mode badal sakta hai." }, { quoted: msg });
                                             
                                             const subArg = (args[0] || '').toLowerCase().trim();
                                             
@@ -1694,7 +1704,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }, { quoted: msg });
                                         }
                                         case 'private': {
-                                            if (!isOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PRIVATE kar sakta hai." }, { quoted: msg });
+                                            if (!isOwner && !isSessionOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ya is session ka paired user bot ko PRIVATE kar sakta hai." }, { quoted: msg });
                                             this.isPublic = false;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = false;
@@ -1705,7 +1715,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         }
                                         case 'public': {
-                                            if (!isOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner hi bot ko PUBLIC kar sakta hai." }, { quoted: msg });
+                                            if (!isOwner && !isSessionOwner) return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ya is session ka paired user bot ko PUBLIC kar sakta hai." }, { quoted: msg });
                                             this.isPublic = true;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = true;
@@ -1717,7 +1727,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         }
                                         case 'hidetag': await commands.hidetag(this.sock, from, msg, isAdmin, q); break;
                                         case 'tagall': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
-                                        case 'setname': await commands.setname(this.sock, from, msg, isAdmin, botData, saveBotData, this.userId, q); break;
+                                        case 'setname': await commands.setname(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, q); break;
                                         case 'insta': case 'ig': await commands.insta(this.sock, from, msg, q); break;
                                         case 'tiktok': case 'tt': case 'tik': case 'tktok': case 'ttdl':
                                         case 'tiktok1': case 'tt1': case 'ttdl1':
@@ -1778,7 +1788,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'vv': await commands.vv(this.sock, from, msg); break;
                                         case 'dp': case 'getpp': case 'pfp': case 'getpfp': case 'bizdp': case 'businessdp': await commands.dp(this.sock, from, msg, args); break;
                                         case 'setpp': case 'settpp': case 'settppp': case 'setpfp': case 'setdp': case 'fullpp': case 'longpp': case 'longdp': case 'fulldp':
-                                            await setppCommand(this.sock, from, msg, isOwner, args);
+                                            await setppCommand(this.sock, from, msg, isOwner || isSessionOwner, args);
                                             break;
                                         case 'setgpp': case 'setgroupdp': case 'setgrouppp': case 'gpp': case 'groupdp':
                                             await setgppCommand(this.sock, from, msg, isAdmin, isOwner, args);
@@ -1792,7 +1802,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await commands.save(this.sock, from, msg, args);
                                             break;
                                         case 'silentsave': case 'autosave': case 'ssave': case 'silentstatus':
-                                            await silentSaveCommand(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await silentSaveCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'gcstatus': case 'groupstatus': case 'statusgc': case 'swgc':
                                             await gcstatusCommand(this.sock, from, msg, isOwner, isAdmin, args);
@@ -1804,7 +1814,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         // New Command Handlers
                                         case 'apk': await commands.apk(this.sock, from, msg); break;
                                         case 'autoread': case 'read': case 'autoreadmsg': case 'autoreadmessage':
-                                            await commands.autoread(this.sock, from, msg, isOwner, botData, saveBotData, this.userId, args);
+                                            await commands.autoread(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'character': await commands.character(this.sock, from, msg); break;
                                         case 'emojimix': await commands.emojimix(this.sock, from, msg); break;

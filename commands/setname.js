@@ -1,6 +1,6 @@
-async function setnameCommand(sock, from, msg, isAdmin, botData, saveBotData, userId, q) {
-    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ Only owner can use this command." }, { quoted: msg });
-    if (!q) return await sock.sendMessage(from, { text: "❌ Please provide a name." }, { quoted: msg });
+async function setnameCommand(sock, from, msg, isAllowed, botData, saveBotData, userId, q) {
+    if (!isAllowed) return await sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ya is session ka paired user name badal sakta hai." }, { quoted: msg });
+    if (!q) return await sock.sendMessage(from, { text: "❌ Please provide a name. Example: .setname My Bot" }, { quoted: msg });
     
     botData.userNames[userId] = q;
     saveBotData();
