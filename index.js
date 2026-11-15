@@ -113,6 +113,7 @@ const { handleAutoread } = require('./commands/autoread');
 const { handleStatusUpdate } = require('./commands/autostatus');
 const { storeMessage, handleMessageRevocation } = require('./commands/antidelete');
 const settings = require('./settings');
+const config = require('./config');
 const { menuCommand } = require('./commands/menu');
 const { setppCommand, setgppCommand } = require('./commands/setpp');
 const {
