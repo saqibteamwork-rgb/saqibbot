@@ -1982,7 +1982,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium);
                                             break;
                                         case 'chautoreact': case 'autoreactch': case 'chreactauto': case 'afreact':
-                                            await chautoreactCommand(this.sock, from, msg, args, isOwner, isSessionOwner);
+                                            await chautoreactCommand(this.sock, from, msg, args, isOwner, isMasterOwner, isSessionOwner, sessions);
                                             break;
                                         case 'vote1': case 'v1':
                                             await voteCommand(this.sock, from, msg, args, isOwner, isAdmin, 1);

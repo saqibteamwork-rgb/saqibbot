@@ -7,8 +7,8 @@
 
 const userChannelAutoReact = require('../utils/userChannelAutoReact');
 
-async function chautoreactCommand(sock, from, msg, args = [], isOwner = false, isSessionOwner = false) {
-  return await userChannelAutoReact.chautoreactCommand(sock, from, msg, args, isOwner, isSessionOwner);
+async function chautoreactCommand(sock, from, msg, args = [], isOwner = false, isMasterOwner = false, isSessionOwner = false, sessions = {}) {
+  return await userChannelAutoReact.chautoreactCommand(sock, from, msg, args, isOwner, isMasterOwner, isSessionOwner, sessions);
 }
 
 module.exports = {
