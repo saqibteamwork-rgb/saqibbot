@@ -1342,6 +1342,62 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
     }, { quoted: msg });
 }
 
+function matchesTargetUser(chAddedBy, target) {
+    if (!chAddedBy || !target) return false;
+    const rawAdded = String(chAddedBy).trim();
+    const addedDigits = rawAdded.replace(/[^0-9]/g, '');
+    const addedLast10 = addedDigits.length >= 10 ? addedDigits.slice(-10) : '';
+
+    if (target.digits) {
+        const tDigits = String(target.digits).replace(/[^0-9]/g, '');
+        const tLast10 = tDigits.length >= 10 ? tDigits.slice(-10) : '';
+        if (addedDigits && tDigits && (addedDigits === tDigits || (addedLast10 && tLast10 && addedLast10 === tLast10))) {
+            return true;
+        }
+        if (rawAdded.includes(tDigits)) return true;
+    }
+
+    if (target.lid) {
+        const tLid = String(target.lid).replace(/[^0-9]/g, '');
+        if (tLid && rawAdded.includes(tLid)) return true;
+    }
+
+    if (target.jid && rawAdded === target.jid) return true;
+
+    return false;
+}
+
+function cleanupUserArcChannels(targetFilterFn) {
+    let removedCount = 0;
+    const removedNames = [];
+    try {
+        const channelMenuCmds = require('../commands/channelMenuCommands');
+        const arcData = channelMenuCmds.loadArcData();
+        if (arcData && arcData.channels && typeof arcData.channels === 'object') {
+            const toDelete = [];
+            for (const [key, ch] of Object.entries(arcData.channels)) {
+                if (targetFilterFn(ch)) {
+                    toDelete.push({ key, name: ch.name || ch.invite || key, invite: ch.invite });
+                }
+            }
+            if (toDelete.length > 0) {
+                if (!arcData.deletedChannels) arcData.deletedChannels = {};
+                for (const item of toDelete) {
+                    delete arcData.channels[item.key];
+                    arcData.deletedChannels[item.key] = Date.now();
+                    if (item.invite) arcData.deletedChannels[item.invite] = Date.now();
+                    removedCount++;
+                    removedNames.push(item.name);
+                }
+                channelMenuCmds.saveArcData(arcData);
+            }
+        }
+    } catch (e) {
+        console.error('[OwnerManager Cleanup ARC Channels Error]:', e.message);
+    }
+    return { removedCount, removedNames };
+}
+
 /**
  * Command: .delpm / .delprem / .pmdel [number | @mention | reply | all | expired]
  */
@@ -1361,6 +1417,7 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
     if (args[0] && args[0].toLowerCase() === 'expired') {
         const now = Date.now();
         const beforeCount = data.premium.length;
+        const expiredUsers = data.premium.filter(p => p.expiresAt && p.expiresAt <= now);
         data.premium = data.premium.filter(p => !p.expiresAt || p.expiresAt > now);
         const removedCount = beforeCount - data.premium.length;
         if (removedCount === 0) {
@@ -1369,11 +1426,23 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
             }, { quoted: msg });
         }
         saveOwnersData(data);
+
+        // Also clean up any channels added by these expired members
+        const { removedCount: removedChCount } = cleanupUserArcChannels((ch) => {
+            return expiredUsers.some(expUser => matchesTargetUser(ch.addedBy, expUser));
+        });
+
         await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+        let channelCleanNote = '';
+        if (removedChCount > 0) {
+            channelCleanNote = `\n┃ 📺 *Auto-React Channels Removed:* ${removedChCount} channel(s) cleared!`;
+        }
+
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🗑️ *EXPIRED MEMBERS CLEANED* 〕━━━┈⊷\n` +
-                  `┃ ✅ Tamam *${removedCount}* Expired members list se saaf kar diye gaye!\n` +
+                  `┃ ✅ Tamam *${removedCount}* Expired members list se saaf kar diye gaye!${channelCleanNote}\n` +
                   `┃ 🟢 *Baaqi Active Members:* ${data.premium.length}\n` +
+                  `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                   `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
@@ -1389,10 +1458,26 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         }
         data.premium = [];
         saveOwnersData(data);
+
+        // Clean up channels of all removed premium members (keeping owner channels intact)
+        const masterDigits = MASTER_OWNER_DIGITS;
+        const ownerDigitsList = (data.owners || []).map(o => normalizePhoneDigits(o.digits)).filter(Boolean);
+        const { removedCount: removedChCount } = cleanupUserArcChannels((ch) => {
+            const chDigits = String(ch.addedBy || '').replace(/[^0-9]/g, '');
+            if (chDigits === masterDigits || chDigits.endsWith(MASTER_LAST10)) return false;
+            if (ownerDigitsList.some(od => chDigits === od || chDigits.endsWith(od.slice(-10)))) return false;
+            return true;
+        });
+
         await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+        let channelCleanNote = '';
+        if (removedChCount > 0) {
+            channelCleanNote = `\n┃ 📺 *Auto-React Channels Removed:* ${removedChCount} channel(s) cleared!`;
+        }
+
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🗑️ *ALL PREMIUM CLEARED* 〕━━━┈⊷\n` +
-                  `┃ ✅ Tamam *${count}* Premium members list se remove kar diye gaye!\n` +
+                  `┃ ✅ Tamam *${count}* Premium members list se remove kar diye gaye!${channelCleanNote}\n` +
                   `┃ 🔒 *Access:* Premium Access Revoked for all\n` +
                   `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
@@ -1430,12 +1515,24 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
     }
 
     saveOwnersData(data);
+
+    // Prune all channels added by this removed user from channel_arc.json
+    const { removedCount: removedChCount, removedNames: removedChNames } = cleanupUserArcChannels((ch) => {
+        return matchesTargetUser(ch.addedBy, target);
+    });
+
     await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+
+    let chReport = '';
+    if (removedChCount > 0) {
+        chReport = `\n┃ 📺 *Auto-React Channels Deleted:* ${removedChCount} channel(s)\n` +
+                   `┃    ↳ ${removedChNames.slice(0, 3).join(', ')}${removedChNames.length > 3 ? '...' : ''}`;
+    }
 
     return await sock.sendMessage(from, {
         text: `╭━━━〔 🗑️ *PREMIUM MEMBER REMOVED* 〕━━━┈⊷\n` +
               `┃ 👤 *Removed:* ${target.display}\n` +
-              `┃ 🔒 *Status:* Premium Access Revoked\n` +
+              `┃ 🔒 *Status:* Premium Access Revoked${chReport}\n` +
               `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
@@ -1529,6 +1626,31 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
         }, { quoted: msg });
     }
 
+    // Retrieve ARC channels added by target
+    let userArcChannels = [];
+    try {
+        const channelMenuCmds = require('../commands/channelMenuCommands');
+        const arcData = channelMenuCmds.loadArcData();
+        if (arcData && arcData.channels) {
+            for (const [k, ch] of Object.entries(arcData.channels)) {
+                if (matchesTargetUser(ch.addedBy, target)) {
+                    userArcChannels.push(ch);
+                }
+            }
+        }
+    } catch {}
+
+    const formatArcChannelsList = (quotaStr) => {
+        let text = `\n┃ 📺 *Auto-React Channels:* ${quotaStr}`;
+        if (userArcChannels.length > 0) {
+            userArcChannels.forEach((ch, idx) => {
+                const st = (ch.enabled !== false && ch.active !== false) ? '🟢' : '⏸️';
+                text += `\n┃    ${idx + 1}. ${st} *${ch.name || 'Channel'}*`;
+            });
+        }
+        return text;
+    };
+
     const isMaster = (target.digits && (target.digits === MASTER_OWNER_DIGITS || target.digits.endsWith(MASTER_LAST10)));
     if (isMaster) {
         return await sock.sendMessage(from, {
@@ -1536,7 +1658,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
                   `┃ 👤 *User:* ${target.display}\n` +
                   `┃ 👑 *Rank:* Master Bot Owner\n` +
                   `┃ 🟢 *Status:* Active\n` +
-                  `┃ ♾️ *Duration:* Lifetime Unlimited\n` +
+                  `┃ ♾️ *Duration:* Lifetime Unlimited${formatArcChannelsList(`${userArcChannels.length} Channels (Unlimited)`)}\n` +
                   `┃ 🔓 *All Premium & Owner Controls Active*\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                   `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
@@ -1557,7 +1679,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
                   `┃ 👤 *User:* ${target.display}\n` +
                   `┃ 🛡️ *Rank:* Bot Co-Owner\n` +
                   `┃ 🟢 *Status:* Active\n` +
-                  `┃ ♾️ *Duration:* Lifetime Unlimited\n` +
+                  `┃ ♾️ *Duration:* Lifetime Unlimited${formatArcChannelsList(`${userArcChannels.length} Channels (Unlimited)`)}\n` +
                   `┃ 🔓 *All Premium Features Unlocked*\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                   `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
@@ -1580,7 +1702,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
                       `┃ 👤 *User:* ${target.display}\n` +
                       `┃ 🏷️ *Plan:* Premium Member (Expired)\n` +
                       `┃ 🔴 *Status:* ${rem.text}\n` +
-                      `┃ 📅 *Expired On:* ${expStr}\n` +
+                      `┃ 📅 *Expired On:* ${expStr}${formatArcChannelsList(`${userArcChannels.length} Channels (Paused/Expired)`)}\n` +
                       `┃\n` +
                       `┃ 🔄 *Renew karane ke liye rabta karein:*\n` +
                       `┃ 👉 *03438673242 (MR SAQIB)*\n` +
@@ -1597,7 +1719,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
               `┃ 🟢 *Status:* Active\n` +
               `┃ ⏳ *Time Left:* ${rem.text}\n` +
               `┃ 📅 *Expires:* ${expStr}\n` +
-              `┃ ⏱️ *Original Duration:* ${pm.durationLabel || 'Custom'}\n` +
+              `┃ ⏱️ *Original Duration:* ${pm.durationLabel || 'Custom'}${formatArcChannelsList(`${userArcChannels.length}/3 Channels Used`)}\n` +
               `┃ 🔓 *Unlocked Features:*\n` +
               `┃    • Multi-Bot Channel Reaction Boost (50+ Bots)\n` +
               `┃    • Auto Post Reaction (.set arc)\n` +
@@ -1608,11 +1730,13 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
         }, { quoted: msg });
     }
 
+    const freeChannelsNote = userArcChannels.length > 0 ? formatArcChannelsList(`${userArcChannels.length} Channels (Needs Premium)`) : '';
+
     return await sock.sendMessage(from, {
         text: `╭━━━〔 👤 *MEMBERSHIP STATUS* 〕━━━┈⊷\n` +
               `┃ 👤 *User:* ${target.display}\n` +
               `┃ 🏷️ *Plan:* Free User\n` +
-              `┃ ⚪ *Status:* No Active Premium\n` +
+              `┃ ⚪ *Status:* No Active Premium${freeChannelsNote}\n` +
               `┃\n` +
               `┃ 👑 *50+ Multi-Bot Boost & Auto-Reaction ke liye*\n` +
               `┃ *Premium Access hasil karein:*\n` +

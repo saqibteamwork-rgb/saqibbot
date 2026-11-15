@@ -2290,6 +2290,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'delcs': case 'rmcs': case 'logoutcs':
                                             await ownerManager.delSessionCommand(this.sock, from, msg, isOwner, args, sessions, AUTH_DIR, logoutSession);
                                             break;
+                                        case 'chstatus': case 'arcstatus': case 'channelstatus': case 'chinfo': case 'channelscheck':
+                                            await channelMenuCmds.chstatusCommand(this.sock, from, msg, isOwner);
+                                            break;
                                         case 'arc': case 'autochreact': await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner || isPremium, args, groupMetadata); break;
                                         case 'arcblock': await channelMenuCmds.arcblockCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcblocklist': await channelMenuCmds.arcblocklistCommand(this.sock, from, msg, isOwner); break;

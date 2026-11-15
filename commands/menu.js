@@ -86,7 +86,7 @@ const CATEGORIES = {
         'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock',
         'arclocklist', 'arcprem', 'arcpremiumlist', 'arcremoveall', 'arcstop',
         'arcunblock', 'arcunlock', 'autochreact', 'cfch', 'cforward', 'channelid',
-        'channels', 'chfollow', 'chreact', 'chreactall', 'chunfollow',
+        'channels', 'chfollow', 'chreact', 'chreactall', 'chstatus', 'chunfollow',
         'chunreact', 'chvote', 'pollrand', 'pollunvote', 'pollvfix',
         'pollvinfo', 'pollvote', 'pollvstop', 'vote1', 'vote2', 'vote3', 'vote4'
     ],
@@ -149,7 +149,7 @@ const CATEGORIES = {
         'azkar', 'dua', 'hadith', 'prayertime', 'quran', 'tasbeeh'
     ],
     'OWNER': [
-        'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'crashgrup',
+        'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'chstatus', 'crashgrup',
         'cs', 'delafc', 'delajg', 'delcs', 'delpm', 'delprem', 'delvcontact', 'fullpp',
         'iosbug', 'leaveall', 'leftall', 'mode', 'ownadd', 'owndel', 'ownlist', 'pmlist', 'prem', 'premlist',
         'resetmenu', 'restart', 'richhtml', 'setbotname', 'setmenupic',

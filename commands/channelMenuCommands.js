@@ -1438,6 +1438,183 @@ async function pollvstopCommand(sock, from, msg, isOwner) {
   await sock.sendMessage(from, { text: "🛑 *Poll vote boosting process stopped!*" }, { quoted: msg });
 }
 
+/**
+ * Command: .chstatus / .arcstatus / .channelstatus / .chinfo / .channelscheck
+ * Strictly executable ONLY by Bot Owner / Master Owner (03438673242)
+ * Comprehensive master dashboard showing:
+ * 1. All Auto-React Channels (.arc / channel_arc.json)
+ * 2. All Auto-Forward Settings & Custom Channel Routes (.set arc / channel_forwarder.json)
+ * 3. All Auto-Follow Channels (.afc / auto_follow.json)
+ */
+async function chstatusCommand(sock, from, msg, isOwner) {
+  if (!isOwner) {
+    await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+    return await sock.sendMessage(from, {
+      text: `╭━━━〔 🔒 *BOT OWNER ONLY* 〕━━━┈⊷\n` +
+            `┃ ❌ *Access Denied!*\n` +
+            `┃ Sirf Bot Owner (*03438673242*) ye\n` +
+            `┃ status dashboard check kar sakta hai!\n` +
+            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    }, { quoted: msg });
+  }
+
+  await sock.sendMessage(from, { react: { text: '📊', key: msg.key } }).catch(() => {});
+
+  // 1. Gather Auto-React (ARC) Data
+  const arcData = loadArcData();
+  const arcEntries = Object.entries(arcData.channels || {});
+  const totalArc = arcEntries.length;
+  const activeArc = arcEntries.filter(([_, c]) => c && c.enabled !== false && c.active !== false).length;
+  const pausedArc = totalArc - activeArc;
+
+  // Load owner data to identify who added each channel
+  let ownersData = { owners: [], premium: [] };
+  try {
+    const ownerManager = require('../utils/ownerManager');
+    ownersData = ownerManager.loadOwnersData();
+  } catch {}
+
+  const masterDigits = '923438673242';
+  const getAdderBadge = (addedBy) => {
+    if (!addedBy) return '👤 Unknown';
+    const digits = String(addedBy).replace(/[^0-9]/g, '');
+    if (digits === masterDigits || digits.endsWith('3438673242')) return '👑 Master Owner';
+    const isCoOwner = (ownersData.owners || []).some(o => {
+      const oDig = String(o.digits || '').replace(/[^0-9]/g, '');
+      return oDig && (oDig === digits || oDig.endsWith(digits.slice(-10)));
+    });
+    if (isCoOwner) return `🛡️ Co-Owner (+${digits})`;
+
+    const pm = (ownersData.premium || []).find(p => {
+      const pDig = String(p.digits || '').replace(/[^0-9]/g, '');
+      return pDig && (pDig === digits || pDig.endsWith(digits.slice(-10)));
+    });
+    if (pm) {
+      const isExpired = pm.expiresAt && pm.expiresAt <= Date.now();
+      return isExpired ? `⚠️ Expired Prem (+${digits})` : `💎 Premium (+${digits})`;
+    }
+    return `👤 User (+${digits})`;
+  };
+
+  let arcSection = '';
+  if (totalArc === 0) {
+    arcSection = `┃ 📭 Koi channel Auto-React me add nahi hai.\n┃ 👉 Add karne ke liye: \`.arc <channel_link>\`\n`;
+  } else {
+    // Show max 25 channels in dashboard to prevent message truncation
+    const displayEntries = arcEntries.slice(0, 25);
+    displayEntries.forEach(([jid, c], idx) => {
+      const state = (c.enabled !== false && c.active !== false) ? '🟢 Active' : '⏸️ Paused';
+      const emojis = (c.emojis || []).join(' ') || '❤️';
+      const delay = c.delayStr || `${Math.round((c.delayMs || 5000) / 1000)}s`;
+      const adder = getAdderBadge(c.addedBy);
+      const link = c.link ? `\n┃    🔗 ${c.link}` : '';
+      const targetRoute = c.targetName ? `\n┃    🎯 Forward: *${c.targetName}*` : '';
+
+      arcSection += `┃\n`;
+      arcSection += `┃ ${idx + 1}. *${c.name || 'WhatsApp Channel'}* (${state})\n`;
+      arcSection += `┃    🆔 \`${jid}\`${link}\n`;
+      arcSection += `┃    👤 Added By: ${adder}\n`;
+      arcSection += `┃    ✨ React: ${emojis} | ⏳ Delay: ${delay}${targetRoute}\n`;
+    });
+
+    if (arcEntries.length > 25) {
+      arcSection += `┃\n┃ ➕ *... aur ${arcEntries.length - 25} mazeed channels (.arclist se dekhein)*\n`;
+    }
+  }
+
+  // 2. Gather Auto-Forward (.set arc) Data
+  let fwdConfig = null;
+  try {
+    const fwd = require('../utils/channelPostForwarder');
+    fwdConfig = fwd.loadConfig();
+  } catch {
+    const fwdFile = path.join(DATA_DIR, 'channel_forwarder.json');
+    if (fs.existsSync(fwdFile)) {
+      try { fwdConfig = fs.readJsonSync(fwdFile); } catch {}
+    }
+  }
+  fwdConfig = fwdConfig || { enabled: true, targetJid: '923438673242@s.whatsapp.net', channelTargets: {} };
+
+  const fwdState = fwdConfig.enabled !== false ? '🟢 Active (Relaying)' : '🔴 Disabled';
+  let defaultTargetDisplay = fwdConfig.targetName || fwdConfig.targetJid || 'Master Owner DM';
+  if (String(defaultTargetDisplay).endsWith('@g.us')) defaultTargetDisplay = 'WhatsApp Group';
+
+  let customTargetsList = '';
+  const seenCustomTargets = new Set();
+  const uniqueCustom = [];
+  for (const [key, ct] of Object.entries(fwdConfig.channelTargets || {})) {
+    if (!ct || !ct.targetJid) continue;
+    const uniqKey = `${ct.channelJid || key}->${ct.targetJid}`;
+    if (!seenCustomTargets.has(uniqKey)) {
+      seenCustomTargets.add(uniqKey);
+      uniqueCustom.push(ct);
+    }
+  }
+
+  if (uniqueCustom.length > 0) {
+    customTargetsList += `┃ 📌 *Custom Per-Channel Forward Routes (${uniqueCustom.length}):*\n`;
+    uniqueCustom.forEach((ct, i) => {
+      customTargetsList += `┃    ${i + 1}. *${ct.channelName || 'Channel'}* ➔ *${ct.targetName || ct.targetJid}*\n`;
+    });
+  } else {
+    customTargetsList += `┃ ℹ️ Tamam channels default target (*${defaultTargetDisplay}*) par forward hote hain.\n`;
+  }
+
+  // 3. Gather Auto-Follow Data (.afc / auto_follow.json)
+  let afChannels = [];
+  try {
+    const afm = require('../utils/autoFollowManager');
+    const afData = afm.loadAutoFollowData();
+    afChannels = Object.values(afData.channels || {});
+  } catch {}
+
+  let afSection = '';
+  if (afChannels.length === 0) {
+    afSection = `┃ 📭 Koi channel Auto-Follow me set nahi hai.\n┃ 👉 Add karne ke liye: \`.afc <channel_link>\`\n`;
+  } else {
+    afChannels.slice(0, 15).forEach((ch, idx) => {
+      afSection += `┃ ${idx + 1}. *${ch.name || 'WhatsApp Channel'}*\n`;
+      afSection += `┃    🆔 \`${ch.jid || 'N/A'}\`\n`;
+    });
+    if (afChannels.length > 15) {
+      afSection += `┃ ➕ *... aur ${afChannels.length - 15} mazeed channels (.afclist se dekhein)*\n`;
+    }
+  }
+
+  const activeSessions = Math.max(getActiveSockets(sock).length, 1);
+
+  const fullText =
+`╭━━━〔 👑 *CHANNELS & AUTOMATION DASHBOARD* 〕━━━┈⊷
+┃ 👑 *Master Controller:* +923438673242
+┃ 🖥️ *Active Bot Sessions:* ${activeSessions} Cloud Servers
+┃ 📊 *Auto-React (ARC):* 🟢 ${activeArc} Active • ⏸️ ${pausedArc} Paused
+┃ ⏩ *Auto-Forward:* ${fwdState}
+┃ 👥 *Auto-Follow:* ${afChannels.length} Channels Monitored
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+📡 *AUTO-REACT CHANNELS (${totalArc} Total):*
+${arcSection}
+⏩ *AUTO-FORWARD & RELAY SETTINGS:*
+┃ • Global Status: ${fwdState}
+┃ • Default Target: *${defaultTargetDisplay}*
+┃ • Auto Relay Command: \`.chreact\`
+${customTargetsList}
+👥 *AUTO-FOLLOW CHANNELS (${afChannels.length} Total):*
+${afSection}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💡 *Quick Owner Commands:*
+• ➕ Auto-React add: \`.arc <channel_link>\`
+• 🗑️ Auto-React del: \`.del arc <channel_link>\`
+• 🎯 Set Forward Group: \`.set arc\` (Group me run karein)
+• 🎯 Set Channel Route: \`.set arc <channel_link>\`
+• 👥 Mass Follow: \`.chfollow <channel_link>\`
+• 💎 Premium Members: \`.pmlist\` • \`.delpm <user>\`
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
+
+  return await sock.sendMessage(from, { text: fullText }, { quoted: msg });
+}
+
 module.exports = {
   loadArcData,
   saveArcData,
@@ -1446,6 +1623,7 @@ module.exports = {
   arcdelCommand,
   arcstopCommand,
   arcstartCommand,
+  chstatusCommand,
   chautojoinCommand,
   arcblockCommand,
   arcblocklistCommand,
