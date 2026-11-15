@@ -1455,21 +1455,25 @@
         profile.portfolio = "https://mrsaqib.me";
       }
 
+      // Enforce Creator Official Identity & DP
+      const saqibName = "Muhammad Saqib";
+      const saqibAvatar = "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png";
+
       // Populate Header Elements
       const headerAvatar = document.getElementById('headerAvatar');
-      if (headerAvatar && profile.avatar) headerAvatar.src = profile.avatar;
+      if (headerAvatar) headerAvatar.src = saqibAvatar;
 
       const headerCreatorLink = document.getElementById('headerCreatorLink');
       if (headerCreatorLink) {
         headerCreatorLink.href = 'https://mrsaqib.me';
-        if (profile.name) headerCreatorLink.textContent = profile.name;
+        headerCreatorLink.textContent = saqibName;
       }
 
       const headerTagline = document.getElementById('headerTagline');
-      if (headerTagline && profile.tagline) headerTagline.textContent = profile.tagline;
+      if (headerTagline) headerTagline.textContent = profile.tagline || 'Full-Stack & Security';
 
       const headerBadge = document.getElementById('headerBadge');
-      if (headerBadge && profile.badge_text) headerBadge.textContent = profile.badge_text;
+      if (headerBadge) headerBadge.textContent = 'Verified ID';
 
       const headerPortfolioBtn = document.getElementById('headerPortfolioBtn');
       if (headerPortfolioBtn) {
@@ -1490,10 +1494,10 @@
 
       // Populate Developer & Contact Hub Elements
       const hubAvatar = document.getElementById('hubAvatar');
-      if (hubAvatar && profile.avatar) hubAvatar.src = profile.avatar;
+      if (hubAvatar) hubAvatar.src = saqibAvatar;
 
       const hubName = document.getElementById('hubName');
-      if (hubName && profile.name) hubName.textContent = profile.name;
+      if (hubName) hubName.textContent = saqibName;
 
       const hubTagline = document.getElementById('hubTagline');
       if (hubTagline && profile.tagline) hubTagline.textContent = profile.tagline;

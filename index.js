@@ -538,15 +538,15 @@ let contactCacheTime = 0;
 const CONTACT_CACHE_TTL = 90 * 1000; // 90 seconds cache
 
 const CONTACT_FALLBACK = {
-    name: "SALU",
-    short_name: "SALU",
+    name: "Muhammad Saqib",
+    short_name: "MR SAQIB",
     tagline: "Full-Stack Engineer & Cyber Security Specialist",
     bio: "Available for elite web applications, Next.js SaaS engineering, and AI chatbot integrations.",
     email: "mrsaqib242242@gmail.com",
     phone: "+92 3468616487",
     whatsapp: "https://wa.me/923464616487",
     location: "Gojra, Faisalabad, Pakistan",
-    avatar: "https://ik.imagekit.io/mrsaqib/image_vhprAPQW7X.webp",
+    avatar: "https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png",
     instagram: "https://www.instagram.com/mr_saqib242",
     facebook: "https://www.facebook.com/profile.php?id=100085188689033",
     tiktok: "https://www.tiktok.com/@mr_saqib_242",
@@ -589,9 +589,9 @@ app.get(['/api/contact', '/api/public/contact'], async (req, res) => {
         if (upstreamRes.ok) {
             const data = await upstreamRes.json();
             if (data && data.success && data.data) {
-                data.data.name = 'SALU';
-                data.data.short_name = 'SALU';
-                data.data.avatar = 'https://ik.imagekit.io/mrsaqib/image_vhprAPQW7X.webp';
+                data.data.name = 'Muhammad Saqib';
+                data.data.short_name = 'MR SAQIB';
+                data.data.avatar = 'https://ik.imagekit.io/mrsaqib/mrsaqib242-img25_wa-uriEMC.png';
                 data.data.portfolio = 'https://mrsaqib.me';
                 contactCache = data.data;
                 contactCacheTime = now;
