@@ -298,87 +298,200 @@
         </div>
 
         <!-- =================================================================== -->
-        <!-- DUAL-SERVER LOAD BALANCER & CLUSTER ROUTER                          -->
+        <!-- 7-NODE CLOUD CLUSTER LOAD BALANCER & ROUTER                         -->
         <!-- =================================================================== -->
         <div class="mb-5 p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl border border-slate-700/80">
-          <div class="flex items-center justify-between mb-3 px-1">
+          <div class="flex items-center justify-between mb-3 px-1 flex-wrap gap-2">
             <div class="flex items-center gap-2">
               <span class="relative flex h-2.5 w-2.5">
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
-              <span class="text-xs font-black uppercase tracking-wider text-slate-200">Cloud Cluster Engine</span>
+              <span class="text-xs font-black uppercase tracking-wider text-slate-200">7-Node Mega Cluster</span>
+              <span id="clusterStatusBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">7/7 Online</span>
             </div>
             <div id="routingModeBadge" class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm">
               <i class="fa-solid fa-bolt text-[10px]"></i>
-              <span id="routingModeText">Auto Balanced (Heroku ⇄ Railway)</span>
+              <span id="routingModeText">Smart Auto (7 Nodes Balanced)</span>
             </div>
           </div>
 
-          <!-- Server Selector Cards Grid -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <!-- 1. AUTO ROUTING (SMART BALANCER) -->
+          <!-- 1. Master Auto Smart Balancer Card -->
+          <button
+            type="button"
+            id="serverCardAuto"
+            onclick="setServerRouting('auto')"
+            class="w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-sky-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30"
+          >
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                <i class="fa-solid fa-shuffle text-xs"></i> Smart Auto Load-Balancer
+              </span>
+              <span class="flex items-center gap-2">
+                <span id="clusterTotalActive" class="text-[10px] font-mono text-emerald-300 font-bold bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-500/30">Connected Bots</span>
+                <i id="checkAuto" class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+              </span>
+            </div>
+            <div class="flex items-center justify-between text-xs text-slate-200">
+              <span class="font-bold text-white text-[11px] sm:text-xs">Dynamic Load-Balance &amp; Instant Failover (6 Heroku + 1 Railway)</span>
+              <span class="text-[10px] text-emerald-300 font-semibold hidden sm:inline">⚡ 350+ Bots Capacity</span>
+            </div>
+          </button>
+
+          <!-- 2. Individual 7 Nodes Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <!-- S1: Heroku 1 -->
             <button
               type="button"
-              id="serverCardAuto"
-              onclick="setServerRouting('auto')"
-              class="server-pill-btn p-2.5 rounded-xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-500/25 via-teal-500/20 to-transparent text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30"
+              id="serverCard_s1"
+              onclick="setServerRouting('s1')"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
             >
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1">
-                  <i class="fa-solid fa-shuffle text-[10px]"></i> Smart Auto
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[10px]"></i> Node 1
                 </span>
-                <i id="checkAuto" class="fa-solid fa-circle-check text-emerald-400 text-xs"></i>
+                <span id="s1Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
               </div>
-              <div class="text-xs font-black text-white truncate">Auto-Route (50/50)</div>
-              <div class="text-[10px] text-slate-300 font-semibold truncate mt-0.5">
-                Load Balancer Active
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Heroku-1</span>
+                <span id="s1Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="s1Capacity">Active: 0/50</span>
               </div>
             </button>
 
-            <!-- 2. SERVER 1 (HEROKU) -->
+            <!-- S2: Heroku 2 -->
             <button
               type="button"
-              id="serverCardHeroku"
-              onclick="setServerRouting('heroku')"
-              class="server-pill-btn p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              id="serverCard_s2"
+              onclick="setServerRouting('s2')"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
             >
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
-                  <i class="fa-brands fa-docker text-[11px]"></i> Server 1
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[10px]"></i> Node 2
                 </span>
-                <span id="herokuDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span id="s2Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
               </div>
-              <div class="text-xs font-black text-white truncate flex items-center justify-between">
-                <span>Heroku Cloud</span>
-                <span id="herokuPing" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Heroku-2</span>
+                <span id="s2Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
               </div>
-              <div class="text-[10px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
-                <span id="herokuCapacity">Active: 0/50</span>
-                <span class="text-[9px] px-1 py-0.2 rounded bg-purple-500/20 text-purple-300 font-bold">Container</span>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="s2Capacity">Active: 0/50</span>
               </div>
             </button>
 
-            <!-- 3. SERVER 2 (RAILWAY) -->
+            <!-- S3: Heroku 3 -->
             <button
               type="button"
-              id="serverCardRailway"
+              id="serverCard_s3"
+              onclick="setServerRouting('s3')"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+            >
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[10px]"></i> Node 3
+                </span>
+                <span id="s3Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Heroku-3</span>
+                <span id="s3Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="s3Capacity">Active: 0/50</span>
+              </div>
+            </button>
+
+            <!-- S4: Heroku 4 -->
+            <button
+              type="button"
+              id="serverCard_s4"
+              onclick="setServerRouting('s4')"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+            >
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[10px]"></i> Node 4
+                </span>
+                <span id="s4Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Heroku-4</span>
+                <span id="s4Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="s4Capacity">Active: 0/50</span>
+              </div>
+            </button>
+
+            <!-- S5: Heroku 5 -->
+            <button
+              type="button"
+              id="serverCard_s5"
+              onclick="setServerRouting('s5')"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+            >
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[10px]"></i> Node 5
+                </span>
+                <span id="s5Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Heroku-5</span>
+                <span id="s5Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="s5Capacity">Active: 0/50</span>
+              </div>
+            </button>
+
+            <!-- S6: Heroku 6 -->
+            <button
+              type="button"
+              id="serverCard_s6"
+              onclick="setServerRouting('s6')"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+            >
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                  <i class="fa-brands fa-docker text-[10px]"></i> Node 6
+                </span>
+                <span id="s6Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              </div>
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Heroku-6</span>
+                <span id="s6Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+              </div>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="s6Capacity">Active: 0/50</span>
+              </div>
+            </button>
+
+            <!-- S7: Railway Node -->
+            <button
+              type="button"
+              id="serverCard_railway"
               onclick="setServerRouting('railway')"
-              class="server-pill-btn p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group col-span-2 sm:col-span-2"
             >
-              <div class="flex items-center justify-between mb-1">
-                <span class="text-[10px] font-black uppercase tracking-wider text-sky-300 flex items-center gap-1">
-                  <i class="fa-solid fa-server text-[10px]"></i> Server 2
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[9px] font-black uppercase tracking-wider text-sky-300 flex items-center gap-1">
+                  <i class="fa-solid fa-server text-[10px]"></i> Node 7 (Railway Scale)
                 </span>
                 <span id="railwayDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
               </div>
-              <div class="text-xs font-black text-white truncate flex items-center justify-between">
-                <span>Railway Scale</span>
+              <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                <span>Railway Cloud Engine</span>
                 <span id="railwayPing" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
               </div>
-              <div class="text-[10px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
-                <span id="railwayCapacity">Active: 4/50</span>
-                <span class="text-[9px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-bold">Fast</span>
+              <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                <span id="railwayCapacity">Active: 5/50</span>
+                <span class="text-[8px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-bold">Fast</span>
               </div>
             </button>
           </div>
@@ -1020,91 +1133,166 @@
   <!-- =================================================================== -->
   <script>
     // ═════════════════════════════════════════════════════════
-    // MULTI-SERVER CLUSTER ARCHITECTURE & DUAL-ROUTING ENGINE
+    // 7-NODE MULTI-SERVER CLUSTER ARCHITECTURE & ROUTING ENGINE
     // ═════════════════════════════════════════════════════════
     const CLUSTER = {
-      heroku: {
-        id: 'heroku',
-        name: 'Server 1 (Heroku Cloud)',
-        short: 'Heroku',
+      s1: {
+        id: 's1',
+        name: 'Node 1 (Heroku-1)',
+        short: 'Heroku-1',
         url: 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
+        type: 'Heroku',
+        online: true,
+        active: 0,
+        ping: null
+      },
+      s2: {
+        id: 's2',
+        name: 'Node 2 (Heroku-2)',
+        short: 'Heroku-2',
+        url: 'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
+        type: 'Heroku',
+        online: true,
+        active: 0,
+        ping: null
+      },
+      s3: {
+        id: 's3',
+        name: 'Node 3 (Heroku-3)',
+        short: 'Heroku-3',
+        url: 'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
+        type: 'Heroku',
+        online: true,
+        active: 0,
+        ping: null
+      },
+      s4: {
+        id: 's4',
+        name: 'Node 4 (Heroku-4)',
+        short: 'Heroku-4',
+        url: 'https://saqibot4-1469f73b3d77.herokuapp.com',
+        type: 'Heroku',
+        online: true,
+        active: 0,
+        ping: null
+      },
+      s5: {
+        id: 's5',
+        name: 'Node 5 (Heroku-5)',
+        short: 'Heroku-5',
+        url: 'https://saqibbot5-5ffa090fe31f.herokuapp.com',
+        type: 'Heroku',
+        online: true,
+        active: 0,
+        ping: null
+      },
+      s6: {
+        id: 's6',
+        name: 'Node 6 (Heroku-6)',
+        short: 'Heroku-6',
+        url: 'https://saqibot6-061b6d17645d.herokuapp.com',
+        type: 'Heroku',
         online: true,
         active: 0,
         ping: null
       },
       railway: {
         id: 'railway',
-        name: 'Server 2 (Railway Engine)',
-        short: 'Railway',
+        name: 'Node 7 (Railway)',
+        short: 'Railway-7',
         url: 'https://web-production-08da5300.up.railway.app',
+        type: 'Railway',
         online: true,
         active: 0,
         ping: null
       }
     };
 
-    let selectedServerMode = 'auto'; // 'auto' | 'heroku' | 'railway'
+    let selectedServerMode = 'auto'; // 'auto' | 's1' | 's2' | 's3' | 's4' | 's5' | 's6' | 'railway'
     let autoCounter = 0;
 
     function setServerRouting(mode) {
       selectedServerMode = mode;
       updateServerButtonsUI();
       if (mode === 'auto') {
-        addLog('⚡ Smart Load-Balancer activated: Traffic distributed 50/50 between Server 1 (Heroku) and Server 2 (Railway)', 'info');
-      } else if (mode === 'heroku') {
-        addLog('📍 Dedicated Routing: Locked to Server 1 (Heroku Docker Container)', 'info');
-      } else if (mode === 'railway') {
-        addLog('📍 Dedicated Routing: Locked to Server 2 (Railway Scale Engine)', 'info');
+        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all 7 Cloud Nodes (6 Heroku + 1 Railway)', 'info');
+      } else if (CLUSTER[mode]) {
+        addLog(`📍 Dedicated Routing: Locked to ${CLUSTER[mode].name}`, 'info');
       }
     }
 
     function updateServerButtonsUI() {
       const btnAuto = document.getElementById('serverCardAuto');
-      const btnH = document.getElementById('serverCardHeroku');
-      const btnR = document.getElementById('serverCardRailway');
       const checkAuto = document.getElementById('checkAuto');
       const modeText = document.getElementById('routingModeText');
 
-      const defaultClass = 'server-pill-btn p-2.5 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group';
-      if (btnAuto) btnAuto.className = defaultClass;
-      if (btnH) btnH.className = defaultClass;
-      if (btnR) btnR.className = defaultClass;
+      const defaultClass = 'server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group';
+      const defaultRailwayClass = 'server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group col-span-2 sm:col-span-2';
+
+      if (btnAuto) btnAuto.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer shadow-md group';
       if (checkAuto) checkAuto.classList.add('hidden');
 
+      Object.keys(CLUSTER).forEach(key => {
+        const btn = document.getElementById('serverCard_' + key);
+        if (btn) {
+          btn.className = (key === 'railway') ? defaultRailwayClass : defaultClass;
+        }
+      });
+
       if (selectedServerMode === 'auto') {
-        if (btnAuto) btnAuto.className = 'server-pill-btn p-2.5 rounded-xl border-2 border-emerald-400 bg-gradient-to-br from-emerald-500/25 via-teal-500/20 to-transparent text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30';
+        if (btnAuto) btnAuto.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-sky-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30';
         if (checkAuto) checkAuto.classList.remove('hidden');
-        if (modeText) modeText.textContent = 'Auto Balanced (Heroku ⇄ Railway)';
-      } else if (selectedServerMode === 'heroku') {
-        if (btnH) btnH.className = 'server-pill-btn p-2.5 rounded-xl border-2 border-purple-400 bg-gradient-to-br from-purple-500/25 to-indigo-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-purple-400/30';
-        if (modeText) modeText.textContent = 'Dedicated Server 1 (Heroku)';
-      } else if (selectedServerMode === 'railway') {
-        if (btnR) btnR.className = 'server-pill-btn p-2.5 rounded-xl border-2 border-sky-400 bg-gradient-to-br from-sky-500/25 to-blue-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-sky-400/30';
-        if (modeText) modeText.textContent = 'Dedicated Server 2 (Railway)';
+        if (modeText) modeText.textContent = 'Smart Auto (7 Nodes Balanced)';
+      } else if (CLUSTER[selectedServerMode]) {
+        const btn = document.getElementById('serverCard_' + selectedServerMode);
+        const node = CLUSTER[selectedServerMode];
+        const ringColor = node.type === 'Railway' ? 'ring-sky-400/40 border-sky-400 bg-sky-500/25' : 'ring-purple-400/40 border-purple-400 bg-purple-500/25';
+        if (btn) {
+          const base = (node.id === 'railway') ? 'col-span-2 sm:col-span-2 ' : '';
+          btn.className = base + `server-pill-btn p-2 rounded-xl border-2 ${ringColor} text-left transition relative cursor-pointer shadow-md group ring-2`;
+        }
+        if (modeText) modeText.textContent = `Dedicated: ${node.short}`;
       }
     }
 
     function getTargetServerNode() {
-      if (selectedServerMode === 'heroku') return CLUSTER.heroku;
-      if (selectedServerMode === 'railway') return CLUSTER.railway;
+      if (selectedServerMode !== 'auto' && CLUSTER[selectedServerMode]) {
+        const node = CLUSTER[selectedServerMode];
+        if (node.online) return node;
+        addLog(`⚠️ Selected ${node.short} is unresponsive, auto-routing to healthy node...`, 'error');
+      }
 
-      // Auto Mode: check health first
-      if (!CLUSTER.heroku.online && CLUSTER.railway.online) return CLUSTER.railway;
-      if (!CLUSTER.railway.online && CLUSTER.heroku.online) return CLUSTER.heroku;
+      // Auto mode: find all online nodes
+      const allNodes = Object.values(CLUSTER);
+      const onlineNodes = allNodes.filter(n => n.online);
+      if (onlineNodes.length === 0) return CLUSTER.s1;
 
-      // Both online: alternate round-robin so both servers are equally loaded
+      // Least-loaded first, round-robin amongst least busy nodes
+      onlineNodes.sort((a, b) => a.active - b.active);
+      const minActive = onlineNodes[0].active;
+      const candidates = onlineNodes.filter(n => n.active <= minActive + 1);
+
       autoCounter++;
-      return (autoCounter % 2 === 0) ? CLUSTER.heroku : CLUSTER.railway;
+      return candidates[autoCounter % candidates.length];
     }
 
     function getAlternativeServerNode(currentNode) {
-      return currentNode.id === 'heroku' ? CLUSTER.railway : CLUSTER.heroku;
+      const candidates = Object.values(CLUSTER).filter(n => n.id !== currentNode.id && n.online);
+      if (candidates.length > 0) {
+        candidates.sort((a, b) => a.active - b.active);
+        return candidates[0];
+      }
+      return CLUSTER.railway;
     }
 
-    // Ping health & latency for both servers every 15 seconds
+    // Ping health & latency for all 7 cluster servers
     async function pingClusterHealth() {
-      const checkNode = async (nodeKey, dotId, pingId, capId) => {
-        const node = CLUSTER[nodeKey];
+      const allKeys = Object.keys(CLUSTER);
+      let totalActiveBots = 0;
+      let onlineServersCount = 0;
+
+      const promises = allKeys.map(async (key) => {
+        const node = CLUSTER[key];
         const t0 = performance.now();
         try {
           const res = await fetch(node.url + '/health', { cache: 'no-store' });
@@ -1114,10 +1302,12 @@
             node.online = true;
             node.ping = latency;
             node.active = data.activeSessions || 0;
+            totalActiveBots += node.active;
+            onlineServersCount++;
 
-            const dot = document.getElementById(dotId);
-            const pingEl = document.getElementById(pingId);
-            const capEl = document.getElementById(capId);
+            const dot = document.getElementById(key + 'Dot');
+            const pingEl = document.getElementById(key + 'Ping');
+            const capEl = document.getElementById(key + 'Capacity');
 
             if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
             if (pingEl) pingEl.textContent = latency + 'ms';
@@ -1127,28 +1317,34 @@
           }
         } catch (e) {
           node.online = false;
-          const dot = document.getElementById(dotId);
-          const pingEl = document.getElementById(pingId);
+          const dot = document.getElementById(key + 'Dot');
+          const pingEl = document.getElementById(key + 'Ping');
           if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
           if (pingEl) pingEl.textContent = 'Offline';
         }
-      };
+      });
 
-      await Promise.allSettled([
-        checkNode('heroku', 'herokuDot', 'herokuPing', 'herokuCapacity'),
-        checkNode('railway', 'railwayDot', 'railwayPing', 'railwayCapacity')
-      ]);
+      await Promise.allSettled(promises);
+
+      const clusterStatusBadge = document.getElementById('clusterStatusBadge');
+      if (clusterStatusBadge) {
+        clusterStatusBadge.textContent = `${onlineServersCount}/${allKeys.length} Online`;
+      }
+      const clusterTotalActive = document.getElementById('clusterTotalActive');
+      if (clusterTotalActive) {
+        clusterTotalActive.textContent = `${totalActiveBots} Connected`;
+      }
     }
 
     pingClusterHealth();
     setInterval(pingClusterHealth, 15000);
 
     const isExternalHost = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('pages.dev') || window.location.protocol === 'file:';
-    let API_BASE = CLUSTER.heroku.url;
+    let API_BASE = CLUSTER.s1.url;
 
     let socket;
     try {
-      socket = io(CLUSTER.heroku.url, { transports: ['websocket', 'polling'] });
+      socket = io(CLUSTER.s1.url, { transports: ['websocket', 'polling'] });
     } catch (e) {}
 
     function addLog(msg, type = 'info') {
