@@ -125,7 +125,7 @@ const CATEGORIES = {
         'accept', 'acceptall', 'add', 'antilink', 'antispam', 'creategroup',
         'del', 'demote', 'demoteall', 'end', 'gcfrwrd', 'gcjid', 'goodbye',
         'groupdesc', 'groupinfo', 'grouplink', 'grouplogo', 'hidetag', 'invtag',
-        'join', 'joinrequest', 'kick', 'leave', 'listadmins', 'listgc',
+        'join', 'joinrequest', 'kick', 'leave', 'leaveall', 'left', 'leftall', 'listadmins', 'listgc',
         'lock', 'membercount', 'mute', 'online', 'out', 'poll',
         'promote', 'promoteall', 'r', 'randommember', 'reject',
         'rejectall', 'requests', 'resetwarn', 'revokelink', 'rtest',
@@ -151,7 +151,7 @@ const CATEGORIES = {
     'OWNER': [
         'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'crashgrup',
         'cs', 'delafc', 'delajg', 'delcs', 'delprem', 'delvcontact', 'fullpp',
-        'iosbug', 'mode', 'ownadd', 'owndel', 'ownlist', 'prem', 'premlist',
+        'iosbug', 'leaveall', 'leftall', 'mode', 'ownadd', 'owndel', 'ownlist', 'prem', 'premlist',
         'resetmenu', 'restart', 'richhtml', 'setbotname', 'setmenupic',
         'setownername', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
     ]

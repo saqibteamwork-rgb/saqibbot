@@ -150,11 +150,11 @@ async function welcomeCommand(sock, from, msg, isAdmin, botData, saveBotData, ar
                     );
                     if (part) {
                         if (part.id) {
-                            phoneJid = part.id.split(':')[0] + '@s.whatsapp.net';
+                            phoneJid = part.id.split('@')[0].split(':')[0] + '@s.whatsapp.net';
                             rawNumber = phoneJid.split('@')[0].replace(/[^0-9]/g, '');
                         }
                         if (part.lid) {
-                            lidJid = part.lid.split(':')[0] + '@lid';
+                            lidJid = part.lid.split('@')[0].split(':')[0] + '@lid';
                         }
                     }
                 }
@@ -276,11 +276,11 @@ async function goodbyeCommand(sock, from, msg, isAdmin, botData, saveBotData, ar
                     );
                     if (part) {
                         if (part.id) {
-                            phoneJid = part.id.split(':')[0] + '@s.whatsapp.net';
+                            phoneJid = part.id.split('@')[0].split(':')[0] + '@s.whatsapp.net';
                             rawNumber = phoneJid.split('@')[0].replace(/[^0-9]/g, '');
                         }
                         if (part.lid) {
-                            lidJid = part.lid.split(':')[0] + '@lid';
+                            lidJid = part.lid.split('@')[0].split(':')[0] + '@lid';
                         }
                     }
                 }
@@ -305,10 +305,12 @@ We will miss you in *${groupSubject}*!
 
 ⚡ *Powered by MR SAQIB MD*`;
 
+            const mentionJids = [...new Set([phoneJid, lidJid, senderJid])].filter(Boolean);
+
             await sock.sendMessage(from, {
                 image: cardBuffer,
                 caption: caption,
-                mentions: [cleanJid, senderJid]
+                mentions: mentionJids
             }, { quoted: msg });
 
         } catch (err) {
@@ -322,7 +324,23 @@ We will miss you in *${groupSubject}*!
         saveBotData();
         await sock.sendMessage(from, { text: "✅ Custom goodbye message set!" }, { quoted: msg });
     } else if (!wantsOn && !wantsOff) {
-        await sock.sendMessage(from, { text: "❌ Usage: .goodbye [on/off/test/set <message>]" }, { quoted: msg });
+        const status = botData.welcomeGoodbye[from]?.goodbye ? "🟢 ENABLED (Auto Goodbye Active)" : "🔴 DISABLED";
+        await sock.sendMessage(from, { 
+            text: 
+`╭━━━〔 🥀 *GOODBYE SYSTEM* 🥀 〕━━━┈⊷
+┃ 📊 *Current Status:* ${status}
+┃
+┃ 📸 *Commands:*
+┃ 👉 *.goodbye on*    — Enable Stylish DP Goodbye Card
+┃ 👉 *.goodbye off*   — Disable Goodbye
+┃ 👉 *.goodbye test*  — Test Card Right Now!
+┃ 👉 *.goodbye set <text>* — Custom text
+┃
+┃ ✨ *Features:*
+┃ ✦ Member ki actual profile picture automatically card mein aayegi!
+┃ ✦ Auto tag & farewell message!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
     }
 }
 
@@ -344,10 +362,11 @@ async function handleGroupParticipantsUpdate(sock, update, botData) {
 
         let memberCount = 1;
         let groupSubject = 'Our Group';
+        let gmeta = null;
         try {
             const metaPromise = sock.groupMetadata(from);
             const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2500));
-            const gmeta = await Promise.race([metaPromise, timeoutPromise]);
+            gmeta = await Promise.race([metaPromise, timeoutPromise]);
             if (gmeta) {
                 memberCount = (gmeta.participants || []).length || 1;
                 groupSubject = gmeta.subject || groupSubject;
@@ -370,11 +389,11 @@ async function handleGroupParticipantsUpdate(sock, update, botData) {
                 );
                 if (part) {
                     if (part.id) {
-                        phoneJid = part.id.split(':')[0] + '@s.whatsapp.net';
+                        phoneJid = part.id.split('@')[0].split(':')[0] + '@s.whatsapp.net';
                         rawNumber = phoneJid.split('@')[0].replace(/[^0-9]/g, '');
                     }
                     if (part.lid) {
-                        lidJid = part.lid.split(':')[0] + '@lid';
+                        lidJid = part.lid.split('@')[0].split(':')[0] + '@lid';
                     }
                 }
             }
@@ -437,8 +456,9 @@ async function handleGroupParticipantsUpdate(sock, update, botData) {
                         groupName: groupSubject
                     });
 
-                    const caption = cfg.goodbyeMsg
-                        ? cfg.goodbyeMsg.replace(/\{user\}/gi, tag).replace(/\{group\}/gi, groupSubject)
+                    const customGoodbye = cfg.goodbyeMsg || cfg.goodbyeText;
+                    const caption = customGoodbye
+                        ? customGoodbye.replace(/\{user\}/gi, tag).replace(/\{group\}/gi, groupSubject)
                         :
 `╔════════════════════════════════╗
   🥀 𝓖𝓞𝓞𝓓𝓑𝓨𝓔 🥀
@@ -458,8 +478,8 @@ We will miss you in *${groupSubject}*!
                     });
                 } catch (cardErr) {
                     console.error('[Goodbye Card Error]:', cardErr.message);
-                    const template = cfg.goodbyeMsg || `👋 Goodbye {user}, take care!`;
-                    await sock.sendMessage(from, { text: template.replace(/\{user\}/gi, tag), mentions: [cleanJid] });
+                    const template = cfg.goodbyeMsg || cfg.goodbyeText || `👋 Goodbye {user}, take care!`;
+                    await sock.sendMessage(from, { text: template.replace(/\{user\}/gi, tag), mentions: [phoneJid] });
                 }
             }
         }

@@ -392,16 +392,69 @@ async function joinrequestCommand(sock, from, msg, isAdmin, args = []) {
     }
 }
 
-// 17. .leave / .out - Bot leaves group
-async function leaveCommand(sock, from, msg, isOwner) {
+// 17. .leave / .left / .out - Bot leaves current group
+async function leaveCommand(sock, from, msg, isAllowed) {
     if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
-    if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner bot ko leave karwa sakta hai!*" }, { quoted: msg });
+    if (!isAllowed) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner ya is session ka user bot ko leave karwa sakta hai!*" }, { quoted: msg });
 
     try {
         await sock.sendMessage(from, { text: "👋 *Allah Hafiz! Bot is leaving the group...*" }, { quoted: msg });
         await new Promise(r => setTimeout(r, 1000));
         await sock.groupLeave(from);
     } catch (e) {
+        await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
+    }
+}
+
+// 17b. .leftall / .leaveall / .outall - Bot leaves ALL participating groups
+async function leftallCommand(sock, from, msg, isAllowed) {
+    if (!isAllowed) {
+        return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner sabhi groups leave karwa sakta hai!*" }, { quoted: msg });
+    }
+
+    await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+
+    try {
+        const participating = await sock.groupFetchAllParticipating();
+        const groups = Object.keys(participating || {}).filter(jid => jid.endsWith('@g.us'));
+
+        if (!groups.length) {
+            return await sock.sendMessage(from, { text: "ℹ️ Bot kisi bhi group mein shamil nahi hai." }, { quoted: msg });
+        }
+
+        await sock.sendMessage(from, { 
+            text: `⚠️ *Leaving all ${groups.length} groups in progress...*` 
+        }, { quoted: msg });
+
+        let leftCount = 0;
+        for (const jid of groups) {
+            try {
+                if (jid === from) continue; // leave current chat last
+                await sock.groupLeave(jid);
+                leftCount++;
+                await new Promise(r => setTimeout(r, 500));
+            } catch (err) {
+                console.error(`[LeftAll Error on ${jid}]:`, err.message);
+            }
+        }
+
+        if (groups.includes(from)) {
+            try {
+                await sock.sendMessage(from, { text: `👋 *Left ${leftCount} other groups. Leaving this group now. Allah Hafiz!*` });
+                await new Promise(r => setTimeout(r, 1000));
+                await sock.groupLeave(from);
+                leftCount++;
+            } catch (_) {}
+        } else {
+            await sock.sendMessage(from, {
+                text: `╭━━━〔 🚪 *LEFT ALL GROUPS* 〕━━━┈⊷\n` +
+                      `┃ ✅ *Successfully Left:* ${leftCount} / ${groups.length} groups\n` +
+                      `┃ 👑 *Action by:* Bot Owner\n` +
+                      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+            }, { quoted: msg });
+        }
+    } catch (e) {
+        console.error('[LeftAll Error]:', e.message);
         await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
     }
 }
@@ -775,6 +828,7 @@ module.exports = {
     joinCommand,
     joinrequestCommand,
     leaveCommand,
+    leftallCommand,
     listadminsCommand,
     lockCommand,
     membercountCommand,

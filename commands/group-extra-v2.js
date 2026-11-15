@@ -25,12 +25,12 @@ function toSansBold(str) {
 }
 
 /**
- * .listgc / .groups - List all participating groups
+ * .listgc / .groups - List all participating groups with member count & invite links
  */
-async function listgcCommand(sock, from, msg, isOwner) {
-    if (!isOwner) {
+async function listgcCommand(sock, from, msg, isOwner, isSessionOwner = false) {
+    if (!isOwner && !isSessionOwner) {
         return await sock.sendMessage(from, { 
-            text: "❌ *Sirf Bot Owner groups ki list dekh sakta hai!*" 
+            text: "❌ *Sirf Bot Owner ya is session ka user groups ki list dekh sakta hai!*" 
         }, { quoted: msg });
     }
 
@@ -46,21 +46,29 @@ async function listgcCommand(sock, from, msg, isOwner) {
             return await sock.sendMessage(from, { text: "ℹ️ Bot kisi group mein shamil nahi hai." }, { quoted: msg });
         }
 
+        // Fetch invite links in parallel with timeout
+        const groupCards = await Promise.all(groups.map(async ([jid, g], idx) => {
+            const subject = g.subject || 'Untitled Group';
+            const count = (g.participants || []).length;
+            let linkStr = '🔒 _Admin required for link_';
+
+            try {
+                const codePromise = sock.groupInviteCode(jid);
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500));
+                const code = await Promise.race([codePromise, timeoutPromise]);
+                if (code) {
+                    linkStr = `https://chat.whatsapp.com/${code}`;
+                }
+            } catch (_) {}
+
+            return `${idx + 1}. 🏷️ *${subject}*\n   🆔 \`${jid}\`\n   👥 Members: *${count}*\n   🔗 Link: ${linkStr}\n`;
+        }));
+
         let out = 
 `╭━━━〔 ⚡ ${toSansBold('ALL PARTICIPATING GROUPS')} ⚡ 〕━━━┈⊷
 ┃ 📊 *Total Groups:* ${groups.length}
 ┃ 👑 *Bot:* ${toSansBold(settings.botName || 'MR SAQIB MD')}
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n`;
-
-        groups.forEach(([jid, g], idx) => {
-            const subject = g.subject || 'Untitled Group';
-            const count = (g.participants || []).length;
-            out += `${idx + 1}. *${subject}*\n`;
-            out += `   🆔 \`${jid}\`\n`;
-            out += `   👥 Members: *${count}*\n\n`;
-        });
-
-        out += `⚡ *Powered by MR SAQIB MD*`;
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` + groupCards.join('\n') + `\n⚡ *Powered by MR SAQIB MD*`;
 
         await sock.sendMessage(from, { text: out }, { quoted: msg });
 

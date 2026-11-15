@@ -666,6 +666,8 @@ let botData = {
     antiDelete: {},
     userNames: {},
     antiCall: {},
+    antiStatusGroups: {},
+    welcomeGoodbye: {},
     customProfiles: {},
     globalSettings: {},
     tgUserNumbers: {} // { "<telegram chatId>": ["923xxxxxxxxx", "923yyyyyyyyy"] }
@@ -674,6 +676,8 @@ if (fs.existsSync(DATA_FILE)) {
     try { botData = fs.readJsonSync(DATA_FILE); } catch (e) {}
 }
 if (!botData.tgUserNumbers) botData.tgUserNumbers = {};
+if (!botData.antiStatusGroups) botData.antiStatusGroups = {};
+if (!botData.welcomeGoodbye) botData.welcomeGoodbye = {};
 if (!botData.customProfiles) botData.customProfiles = {};
 if (!botData.globalSettings) botData.globalSettings = {};
 
@@ -1984,7 +1988,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await obfuscateCommand(this.sock, from, msg, args);
                                             break;
                                         case 'listgc': case 'groups': case 'mygroups':
-                                            await listgcCommand(this.sock, from, msg, isOwner);
+                                            await listgcCommand(this.sock, from, msg, isOwner, isSessionOwner);
                                             break;
                                         case 'grouplogo': case 'glogo':
                                             await grouplogoCommand(this.sock, from, msg);
@@ -2203,7 +2207,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'groupinfo': case 'gcinfo': await groupMenuCmds.groupinfoCommand(this.sock, from, msg); break;
                                         case 'join': await groupMenuCmds.joinCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'joinrequest': await groupMenuCmds.joinrequestCommand(this.sock, from, msg, isAdmin, args); break;
-                                        case 'leave': case 'out': await groupMenuCmds.leaveCommand(this.sock, from, msg, isOwner); break;
+                                        case 'leave': case 'left': case 'out': case 'leavegc': case 'leftgc':
+                                            await groupMenuCmds.leaveCommand(this.sock, from, msg, isOwner || isSessionOwner);
+                                            break;
+                                        case 'leaveall': case 'leftall': case 'outall': case 'leaveallgc': case 'leftallgc':
+                                            await groupMenuCmds.leftallCommand(this.sock, from, msg, isOwner || isSessionOwner);
+                                            break;
                                         case 'lock': await groupMenuCmds.lockCommand(this.sock, from, msg, isAdmin); break;
                                         case 'membercount': await groupMenuCmds.membercountCommand(this.sock, from, msg); break;
                                         case 'promoteall': await groupMenuCmds.promoteallCommand(this.sock, from, msg, isOwner); break;
