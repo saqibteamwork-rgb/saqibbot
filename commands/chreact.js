@@ -802,6 +802,7 @@ async function resolveChannelPost(sock, parsed) {
 
 const DEFAULT_REACTION_EMOJIS = ['❤️', '🔥', '👍', '🥰', '🎉', '✨', '😍', '👏'];
 const processedChreactIds = new Set();
+const normalUserChreactCooldown = new Map();
 
 function toSmallCaps(str) {
   const map = {
@@ -919,13 +920,80 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
 }
 
+/**
+ * Executes emoji reaction using ONLY the current bot session (Free / Normal User).
+ * Does NOT relay to ARC target or trigger other connected bot sockets.
+ */
+async function executeSingleSessionReaction(sock, from, msg, target) {
+  const { jid, serverId, emoji, customEmojis, hasCustomEmoji, channelName } = target;
+
+  const dedupeKey = msg?.key?.id ? `msg:${msg.key.id}` : `post:${jid}:${serverId}`;
+  if (processedChreactIds.has(dedupeKey)) return;
+  processedChreactIds.add(dedupeKey);
+  if (processedChreactIds.size > 1000) {
+    processedChreactIds.delete(processedChreactIds.values().next().value);
+  }
+
+  await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+
+  let reactEmoji = '❤️';
+  if (Array.isArray(customEmojis) && customEmojis.length > 0) {
+    reactEmoji = customEmojis[0];
+  } else if (hasCustomEmoji && emoji) {
+    reactEmoji = emoji;
+  }
+
+  try {
+    if (typeof sock.newsletterFollow === 'function') {
+      await withTimeout(sock.newsletterFollow(jid), 3000).catch(() => {});
+      await sleep(200);
+    }
+    if (typeof sock.newsletterReactMessage === 'function') {
+      await withTimeout(sock.newsletterReactMessage(jid, String(serverId), reactEmoji), 4000);
+    }
+  } catch (err) {
+    try {
+      await sleep(300);
+      if (typeof sock.newsletterFollow === 'function') {
+        await withTimeout(sock.newsletterFollow(jid), 3000).catch(() => {});
+        await sleep(200);
+      }
+      if (typeof sock.newsletterReactMessage === 'function') {
+        await withTimeout(sock.newsletterReactMessage(jid, String(serverId), reactEmoji), 4000).catch(() => {});
+      }
+    } catch (retryErr) {
+      console.error('[executeSingleSessionReaction]', retryErr?.message || retryErr);
+    }
+  }
+
+  await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+  const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
+  const summaryText =
+    `╭━━━〔 📢 *ᴄʜᴀɴɴᴇʟ ʀᴇᴀᴄᴛɪᴏɴ* 〕━━━┈⊷\n` +
+    `┃ ✅ *ʀᴇᴀᴄᴛɪᴏɴ sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n` +
+    `┃ 🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
+    `┃ 📝 *ᴘᴏsᴛ ɪᴅ:* #${serverId}\n` +
+    `┃ 😊 *ᴇᴍᴏᴊɪ:* ${reactEmoji}\n` +
+    `┃ 🤖 *sᴇʀᴠᴇʀ:* 1 ʙᴏᴛ (ғʀᴇᴇ ᴜsᴇʀ)\n` +
+    `┃\n` +
+    `┃ 👑 *50+ ᴍᴜʟᴛɪ-ʙᴏᴛ ʙᴏᴏsᴛ ᴄʜᴀʜɪʏᴇ?*\n` +
+    `┃ 👉 *ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss ᴋᴇ ʟɪʏᴇ ʀᴀʙᴛᴀ ᴋᴀʀᴇɪɴ:*\n` +
+    `┃ 📞 *03438673242 (ᴍʀ sᴀǫɪʙ)*\n` +
+    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
+
+  await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // EXPORTED COMMAND HANDLERS
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
  * .chreact <post link> [emoji]
- * Specifically for emoji reactions on channel posts!
+ * - Premium / Owner: Relays to ARC group and boosts across ALL connected bots!
+ * - Normal (Free) User: Reacts with 1 bot only (this session) without ARC relay!
  */
 async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium = false) {
   if (!isOwner && !isPremium) {
@@ -937,53 +1005,58 @@ async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium
     } catch {}
   }
 
-  if (!isOwner && !isPremium) {
-    const denyKey = msg?.key?.id ? `deny:${msg.key.id}` : null;
-    if (denyKey) {
-      if (processedChreactIds.has(denyKey)) return;
-      processedChreactIds.add(denyKey);
-    }
-    return sock.sendMessage(from, {
-      text: `╭━━━〔 💎 *PREMIUM ACCESS REQUIRED* 〕━━━┈⊷\n` +
-            `┃ ❌ *Access Denied!*\n` +
-            `┃ Ye command sirf *Premium Members*\n` +
-            `┃ use kar sakte hain!\n` +
-            `┃\n` +
-            `┃ 👑 *Premium Access ke liye:*\n` +
-            `┃ 👉 *03438673242 (MR SAQIB)* se rabta karein.\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
-    }, { quoted: msg });
-  }
-
   const parsed = parseTargetAndEmoji(args, msg, '❤️');
 
   if ((!parsed.code && !parsed.jid) || !parsed.serverId) {
     return sock.sendMessage(from, {
-      text: `📢 *MR SAQIB MD — ALL SESSIONS CHANNEL POST REACT*\n\n` +
-            `Tamam connected WhatsApp bot sessions se kisi bhi channel post par react karein!\n\n` +
+      text: `📢 *MR SAQIB MD — CHANNEL POST REACT*\n\n` +
+            `Channel post par react karein!\n\n` +
             `📌 *Kaise use karein:*\n` +
-            `👉 *${config.prefix}chreact <post_link> [emoji]*\n` +
-            `_Example:_ \`${config.prefix}chreact https://whatsapp.com/channel/.../123 ❤️\``
+            `👉 *${config.prefix || '.'}chreact <post_link> [emoji]*\n` +
+            `_Example:_ \`${config.prefix || '.'}chreact https://whatsapp.com/channel/.../123 ❤️\``
     }, { quoted: msg });
   }
 
-  // Immediately relay .chreact <exact_link> to the .set arc Group/Chat before any slow resolution!
-  try {
-    const fwd = require('../utils/channelPostForwarder');
-    if (typeof fwd.relayChreactToArcTarget === 'function') {
-      const relayedId = await fwd.relayChreactToArcTarget(sock, from, parsed);
-      if (relayedId) {
-        processedChreactIds.add(`msg:${relayedId}`);
+  // 1. PREMIER / OWNER PATH (Full Multi-Bot + ARC Group Relay)
+  if (isOwner || isPremium) {
+    // Immediately relay .chreact <exact_link> to the .set arc Group/Chat before any slow resolution!
+    try {
+      const fwd = require('../utils/channelPostForwarder');
+      if (typeof fwd.relayChreactToArcTarget === 'function') {
+        const relayedId = await fwd.relayChreactToArcTarget(sock, from, parsed);
+        if (relayedId) {
+          processedChreactIds.add(`msg:${relayedId}`);
+        }
       }
+    } catch {}
+
+    const resolved = await resolveChannelPost(sock, parsed);
+    if (!resolved.ok) {
+      return sock.sendMessage(from, { text: `❌ ${resolved.error}` }, { quoted: msg });
     }
-  } catch {}
+
+    return await executeMultiSessionReaction(sock, from, msg, resolved, 'CHANNEL REACTION BOOST');
+  }
+
+  // 2. NORMAL / FREE USER PATH (Single-Bot Reaction, NO ARC Relay)
+  const senderId = msg?.key?.participant || from;
+  const now = Date.now();
+  const lastUsed = normalUserChreactCooldown.get(senderId) || 0;
+  if (now - lastUsed < 5000) {
+    const waitSec = Math.ceil((5000 - (now - lastUsed)) / 1000);
+    return sock.sendMessage(from, {
+      text: `⏳ *Slow Down!* Baraye meharbani ${waitSec} second intezar karein.`
+    }, { quoted: msg });
+  }
+  if (normalUserChreactCooldown.size > 2000) normalUserChreactCooldown.clear();
+  normalUserChreactCooldown.set(senderId, now);
 
   const resolved = await resolveChannelPost(sock, parsed);
   if (!resolved.ok) {
     return sock.sendMessage(from, { text: `❌ ${resolved.error}` }, { quoted: msg });
   }
 
-  await executeMultiSessionReaction(sock, from, msg, resolved, 'CHANNEL REACTION BOOST');
+  return await executeSingleSessionReaction(sock, from, msg, resolved);
 }
 
 /**
