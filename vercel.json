@@ -4,11 +4,11 @@
   "rewrites": [
     {
       "source": "/api/:match*",
-      "destination": "https://web-production-08da5300.up.railway.app/api/:match*"
+      "destination": "https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com/api/:match*"
     },
     {
       "source": "/socket.io/:match*",
-      "destination": "https://web-production-08da5300.up.railway.app/socket.io/:match*"
+      "destination": "https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com/socket.io/:match*"
     },
     {
       "source": "/(.*)",

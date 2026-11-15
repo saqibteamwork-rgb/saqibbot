@@ -2433,13 +2433,17 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // ═════════════════════════════════════════════════════════
         // ULTRA RESILIENT 24/7 ANTI-SLEEP ENGINE (Multi-Target Ping)
         // ═════════════════════════════════════════════════════════
+        const baseHerokuUrl = 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com';
         const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
         const fallbackRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';
         const pingTargets = [
+            baseHerokuUrl,
+            `${baseHerokuUrl}/health`,
             baseRailwayUrl,
             `${baseRailwayUrl}/health`,
             fallbackRailwayUrl,
             `${fallbackRailwayUrl}/health`,
+            process.env.HEROKU_APP_NAME ? `https://${process.env.HEROKU_APP_NAME}.herokuapp.com/health` : null,
             process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}/health` : null,
             process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : null,
             process.env.APP_URL ? `${process.env.APP_URL}/health` : null,
