@@ -151,6 +151,43 @@ function parseDelay(str) {
   return num;
 }
 
+/**
+ * Extracts all emoji characters and tokens from a string.
+ * Supports:
+ * - Comma-separated: "🥺,😭,🤧" or "❤️,🔥,👍"
+ * - Space-separated: "🥺 😭 🤧"
+ * - Concatenated: "🥺😭🤧"
+ */
+function extractReactionEmojis(str) {
+  if (!str || typeof str !== 'string') return [];
+  const clean = str.trim();
+  if (!clean) return [];
+
+  const tokens = clean.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+  const result = [];
+
+  for (const token of tokens) {
+    if (!token) continue;
+    try {
+      const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+      const graphemes = [...seg.segment(token)]
+        .map(s => s.segment)
+        .filter(g => /(\p{Extended_Pictographic}|[\u2000-\u3300])/u.test(g));
+
+      if (graphemes.length > 0) {
+        result.push(...graphemes);
+        continue;
+      }
+    } catch {}
+
+    if (/(\p{Extended_Pictographic}|[\u2000-\u3300])/u.test(token)) {
+      result.push(token);
+    }
+  }
+
+  return result;
+}
+
 function normalizeChannelInput(str) {
   if (!str) return null;
   const linkMatch = str.match(/whatsapp\.com\/channel\/([0-9A-Za-z_-]+)/i);
@@ -621,20 +658,34 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
       return await sock.sendMessage(from, { text: "❌ *Channel resolve nahi ho saka!*" }, { quoted: msg });
     }
 
-    // Parse options: emojis, count, delay
-    let emojisArg = rawParams[1] || '❤️,🔥,👍,😍,👏';
-    let countArg = rawParams[2] || 'all';
-    let delayArg = rawParams[3] || '2s';
+    // Parse options: emojis, count, delay (supports "🥺,😭,🤧", "🥺 😭 🤧", etc.)
+    let rawOptionsStr = rawParams.slice(1).join(' ').trim();
+    let emojisList = [];
+    let count = 0;
+    let delayMs = 2000;
 
-    // Handle shifting if a param was skipped
-    if (emojisArg && (emojisArg.endsWith('s') || /^[0-9]+$/.test(emojisArg))) {
-      countArg = emojisArg;
-      emojisArg = '❤️,🔥,👍,😍,👏';
+    const foundEmojis = extractReactionEmojis(rawOptionsStr);
+    if (foundEmojis.length > 0) {
+      emojisList = foundEmojis;
+      rawOptionsStr = rawOptionsStr.replace(/[\p{Extended_Pictographic}\u2000-\u3300,]+/gu, ' ').trim();
     }
 
-    const emojisList = emojisArg.split(/[\s,]+/).filter(Boolean);
-    const delayMs = parseDelay(delayArg);
-    const count = (countArg.toLowerCase() === 'all' || isNaN(parseInt(countArg, 10))) ? 0 : parseInt(countArg, 10);
+    const remainingTokens = rawOptionsStr.split(/\s+/).filter(Boolean);
+    for (const t of remainingTokens) {
+      if (/^[0-9]+[sm]?$/i.test(t)) {
+        if (t.toLowerCase().endsWith('s') || t.toLowerCase().endsWith('m') || parseInt(t, 10) > 100) {
+          delayMs = parseDelay(t);
+        } else if (count === 0) {
+          count = parseInt(t, 10);
+        }
+      } else if (t.toLowerCase() === 'all') {
+        count = 0;
+      }
+    }
+
+    if (emojisList.length === 0) {
+      emojisList = ['❤️', '🔥', '👍', '😍', '👏'];
+    }
 
     // Save ARC Channel data immediately so nothing blocks confirmation!
     data.enabled = true;

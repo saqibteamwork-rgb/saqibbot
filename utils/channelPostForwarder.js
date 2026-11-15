@@ -65,6 +65,43 @@ function parseChannelInput(str) {
     return null;
 }
 
+/**
+ * Extracts all emoji characters and tokens from a string.
+ * Supports:
+ * - Comma-separated: "🥺,😭,🤧" or "❤️,🔥,👍"
+ * - Space-separated: "🥺 😭 🤧"
+ * - Concatenated: "🥺😭🤧"
+ */
+function extractReactionEmojis(str) {
+    if (!str || typeof str !== 'string') return [];
+    const clean = str.trim();
+    if (!clean) return [];
+
+    const tokens = clean.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+    const result = [];
+
+    for (const token of tokens) {
+        if (!token) continue;
+        try {
+            const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+            const graphemes = [...seg.segment(token)]
+                .map(s => s.segment)
+                .filter(g => /(\p{Extended_Pictographic}|[\u2000-\u3300])/u.test(g));
+
+            if (graphemes.length > 0) {
+                result.push(...graphemes);
+                continue;
+            }
+        } catch {}
+
+        if (/(\p{Extended_Pictographic}|[\u2000-\u3300])/u.test(token)) {
+            result.push(token);
+        }
+    }
+
+    return result;
+}
+
 function loadArcDataMerged() {
     try {
         const channelMenuCmds = require('../commands/channelMenuCommands');
@@ -419,14 +456,24 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
         return false;
     }
 
+    // Extract configured emojis from arcConf (memory-persistent)
+    let emojiPart = '';
+    if (Array.isArray(arcConf.emojis) && arcConf.emojis.length > 0) {
+        emojiPart = arcConf.emojis.join(',');
+    } else if (arcConf.emoji) {
+        emojiPart = arcConf.emoji;
+    }
+
     const postLink = `https://whatsapp.com/channel/${inviteCode}/${serverId}`;
-    const cmdText = `${config.command || '.chreact'} ${postLink}`;
+    const cmdText = emojiPart
+        ? `${config.command || '.chreact'} ${postLink} ${emojiPart}`
+        : `${config.command || '.chreact'} ${postLink}`;
 
     // Resolve channel-specific target group/chat or fallback to default
     const { targetDestJid, targetName, isTargetGroup, isCustomRoute } = resolveEffectiveTarget(from, inviteCode);
 
     // Also mark in recentRelays so chreactCommand doesn't re-relay this same auto-post
-    recentRelays.set(`${targetDestJid}|${postLink}`, Date.now());
+    recentRelays.set(`${targetDestJid}|${postLink}|${emojiPart}`, Date.now());
 
     try {
         console.log(`[ChannelForwarder] 📢 ARC Post in "${channelName}"! Route: ${isCustomRoute ? '🎯 Custom' : '🌐 Default'} ➔ Sending to "${targetName}" (${targetDestJid}): ${cmdText}`);
@@ -453,7 +500,8 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
 
         await new Promise(r => setTimeout(r, 1000));
         const { chreactCommand } = require('../commands/chreact');
-        await chreactCommand(usedSock, targetDestJid, cmdMsg, [postLink], true, true, true);
+        const cmdArgs = emojiPart ? [postLink, emojiPart] : [postLink];
+        await chreactCommand(usedSock, targetDestJid, cmdMsg, cmdArgs, true, true, true);
         return true;
     } catch (sendErr) {
         console.error('[ChannelForwarder Send Error]:', sendErr.message);
@@ -759,6 +807,15 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
         let destJid = from;
         let destLabel = from.endsWith('@g.us') ? (groupMetadata?.subject || 'WhatsApp Group') : 'Current Chat';
 
+        let customEmojisFromArg = null;
+        if (targetArg) {
+            const ems = extractReactionEmojis(targetArg);
+            if (ems.length > 0) {
+                customEmojisFromArg = ems;
+                targetArg = targetArg.replace(/[\p{Extended_Pictographic}\u2000-\u3300,]+/gu, ' ').trim();
+            }
+        }
+
         if (targetArg) {
             const groupInviteMatch = targetArg.match(/chat\.whatsapp\.com\/([0-9A-Za-z_-]+)/i);
             if (groupInviteMatch) {
@@ -825,6 +882,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
         saveConfig(config);
 
         // 2. Also register in channel_arc.json & save across disk backups
+        let activeEmojis = ['❤️', '🔥', '👍', '😍', '👏'];
         try {
             const channelMenuCmds = require('../commands/channelMenuCommands');
             const liveArcData = channelMenuCmds.loadArcData();
@@ -834,14 +892,19 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
                 liveArcData.channels[targetChannelJid].targetJid = destJid;
                 liveArcData.channels[targetChannelJid].targetName = destLabel;
                 liveArcData.channels[targetChannelJid].targetUpdatedAt = now;
+                if (customEmojisFromArg && customEmojisFromArg.length > 0) {
+                    liveArcData.channels[targetChannelJid].emojis = customEmojisFromArg;
+                }
+                activeEmojis = liveArcData.channels[targetChannelJid].emojis || activeEmojis;
             } else {
+                activeEmojis = (customEmojisFromArg && customEmojisFromArg.length > 0) ? customEmojisFromArg : activeEmojis;
                 const canonicalLink = inviteCode ? `https://whatsapp.com/channel/${inviteCode}` : rawChannelInput;
                 liveArcData.channels[targetChannelJid] = {
                     jid: targetChannelJid,
                     name: channelName,
                     invite: inviteCode,
                     link: canonicalLink,
-                    emojis: ['❤️', '🔥', '👍', '😍', '👏'],
+                    emojis: activeEmojis,
                     count: 0,
                     delayMs: 2000,
                     delayStr: '2s',
@@ -861,6 +924,9 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
         const isDestGroup = destJid.endsWith('@g.us');
         await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
 
+        const emojiDisplay = (activeEmojis && activeEmojis.length > 0) ? activeEmojis.join(' ') : '❤️ 🔥 👍';
+        const autoCmdExample = activeEmojis && activeEmojis.length > 0 ? `${config.command || '.chreact'} <post_link> ${activeEmojis.join(',')}` : `${config.command || '.chreact'} <post_link>`;
+
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🎯 *CHANNEL ARC TARGET LINKED* 〕━━━┈⊷\n` +
                   `┃ ✅ *Status:* Active & Permanently Mapped\n` +
@@ -868,13 +934,14 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
                   `┃ 🆔 *Channel JID:* \`${targetChannelJid}\`\n` +
                   `┃ 📍 *Forward Target:* *${destLabel}*\n` +
                   `┃ 📬 *Target JID:* \`${destJid}\`\n` +
-                  `┃ ⌨️ *Auto Command:* \`${config.command || '.chreact'} <post_link>\`\n` +
+                  `┃ ✨ *Auto Emojis:* ${emojiDisplay}\n` +
+                  `┃ ⌨️ *Auto Command:* \`${autoCmdExample}\`\n` +
                   `┃ 👑 *Set By:* Bot Owner\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                   `💡 *Automatic Routing:* Ab jab bhi *"${channelName}"* me nayi post aayegi:\n` +
-                  `👉 \`${config.command || '.chreact'} <post_link>\` automatic isi *${destLabel}* me aayega!\n\n` +
+                  `👉 \`${autoCmdExample}\` automatic isi *${destLabel}* me aayega aur tamam bots inhi emojis se react karenge!\n\n` +
                   `🔄 *Kisi aur channel ko kisi aur group me set karne ke liye:*\n` +
-                  `👉 Us group me ja kar: \`.set arc <channel_link>\` run karein.\n\n` +
+                  `👉 Us group me ja kar: \`.set arc <channel_link> [emojis]\` run karein.\n\n` +
                   `📋 *Sabhi routes dekhne ke liye:* \`.set arc list\`\n` +
                   `🗑️ *Route khatam karne ke liye:* \`.set arc reset ${targetChannelJid}\`\n\n` +
                   `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴛᴇᴀᴍ-ᴍʀ-sᴀǫɪʙ*`
@@ -1036,8 +1103,26 @@ async function relayChreactToArcTarget(sock, originFrom, targetInfo = {}) {
 
         if (!postLink) return null;
 
+        // Determine emojis to include in relayed command
+        let emojiPart = '';
+        if (Array.isArray(targetInfo.customEmojis) && targetInfo.customEmojis.length > 0) {
+            emojiPart = targetInfo.customEmojis.join(',');
+        } else if (targetInfo.hasCustomEmoji && targetInfo.emoji) {
+            emojiPart = targetInfo.emoji;
+        } else {
+            // Fallback: Check if the channel has .arc emojis configured
+            try {
+                const arcConf = targetInfo.jid ? loadArcChannelConf(targetInfo.jid) : null;
+                if (Array.isArray(arcConf?.emojis) && arcConf.emojis.length > 0) {
+                    emojiPart = arcConf.emojis.join(',');
+                } else if (arcConf?.emoji) {
+                    emojiPart = arcConf.emoji;
+                }
+            } catch {}
+        }
+
         // Prevent duplicate relay for the same target + link within 6 seconds
-        const relayKey = `${targetDestJid}|${postLink}`;
+        const relayKey = `${targetDestJid}|${postLink}|${emojiPart}`;
         const now = Date.now();
         const prevTime = recentRelays.get(relayKey) || 0;
         if (now - prevTime < 6000) {
@@ -1049,7 +1134,9 @@ async function relayChreactToArcTarget(sock, originFrom, targetInfo = {}) {
             recentRelays.delete(firstKey);
         }
 
-        const cmdText = `${config.command || '.chreact'} ${postLink}`;
+        const cmdText = emojiPart
+            ? `${config.command || '.chreact'} ${postLink} ${emojiPart}`
+            : `${config.command || '.chreact'} ${postLink}`;
         const preferredDigits = config.senderAccount || '923438673242';
 
         console.log(`[RelayChreact] 🚀 Relaying user .chreact to target (${targetDestJid}): ${cmdText}`);

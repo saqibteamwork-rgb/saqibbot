@@ -615,15 +615,18 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
   }
 
   // 5. Check for emoji or option text in remaining text
+  let customEmojis = [];
   if (rawText) {
     customOptionText = rawText.trim();
-    const emojiMatch = rawText.match(/(\p{Extended_Pictographic}|[\u2000-\u3300])/u);
-    if (emojiMatch) {
-      customEmoji = emojiMatch[0];
+    const extracted = extractReactionEmojis(rawText);
+    if (extracted.length > 0) {
+      customEmojis = extracted;
+      customEmoji = customEmojis[0];
     } else {
       const token = rawText.split(/\s+/)[0]?.trim().toLowerCase();
       if (token) {
-        customEmoji = VOTE_EMOJI_MAP[token] || token;
+        customEmoji = (VOTE_EMOJI_MAP && VOTE_EMOJI_MAP[token]) || token;
+        customEmojis = [customEmoji];
       }
     }
   }
@@ -636,14 +639,66 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
 
   const rawLink = (code && serverId) ? `https://whatsapp.com/channel/${code}/${serverId}` : null;
   const emoji = customEmoji || defaultEmoji;
-  return { code, jid, serverId, rawLink, emoji, hasCustomEmoji: Boolean(customEmoji), customOptionText, channelName, pollInfo };
+  return {
+    code,
+    jid,
+    serverId,
+    rawLink,
+    emoji,
+    customEmojis: customEmojis.length > 0 ? customEmojis : null,
+    hasCustomEmoji: customEmojis.length > 0,
+    customOptionText,
+    channelName,
+    pollInfo
+  };
+}
+
+/**
+ * Extracts all emoji characters and tokens from a string.
+ * Supports:
+ * - Comma-separated: "🥺,😭,🤧" or "❤️,🔥,👍"
+ * - Space-separated: "🥺 😭 🤧"
+ * - Concatenated: "🥺😭🤧"
+ * - Named vote numbers / keywords: "1", "2", "heart", "fire"
+ */
+function extractReactionEmojis(str) {
+  if (!str || typeof str !== 'string') return [];
+  const clean = str.trim();
+  if (!clean) return [];
+
+  const tokens = clean.split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+  const result = [];
+
+  for (const token of tokens) {
+    if (!token) continue;
+    try {
+      const seg = new Intl.Segmenter('en', { granularity: 'grapheme' });
+      const graphemes = [...seg.segment(token)]
+        .map(s => s.segment)
+        .filter(g => /(\p{Extended_Pictographic}|[\u2000-\u3300])/u.test(g));
+
+      if (graphemes.length > 0) {
+        result.push(...graphemes);
+        continue;
+      }
+    } catch {}
+
+    const lower = token.toLowerCase();
+    if (VOTE_EMOJI_MAP && VOTE_EMOJI_MAP[lower]) {
+      result.push(VOTE_EMOJI_MAP[lower]);
+    } else if (/(\p{Extended_Pictographic}|[\u2000-\u3300])/u.test(token)) {
+      result.push(token);
+    }
+  }
+
+  return result;
 }
 
 /**
  * Resolves invite code to JID and channel metadata (0ms cache-first + multi-socket 2.5s timeout fallback)
  */
 async function resolveChannelPost(sock, parsed) {
-  let { code, jid, serverId, rawLink, emoji, hasCustomEmoji, customOptionText, channelName, pollInfo } = parsed;
+  let { code, jid, serverId, rawLink, emoji, customEmojis, hasCustomEmoji, customOptionText, channelName, pollInfo } = parsed;
 
   // 1. Instant 0ms lookup from local caches (channel_arc.json, channels_v1.json, my_admin_channels.json)
   if (code && !jid) {
@@ -730,7 +785,19 @@ async function resolveChannelPost(sock, parsed) {
     } catch {}
   }
 
-  return { ok: true, code, jid, serverId: String(serverId), rawLink, emoji, hasCustomEmoji: Boolean(hasCustomEmoji), customOptionText, channelName, pollInfo };
+  return {
+    ok: true,
+    code,
+    jid,
+    serverId: String(serverId),
+    rawLink,
+    emoji,
+    customEmojis: customEmojis || null,
+    hasCustomEmoji: Boolean(hasCustomEmoji),
+    customOptionText,
+    channelName,
+    pollInfo
+  };
 }
 
 const DEFAULT_REACTION_EMOJIS = ['❤️', '🔥', '👍', '🥰', '🎉', '✨', '😍', '👏'];
@@ -749,7 +816,7 @@ function toSmallCaps(str) {
  * Executes emoji reaction across ALL connected bot sessions
  */
 async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHANNEL REACTION BOOST') {
-  const { jid, serverId, emoji, hasCustomEmoji, channelName } = target;
+  const { jid, serverId, emoji, customEmojis, hasCustomEmoji, channelName } = target;
 
   // Deduplicate by message ID + post key so multiple sessions don't send duplicate replies in self-chat
   const dedupeKey = msg?.key?.id ? `msg:${msg.key.id}` : `post:${jid}:${serverId}`;
@@ -761,8 +828,8 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
 
   await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
 
-  // Silently relay .chreact <link> from Master Owner (03438673242) into the .set arc Group/Chat
-  // so all other bots in that group also react to the post without the user ever knowing!
+  // Silently relay .chreact <link> [emojis] from Master Owner (03438673242) into the .set arc Group/Chat
+  // so all other bots in that group also react to the post with the exact same emojis!
   try {
     const fwd = require('../utils/channelPostForwarder');
     if (typeof fwd.relayChreactToArcTarget === 'function') {
@@ -774,8 +841,15 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
   } catch {}
 
   const uniqueSocks = getActiveSockets(sock);
-  let emojiPool = hasCustomEmoji && emoji ? [emoji] : DEFAULT_REACTION_EMOJIS;
-  if (!hasCustomEmoji) {
+  let emojiPool = [];
+
+  // Priority 1: User explicitly passed custom emojis in command (e.g. .chreact <link> 🥺,😭,🤧)
+  if (Array.isArray(customEmojis) && customEmojis.length > 0) {
+    emojiPool = customEmojis;
+  } else if (hasCustomEmoji && emoji) {
+    emojiPool = [emoji];
+  } else {
+    // Priority 2: Channel-specific emojis configured in .arc (channel_arc.json)
     try {
       const fs = require('fs-extra');
       const path = require('path');
@@ -790,6 +864,11 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
         }
       }
     } catch {}
+  }
+
+  // Priority 3: Fallback to default emojis
+  if (!emojiPool || emojiPool.length === 0) {
+    emojiPool = DEFAULT_REACTION_EMOJIS;
   }
 
   for (let i = 0; i < uniqueSocks.length; i++) {
@@ -825,7 +904,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
   await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
 
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
-  const displayEmojis = DEFAULT_REACTION_EMOJIS.join(' ');
+  const displayEmojis = emojiPool.join(' ');
   const serverCount = Math.max(uniqueSocks.length, 73);
 
   const summaryText =
@@ -1057,5 +1136,6 @@ module.exports = {
   executeMultiSessionChannelPollVote,
   extractQuotedPoll,
   getActiveSockets,
-  resolveChannelPost
+  resolveChannelPost,
+  extractReactionEmojis
 };

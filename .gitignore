@@ -38,6 +38,7 @@ data/stickers/
 data/saved_stickers.json
 data/bot_data.json
 data/channel_arc.json
+data/channel_forwarder.json
 data/polls.json
 data/autoread.json
 data/messageLogs/
