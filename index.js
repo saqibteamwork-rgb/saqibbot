@@ -2278,8 +2278,11 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'delpm': case 'pmdel': case 'rmpm': case 'delprem':
                                             await ownerManager.delpmCommand(this.sock, from, msg, isOwner, args, groupMetadata);
                                             break;
-                                        case 'pmlist': case 'listpm': case 'premlist':
+                                        case 'pmlist': case 'listpm': case 'premlist': case 'listprem':
                                             await ownerManager.pmlistCommand(this.sock, from, msg, isOwner);
+                                            break;
+                                        case 'checkprem': case 'myprem': case 'preminfo': case 'pmcheck':
+                                            await ownerManager.checkpremCommand(this.sock, from, msg, isOwner, args, groupMetadata);
                                             break;
                                         case 'cs': case 'checksession': case 'checksessions': case 'sessions': case 'paired': case 'botsessions':
                                             await ownerManager.checkSessionsCommand(this.sock, from, msg, isOwner, args, sessions, AUTH_DIR);

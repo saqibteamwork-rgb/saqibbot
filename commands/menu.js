@@ -116,7 +116,7 @@ const CATEGORIES = {
         'trackip', 'truecaller', 'vcf', 'was', 'wiki'
     ],
     'GENERAL': [
-        'alive', 'botstatus', 'calc', 'dp', 'help', 'myprofile', 'owner',
+        'alive', 'botstatus', 'calc', 'checkprem', 'dp', 'help', 'myprem', 'myprofile', 'owner',
         'pair', 'ping', 'profileinfo', 'resetmenu', 'runtime', 'setbotname',
         'setmenupic', 'setownername', 'speed', 'tmp', 'tmpib',
         'tmprst', 'translate', 'vv', 'wame', 'weather'
@@ -149,9 +149,9 @@ const CATEGORIES = {
         'azkar', 'dua', 'hadith', 'prayertime', 'quran', 'tasbeeh'
     ],
     'OWNER': [
-        'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'crashgrup',
-        'cs', 'delafc', 'delajg', 'delcs', 'delprem', 'delvcontact', 'fullpp',
-        'iosbug', 'leaveall', 'leftall', 'mode', 'ownadd', 'owndel', 'ownlist', 'prem', 'premlist',
+        'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'crashgrup',
+        'cs', 'delafc', 'delajg', 'delcs', 'delpm', 'delprem', 'delvcontact', 'fullpp',
+        'iosbug', 'leaveall', 'leftall', 'mode', 'ownadd', 'owndel', 'ownlist', 'pmlist', 'prem', 'premlist',
         'resetmenu', 'restart', 'richhtml', 'setbotname', 'setmenupic',
         'setownername', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
     ]

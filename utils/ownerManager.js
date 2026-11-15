@@ -710,9 +710,16 @@ function checkIsPremium(ctx) {
 
     const { phones, lids } = collectSenderCandidates(ctx);
     const data = loadOwnersData();
+    const now = Date.now();
 
     for (const pm of (data.premium || [])) {
         if (!pm) continue;
+
+        // Skip expired subscriptions
+        if (pm.expiresAt && typeof pm.expiresAt === 'number' && pm.expiresAt <= now) {
+            continue;
+        }
+
         const pDigits = normalizePhoneDigits(pm.digits);
         const pLast10 = pDigits.length >= 10 ? pDigits.slice(-10) : '';
         const pLid = extractLidDigits(pm.lid || '', true) || (pDigits ? getLinkedLidForPhone(pDigits, ctx.sock) : '');
@@ -1086,9 +1093,139 @@ async function ownlistCommand(sock, from, msg, isOwner) {
     }, { quoted: msg });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DURATION & EXPIRATION HELPERS FOR TIMED PREMIUM MEMBERSHIP
+// ─────────────────────────────────────────────────────────────────────────────
+
+function extractDurationFromArgs(args) {
+    if (!args || !args.length) return { durationArg: null, cleanArgs: [] };
+    let durationArg = null;
+    const cleanArgs = [];
+
+    const durationRegex = /^(\d+)\s*(s|m|h|d|w|mo|month|months|y|year|years)?$/i;
+    const permRegex = /^(perm|permanent|unlimited|lifetime|forever|inf|infinity)$/i;
+
+    for (let i = 0; i < args.length; i++) {
+        const arg = String(args[i]).trim();
+        if (!durationArg && (permRegex.test(arg) || (durationRegex.test(arg) && !/^\d{9,16}$/.test(arg)))) {
+            // Also check two-word duration e.g. '30' 'days' or '1' 'month'
+            if (/^\d+$/.test(arg) && i + 1 < args.length && /^(days?|months?|weeks?|hours?|years?)$/i.test(args[i + 1])) {
+                durationArg = `${arg} ${args[i + 1]}`;
+                i++;
+                continue;
+            }
+            durationArg = arg;
+        } else {
+            cleanArgs.push(arg);
+        }
+    }
+
+    return { durationArg, cleanArgs };
+}
+
+function parseDuration(input) {
+    if (!input) {
+        const ms = 30 * 24 * 60 * 60 * 1000;
+        return { ms, label: '30 Days (1 Month)', expiresAt: Date.now() + ms, isPermanent: false };
+    }
+
+    const str = String(input).trim().toLowerCase();
+    if (['perm', 'permanent', 'unlimited', 'lifetime', 'forever', 'inf', 'infinity'].includes(str)) {
+        return { ms: null, label: 'Permanent (Lifetime)', expiresAt: null, isPermanent: true };
+    }
+
+    const match = /^(\d+)\s*([a-z]+)?$/i.exec(str);
+    if (!match) {
+        const ms = 30 * 24 * 60 * 60 * 1000;
+        return { ms, label: '30 Days (1 Month)', expiresAt: Date.now() + ms, isPermanent: false };
+    }
+
+    const count = parseInt(match[1], 10);
+    const rawUnit = (match[2] || 'd').toLowerCase();
+
+    let ms = 0;
+    let label = '';
+
+    if (rawUnit === 's') {
+        ms = count * 1000;
+        label = `${count} Second${count > 1 ? 's' : ''}`;
+    } else if (rawUnit === 'm' || rawUnit === 'mo' || rawUnit.startsWith('month')) {
+        ms = count * 30 * 24 * 60 * 60 * 1000;
+        label = `${count} Month${count > 1 ? 's' : ''} (${count * 30} Days)`;
+    } else if (rawUnit === 'h' || rawUnit.startsWith('hour') || rawUnit === 'hr') {
+        ms = count * 60 * 60 * 1000;
+        label = `${count} Hour${count > 1 ? 's' : ''}`;
+    } else if (rawUnit === 'w' || rawUnit.startsWith('week')) {
+        ms = count * 7 * 24 * 60 * 60 * 1000;
+        label = `${count} Week${count > 1 ? 's' : ''} (${count * 7} Days)`;
+    } else if (rawUnit === 'y' || rawUnit.startsWith('year')) {
+        ms = count * 365 * 24 * 60 * 60 * 1000;
+        label = `${count} Year${count > 1 ? 's' : ''}`;
+    } else {
+        ms = count * 24 * 60 * 60 * 1000;
+        label = `${count} Day${count > 1 ? 's' : ''}`;
+    }
+
+    return {
+        ms,
+        label,
+        expiresAt: Date.now() + ms,
+        isPermanent: false
+    };
+}
+
+function formatRemainingTime(expiresAt) {
+    if (!expiresAt) return { text: '♾️ Permanent (Lifetime)', isExpired: false, daysLeft: 9999 };
+    const now = Date.now();
+    const diff = expiresAt - now;
+
+    if (diff <= 0) {
+        const agoMs = Math.abs(diff);
+        const hoursAgo = Math.floor(agoMs / (60 * 60 * 1000));
+        const daysAgo = Math.floor(hoursAgo / 24);
+        const timeAgoStr = daysAgo > 0 ? `${daysAgo} day${daysAgo > 1 ? 's' : ''} ago` : `${hoursAgo} hour${hoursAgo > 1 ? 's' : ''} ago`;
+        return { text: `🔴 Expired (${timeAgoStr})`, isExpired: true, daysLeft: 0 };
+    }
+
+    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+    const minutes = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+
+    let parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0 || days > 0) parts.push(`${hours}h`);
+    parts.push(`${minutes}m`);
+
+    return {
+        text: `🟢 ${parts.join(' ')} remaining`,
+        isExpired: false,
+        days,
+        hours,
+        minutes
+    };
+}
+
+function formatExpiryDate(timestamp) {
+    if (!timestamp) return 'Permanent (Never Expires)';
+    try {
+        const d = new Date(timestamp);
+        return d.toLocaleString('en-US', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: true,
+            timeZone: 'Asia/Karachi'
+        });
+    } catch {
+        return new Date(timestamp).toISOString().slice(0, 10);
+    }
+}
+
 /**
- * Command: .addpm / .pmadd [number | @mention | reply]
- * Adds a user to Premium Members so they can use .arc and .chreact (which relays via .set arc)
+ * Command: .addpm / .addprem / .pmadd [number | @mention | reply] [duration]
+ * Adds a user to Premium Members with an expiration period (e.g. 30d, 1m, 7d, perm).
  */
 async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
     if (markCommandHandled(msg?.key?.id)) return;
@@ -1104,24 +1241,38 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         }, { quoted: msg });
     }
 
-    const target = await extractTargetUser(sock, msg, args, groupMetadata, from);
+    const { durationArg, cleanArgs } = extractDurationFromArgs(args);
+    const target = await extractTargetUser(sock, msg, cleanArgs, groupMetadata, from);
+
     if (!target) {
         return await sock.sendMessage(from, {
             text: `╭━━━〔 💎 *ADD PREMIUM MEMBER (.addpm)* 〕━━━┈⊷\n` +
-                  `┃ 📌 *Kaise Add Karein:*\n` +
-                  `┃ 1️⃣ Kisi ke message par *Reply* kar ke:\n` +
-                  `┃    👉 \`.addpm\`\n` +
-                  `┃ 2️⃣ Group me *Mention* kar ke:\n` +
-                  `┃    👉 \`.addpm @user\`\n` +
-                  `┃ 3️⃣ *Number* likh kar:\n` +
-                  `┃    👉 \`.addpm 03001234567\`\n` +
+                  `┃ 📌 *Kaise Add Karein (Days / Months ke sath):*\n` +
+                  `┃ 1️⃣ Reply kar ke duration dein:\n` +
+                  `┃    👉 \`.addpm 30d\` (30 Days)\n` +
+                  `┃    👉 \`.addpm 1m\` (1 Month)\n` +
+                  `┃    👉 \`.addpm perm\` (Lifetime)\n` +
                   `┃\n` +
-                  `┃ 🗑️ *Remove:* \`.delpm <number/@user/reply>\`\n` +
-                  `┃ 📋 *List:* \`.pmlist\`\n` +
-                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                  `┃ 2️⃣ Mention kar ke duration dein:\n` +
+                  `┃    👉 \`.addpm @user 7d\`\n` +
+                  `┃    👉 \`.addpm @user 1m\`\n` +
+                  `┃\n` +
+                  `┃ 3️⃣ Number likh kar:\n` +
+                  `┃    👉 \`.addpm 03001234567 30d\`\n` +
+                  `┃\n` +
+                  `┃ ⏱️ *Supported Units:*\n` +
+                  `┃ • \`7d\` / \`15d\` / \`30d\` (Days)\n` +
+                  `┃ • \`1m\` / \`2m\` / \`3m\` (Months)\n` +
+                  `┃ • \`1y\` (Year) • \`perm\` (Lifetime)\n` +
+                  `┃\n` +
+                  `┃ 🔍 *Check Status:* \`.checkprem\`\n` +
+                  `┃ 📋 *List:* \`.pmlist\` • 🗑️ *Remove:* \`.delpm\`\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
         }, { quoted: msg });
     }
 
+    const durationInfo = parseDuration(durationArg);
     const data = loadOwnersData();
     const targetLast10 = target.digits && target.digits.length >= 10 ? target.digits.slice(-10) : '';
     const existing = data.premium.find(p =>
@@ -1129,10 +1280,25 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         (target.lid && p.lid === target.lid)
     );
 
+    let newExpiresAt = null;
+    let isExtended = false;
+
+    if (durationInfo.isPermanent) {
+        newExpiresAt = null;
+    } else if (existing?.expiresAt && existing.expiresAt > Date.now()) {
+        newExpiresAt = existing.expiresAt + durationInfo.ms;
+        isExtended = true;
+    } else {
+        newExpiresAt = Date.now() + durationInfo.ms;
+    }
+
     if (existing) {
         if (target.digits && !existing.digits) existing.digits = target.digits;
         if (target.lid && !existing.lid) existing.lid = target.lid;
         if (target.digits) existing.jid = `${target.digits}@s.whatsapp.net`;
+        existing.addedAt = Date.now();
+        existing.durationLabel = durationInfo.label;
+        existing.expiresAt = newExpiresAt;
         saveOwnersData(data);
     } else {
         data.premium.push({
@@ -1140,7 +1306,9 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
             lid: target.lid,
             jid: target.jid,
             addedBy: MASTER_OWNER_DIGITS,
-            addedAt: Date.now()
+            addedAt: Date.now(),
+            durationLabel: durationInfo.label,
+            expiresAt: newExpiresAt
         });
         saveOwnersData(data);
     }
@@ -1149,16 +1317,23 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
 
     const mentionList = target.jid ? [target.jid] : [];
     const tagDisplay = target.digits ? `@${target.digits}` : target.display;
+    const expiryStr = formatExpiryDate(newExpiresAt);
+    const remInfo = formatRemainingTime(newExpiresAt);
+    const actionLabel = isExtended ? 'Premium Extended (Time Added)' : 'Premium Activated';
 
     return await sock.sendMessage(from, {
-        text: `╭━━━〔 💎 *NEW PREMIUM MEMBER ADDED* 〕━━━┈⊷\n` +
-              `┃ ✅ *Status:* Premium Activated\n` +
+        text: `╭━━━〔 💎 *PREMIUM MEMBER SET* 〕━━━┈⊷\n` +
+              `┃ ✅ *Status:* ${actionLabel}\n` +
               `┃ 👤 *Member:* ${tagDisplay}\n` +
               `┃ 🆔 *ID:* \`${target.digits || target.lid}\`\n` +
+              `┃ ⏱️ *Duration:* ${durationInfo.label}\n` +
+              `┃ ⏳ *Time Left:* ${remInfo.text}\n` +
+              `┃ 📅 *Expiry Date:* ${expiryStr}\n` +
+              `┃\n` +
               `┃ 🔓 *Unlocked Features:*\n` +
-              `┃    • \`.arc <channel_link>\` (Auto-React)\n` +
+              `┃    • \`.chreact <post_link>\` (Multi-Server Cloud Boost)\n` +
+              `┃    • \`.arc <channel_link>\` (Auto Post Reaction)\n` +
               `┃    • \`.del arc <channel_link>\`\n` +
-              `┃    • \`.chreact <post_link>\` (Multi-Server Cloud)\n` +
               `┃    • \`.chvote <post_link> 1/2\`\n` +
               `┃ 👑 *Approved By:* MR SAQIB\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
@@ -1168,7 +1343,7 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
 }
 
 /**
- * Command: .delpm / .delprem / .pmdel [number | @mention | reply | all]
+ * Command: .delpm / .delprem / .pmdel [number | @mention | reply | all | expired]
  */
 async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
     if (markCommandHandled(msg?.key?.id)) return;
@@ -1181,6 +1356,28 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
     }
 
     const data = loadOwnersData();
+
+    // Support: .delprem expired / .delpm expired
+    if (args[0] && args[0].toLowerCase() === 'expired') {
+        const now = Date.now();
+        const beforeCount = data.premium.length;
+        data.premium = data.premium.filter(p => !p.expiresAt || p.expiresAt > now);
+        const removedCount = beforeCount - data.premium.length;
+        if (removedCount === 0) {
+            return await sock.sendMessage(from, {
+                text: `ℹ️ *Koi bhi expired premium member nahi mila.* Sabhi active hain!`
+            }, { quoted: msg });
+        }
+        saveOwnersData(data);
+        await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🗑️ *EXPIRED MEMBERS CLEANED* 〕━━━┈⊷\n` +
+                  `┃ ✅ Tamam *${removedCount}* Expired members list se saaf kar diye gaye!\n` +
+                  `┃ 🟢 *Baaqi Active Members:* ${data.premium.length}\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    }
 
     // Support: .delprem all / .delpm all
     if (args[0] && args[0].toLowerCase() === 'all') {
@@ -1203,7 +1400,8 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         }, { quoted: msg });
     }
 
-    const target = await extractTargetUser(sock, msg, args, groupMetadata, from);
+    const { cleanArgs } = extractDurationFromArgs(args);
+    const target = await extractTargetUser(sock, msg, cleanArgs.length ? cleanArgs : args, groupMetadata, from);
     if (!target) {
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🗑️ *DELETE PREMIUM (.delprem)* 〕━━━┈⊷\n` +
@@ -1211,7 +1409,8 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
                   `┃ 1️⃣ Reply kar ke: \`.delprem\`\n` +
                   `┃ 2️⃣ Mention kar ke: \`.delprem @user\`\n` +
                   `┃ 3️⃣ Number likh kar: \`.delprem 03001234567\`\n` +
-                  `┃ 4️⃣ Sab ko hatane ke liye: \`.delprem all\`\n` +
+                  `┃ 4️⃣ Expired saaf karne ke liye: \`.delprem expired\`\n` +
+                  `┃ 5️⃣ Sab ko hatane ke liye: \`.delprem all\`\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: msg });
     }
@@ -1244,7 +1443,7 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
 }
 
 /**
- * Command: .pmlist / .premlist
+ * Command: .pmlist / .premlist / .listprem
  */
 async function pmlistCommand(sock, from, msg, isOwner) {
     if (markCommandHandled(msg?.key?.id)) return;
@@ -1253,26 +1452,174 @@ async function pmlistCommand(sock, from, msg, isOwner) {
     }
 
     const data = loadOwnersData();
-    if (!data.premium.length) {
+    if (!data.premium || !data.premium.length) {
         return await sock.sendMessage(from, {
             text: `╭━━━〔 💎 *PREMIUM MEMBERS LIST* 〕━━━┈⊷\n` +
                   `┃ 📭 Abhi koi Premium Member add nahi hai.\n` +
-                  `┃ 👉 Add karne ke liye: \`.addpm <number/@user/reply>\`\n` +
+                  `┃ 👉 Add karne ke liye: \`.addpm <number/@user/reply> [duration]\`\n` +
+                  `┃ 💡 Example: \`.addpm 03001234567 30d\`\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: msg });
     }
 
+    let activeCount = 0;
+    let expiredCount = 0;
     let listText = '';
+
     data.premium.forEach((p, i) => {
         const label = p.digits ? `+${p.digits}` : `LID:${p.lid}`;
-        listText += `┃ 💎 *${i + 1}. ${label}* (Premium)\n`;
+        const rem = formatRemainingTime(p.expiresAt);
+        const expStr = formatExpiryDate(p.expiresAt);
+
+        if (rem.isExpired) {
+            expiredCount++;
+            listText += `┃ 🔴 *${i + 1}. ${label}*\n` +
+                        `┃    ↳ Status: Expired\n` +
+                        `┃    ↳ Expiry: ${expStr}\n`;
+        } else {
+            activeCount++;
+            const statusIcon = p.expiresAt ? '🟢' : '♾️';
+            listText += `┃ ${statusIcon} *${i + 1}. ${label}*\n` +
+                        `┃    ↳ Remaining: ${rem.text}\n` +
+                        `┃    ↳ Expiry: ${expStr}\n`;
+        }
     });
 
     return await sock.sendMessage(from, {
-        text: `╭━━━〔 💎 *PREMIUM MEMBERS (${data.premium.length})* 〕━━━┈⊷\n` +
-              `${listText}` +
+        text: `╭━━━〔 💎 *PREMIUM MEMBERS LIST* 〕━━━┈⊷\n` +
+              `┃ 📊 *Summary:* 🟢 ${activeCount} Active • 🔴 ${expiredCount} Expired\n` +
+              `┃\n` +
+              listText +
+              `┃\n` +
+              `┃ 💡 *Add/Renew:* \`.addpm <user> <30d/1m/perm>\`\n` +
+              `┃ 🧹 *Clean Expired:* \`.delpm expired\`\n` +
+              `┃ 🗑️ *Remove:* \`.delpm <user>\`\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+}
+
+/**
+ * Command: .checkprem / .myprem / .preminfo
+ * Anyone can check their own status, or owner can check any user's status!
+ */
+async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
+    if (markCommandHandled(msg?.key?.id)) return;
+
+    let target = null;
+    if (args.length > 0) {
+        target = await extractTargetUser(sock, msg, args, groupMetadata, from);
+    } else {
+        const isGroup = Boolean(from && String(from).endsWith('@g.us'));
+        const isMe = Boolean(msg?.key?.fromMe);
+        const rawSender = msg?.key?.participant || msg?.participant || (isMe ? sock?.user?.id : from) || '';
+        const digits = normalizePhoneDigits(rawSender);
+        const lid = extractLidDigits(rawSender, true);
+        target = {
+            digits,
+            lid,
+            jid: digits ? `${digits}@s.whatsapp.net` : (rawSender.endsWith('@lid') ? rawSender : `${rawSender}@s.whatsapp.net`),
+            display: digits ? `+${digits}` : (lid ? `LID:${lid}` : 'User')
+        };
+    }
+
+    if (!target) {
+        return await sock.sendMessage(from, {
+            text: `❌ User detect nahi ho saka. \`.checkprem @user\` likhein ya direct \`.checkprem\` bhejein.`
+        }, { quoted: msg });
+    }
+
+    const isMaster = (target.digits && (target.digits === MASTER_OWNER_DIGITS || target.digits.endsWith(MASTER_LAST10)));
+    if (isMaster) {
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 👑 *MEMBERSHIP STATUS* 〕━━━┈⊷\n` +
+                  `┃ 👤 *User:* ${target.display}\n` +
+                  `┃ 👑 *Rank:* Master Bot Owner\n` +
+                  `┃ 🟢 *Status:* Active\n` +
+                  `┃ ♾️ *Duration:* Lifetime Unlimited\n` +
+                  `┃ 🔓 *All Premium & Owner Controls Active*\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
+            mentions: target.jid ? [target.jid] : []
+        }, { quoted: msg });
+    }
+
+    const data = loadOwnersData();
+    const targetLast10 = target.digits && target.digits.length >= 10 ? target.digits.slice(-10) : '';
+
+    const isCoOwner = (data.owners || []).some(o =>
+        (target.digits && o.digits && (o.digits === target.digits || (targetLast10 && o.digits.endsWith(targetLast10)))) ||
+        (target.lid && o.lid === target.lid)
+    );
+    if (isCoOwner) {
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🛡️ *MEMBERSHIP STATUS* 〕━━━┈⊷\n` +
+                  `┃ 👤 *User:* ${target.display}\n` +
+                  `┃ 🛡️ *Rank:* Bot Co-Owner\n` +
+                  `┃ 🟢 *Status:* Active\n` +
+                  `┃ ♾️ *Duration:* Lifetime Unlimited\n` +
+                  `┃ 🔓 *All Premium Features Unlocked*\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
+            mentions: target.jid ? [target.jid] : []
+        }, { quoted: msg });
+    }
+
+    const pm = (data.premium || []).find(p =>
+        (target.digits && p.digits && (p.digits === target.digits || (targetLast10 && p.digits.endsWith(targetLast10)))) ||
+        (target.lid && p.lid === target.lid)
+    );
+
+    if (pm) {
+        const rem = formatRemainingTime(pm.expiresAt);
+        const expStr = formatExpiryDate(pm.expiresAt);
+
+        if (rem.isExpired) {
+            return await sock.sendMessage(from, {
+                text: `╭━━━〔 💎 *MEMBERSHIP STATUS* 〕━━━┈⊷\n` +
+                      `┃ 👤 *User:* ${target.display}\n` +
+                      `┃ 🏷️ *Plan:* Premium Member (Expired)\n` +
+                      `┃ 🔴 *Status:* ${rem.text}\n` +
+                      `┃ 📅 *Expired On:* ${expStr}\n` +
+                      `┃\n` +
+                      `┃ 🔄 *Renew karane ke liye rabta karein:*\n` +
+                      `┃ 👉 *03438673242 (MR SAQIB)*\n` +
+                      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                      `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
+                mentions: target.jid ? [target.jid] : []
+            }, { quoted: msg });
+        }
+
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 💎 *MEMBERSHIP STATUS* 〕━━━┈⊷\n` +
+              `┃ 👤 *User:* ${target.display}\n` +
+              `┃ 🏷️ *Plan:* Premium Member\n` +
+              `┃ 🟢 *Status:* Active\n` +
+              `┃ ⏳ *Time Left:* ${rem.text}\n` +
+              `┃ 📅 *Expires:* ${expStr}\n` +
+              `┃ ⏱️ *Original Duration:* ${pm.durationLabel || 'Custom'}\n` +
+              `┃ 🔓 *Unlocked Features:*\n` +
+              `┃    • Multi-Bot Channel Reaction Boost (50+ Bots)\n` +
+              `┃    • Auto Post Reaction (.set arc)\n` +
+              `┃    • Channel Poll Voting (.chvote)\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
+            mentions: target.jid ? [target.jid] : []
+        }, { quoted: msg });
+    }
+
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 👤 *MEMBERSHIP STATUS* 〕━━━┈⊷\n` +
+              `┃ 👤 *User:* ${target.display}\n` +
+              `┃ 🏷️ *Plan:* Free User\n` +
+              `┃ ⚪ *Status:* No Active Premium\n` +
+              `┃\n` +
+              `┃ 👑 *50+ Multi-Bot Boost & Auto-Reaction ke liye*\n` +
+              `┃ *Premium Access hasil karein:*\n` +
+              `┃ 👉 *03438673242 (MR SAQIB)*\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
+        mentions: target.jid ? [target.jid] : []
     }, { quoted: msg });
 }
 
@@ -1422,6 +1769,7 @@ module.exports = {
     addpmCommand,
     delpmCommand,
     pmlistCommand,
+    checkpremCommand,
     checkSessionsCommand,
     delSessionCommand
 };
