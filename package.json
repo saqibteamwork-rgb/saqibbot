@@ -12,9 +12,14 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "@jerrycoder/instagram-api": "^2.5.9",
+    "@mrnima/instagram-downloader": "^1.0.0",
+    "@renpwn/fb-downloader": "^1.0.16",
     "@vitalets/google-translate-api": "^9.2.1",
     "@whiskeysockets/baileys": "^7.0.0-rc10",
+    "ab-downloader": "^2.0.0",
     "axios": "^1.6.0",
+    "cakkatrok-instagram-downloader": "^2.0.2",
     "cheerio": "^1.2.0",
     "dotenv": "^16.6.1",
     "express": "^4.22.2",
@@ -37,7 +42,9 @@
     "qrcode-terminal": "^0.12.0",
     "ruhend-scraper": "^10.0.3",
     "sharp": "^0.34.5",
+    "snapsave-media-downloader": "^2.5.1",
     "socket.io": "^4.8.3",
+    "ultra-igdl": "^1.0.3",
     "wa-sticker-formatter": "^4.4.4",
     "yt-search": "^2.13.1",
     "ytdl-lite": "^1.0.1"
