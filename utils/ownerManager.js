@@ -78,7 +78,25 @@ function extractLidDigits(raw, allowBareDigits = false) {
     return d.length >= 5 ? d : '';
 }
 
+let lastOwnersCheckTime = 0;
+let debouncedSaveTimer = null;
+
+function debouncedSaveOwnersData(data) {
+    if (debouncedSaveTimer) return;
+    debouncedSaveTimer = setTimeout(() => {
+        debouncedSaveTimer = null;
+        try {
+            saveOwnersData(cachedOwnersData || data);
+        } catch (_) {}
+    }, 2000);
+}
+
 function loadOwnersData() {
+    const now = Date.now();
+    if (cachedOwnersData && (now - lastOwnersCheckTime < 3000)) {
+        return cachedOwnersData;
+    }
+    lastOwnersCheckTime = now;
     try {
         const primaryExists = fs.existsSync(OWNERS_FILE);
         const backupExists = fs.existsSync(OWNERS_AUTH_BACKUP);
@@ -244,7 +262,7 @@ function learnIdentityMapping(phoneInput, lidInput) {
     }
 
     if (changed) {
-        saveOwnersData(data);
+        debouncedSaveOwnersData(data);
     }
     return true;
 }
@@ -511,6 +529,8 @@ function registerSessionIdentity(sock) {
  * Collects all candidate Phone Numbers and LIDs for a message sender
  */
 function collectSenderCandidates(ctx = {}) {
+    if (ctx && ctx._candidates) return ctx._candidates;
+
     const {
         sock,
         msg,
@@ -610,10 +630,14 @@ function collectSenderCandidates(ctx = {}) {
         learnIdentityMapping([...phoneSet][0], [...lidSet][0]);
     }
 
-    return {
+    const result = {
         phones: [...phoneSet],
         lids: [...lidSet]
     };
+    if (ctx && typeof ctx === 'object') {
+        ctx._candidates = result;
+    }
+    return result;
 }
 
 /**

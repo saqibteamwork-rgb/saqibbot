@@ -158,6 +158,8 @@ const { executePlugin } = require('./lib/pluginRunner');
 const groupMenuCmds = require('./commands/groupMenuCommands');
 const channelMenuCmds = require('./commands/channelMenuCommands');
 const { gcstatusCommand } = require('./commands/gcstatus');
+const { getProfilePictureUrl } = require('./utils/pfpFetcher');
+const { isDetailsRequest, sendCommandDetails } = require('./commands/commandDetails');
 
 const app = express();
 const server = http.createServer(app);
@@ -512,7 +514,6 @@ app.get('/api/dp', async (req, res) => {
         const rawNum = (req.query.num || req.query.number || '').toString().trim();
         const num = rawNum.replace(/[^0-9]/g, '');
         if (!num) return res.status(400).json({ success: false, error: 'Valid number required' });
-        const { getProfilePictureUrl } = require('./utils/pfpFetcher');
         const primarySock = global.ProBoySessionManager?.getActiveSocks()?.[0];
         const pfp = await getProfilePictureUrl(primarySock, `${num}@s.whatsapp.net`);
         return res.json({ success: true, number: num, pfp });
@@ -679,8 +680,10 @@ function saveBotData() {
     }, 150);
 }
 
-// Ultra-fast in-memory cache for group metadata (10 min TTL for maximum speed)
+// Ultra-fast in-memory cache for group metadata (10 min TTL with in-flight deduplication)
 const groupMetaCache = new Map();
+const inflightGroupMeta = new Map();
+
 async function getCachedGroupMetadata(sock, jid, force = false) {
     if (!jid || !jid.endsWith('@g.us')) return null;
     const now = Date.now();
@@ -688,16 +691,44 @@ async function getCachedGroupMetadata(sock, jid, force = false) {
     if (!force && cached && (now - cached.time < 600000)) {
         return cached.data;
     }
-    try {
-        const data = await sock.groupMetadata(jid);
-        if (data) {
-            if (groupMetaCache.size > 200) groupMetaCache.clear();
-            groupMetaCache.set(jid, { time: now, data });
-            return data;
-        }
-    } catch {}
-    return cached ? cached.data : null;
+    if (inflightGroupMeta.has(jid)) {
+        return inflightGroupMeta.get(jid);
+    }
+    const fetchPromise = (async () => {
+        try {
+            const data = await sock.groupMetadata(jid);
+            if (data) {
+                if (groupMetaCache.size > 300) {
+                    const oldest = groupMetaCache.keys().next().value;
+                    groupMetaCache.delete(oldest);
+                }
+                groupMetaCache.set(jid, { time: Date.now(), data });
+                return data;
+            }
+        } catch {}
+        return cached ? cached.data : null;
+    })().finally(() => {
+        inflightGroupMeta.delete(jid);
+    });
+
+    inflightGroupMeta.set(jid, fetchPromise);
+    return fetchPromise;
 }
+
+// Ultra-fast in-memory Message Retry Cache for zero-stalls on Baileys signal key requests
+const globalMsgRetryCounterMap = new Map();
+const globalMsgRetryCounterCache = {
+    get(key) { return globalMsgRetryCounterMap.get(key); },
+    set(key, value) {
+        if (globalMsgRetryCounterMap.size > 2000) {
+            const oldest = globalMsgRetryCounterMap.keys().next().value;
+            globalMsgRetryCounterMap.delete(oldest);
+        }
+        globalMsgRetryCounterMap.set(key, value);
+    },
+    del(key) { globalMsgRetryCounterMap.delete(key); },
+    flushAll() { globalMsgRetryCounterMap.clear(); }
+};
 
 const sessions = {};
 const userSockets = {};
@@ -976,12 +1007,15 @@ class BotSession {
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                keepAliveIntervalMs: 20000,
-                connectTimeoutMs: 60000,
-                defaultQueryTimeoutMs: 60000,
+                keepAliveIntervalMs: 15000,
+                connectTimeoutMs: 30000,
+                defaultQueryTimeoutMs: 25000,
                 emitOwnEvents: true,
                 retryRequestDelayMs: 2000,
                 maxMsgRetryCount: 5,
+                cachedGroupMetadata: async (jid) => getCachedGroupMetadata(this.sock, jid),
+                msgRetryCounterCache: globalMsgRetryCounterCache,
+                generateHighQualityLinkPreview: false,
                 linkPreviewImageThumbnailWidth: 192,
                 transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
                 getMessage: async (key) => {
@@ -1506,7 +1540,6 @@ class BotSession {
                             (async () => {
                                 try {
                                     // ===== SMART COMMAND DETAILS & USAGE HELPER (.cmd d / .d cmd) =====
-                                    const { isDetailsRequest, sendCommandDetails } = require('./commands/commandDetails');
                                     const detailsCheck = isDetailsRequest(commandName, args);
                                     if (detailsCheck.isDetails && detailsCheck.targetCmd) {
                                         await sendCommandDetails(this.sock, from, msg, detailsCheck.targetCmd);
@@ -2377,12 +2410,15 @@ app.get('/api/qr/start', async (req, res) => {
             browser: Browsers.ubuntu('Chrome'),
             syncFullHistory: false,
             markOnlineOnConnect: true,
-            keepAliveIntervalMs: 30000,
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
+            keepAliveIntervalMs: 15000,
+            connectTimeoutMs: 30000,
+            defaultQueryTimeoutMs: 25000,
             emitOwnEvents: true,
-            retryRequestDelayMs: 5000,
+            retryRequestDelayMs: 2500,
             maxMsgRetryCount: 5,
+            cachedGroupMetadata: async (jid) => getCachedGroupMetadata(sock, jid),
+            msgRetryCounterCache: globalMsgRetryCounterCache,
+            generateHighQualityLinkPreview: false,
             getMessage: async (key) => {
                 if (!key || key.remoteJid?.endsWith('@newsletter')) {
                     return undefined;

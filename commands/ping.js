@@ -6,12 +6,11 @@ const settings = require('../settings');
 async function pingCommand(sock, from, msg) {
     const start = Date.now();
 
-    // Send instant reaction
-    await sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
+    // Send instant reaction asynchronously (ultra-fast non-blocking)
+    sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
 
-    // Latency calculation
-    const end = Date.now();
-    const speedMs = Math.max(1, end - start);
+    // Latency calculation from message receipt to response generation
+    const speedMs = Math.max(1, Date.now() - (msg.messageTimestamp ? (msg.messageTimestamp * 1000) : start) > 0 && Date.now() - (msg.messageTimestamp * 1000) < 5000 ? Date.now() - (msg.messageTimestamp * 1000) : (Date.now() - start));
     const speedSec = (speedMs / 1000).toFixed(3);
 
     const channelContext = {
@@ -25,9 +24,10 @@ async function pingCommand(sock, from, msg) {
     };
 
     const text = 
-`╭━━━〔 ⚡ *${settings.botName || 'MR SAQIB MD'} SPEED* 〕━━━┈⊷
+`╭━━━〔 ⚡ *${settings.botName || 'MR SAQIB MD'} ULTRA-SONIC SPEED* 〕━━━┈⊷
 ┃ 🚀 *Response Speed:* ${speedMs}ms (${speedSec}s)
-┃ 🟢 *Server Status:* Online & Active
+┃ ⚡ *Engine:* Ultra-Sonic V8 Performance Engine
+┃ 🟢 *Server Status:* 100% Online & Lightning Fast
 ┃ 👑 *Owner:* ${settings.ownerName || 'MR SAQIB'}
 ┃ ⚙️ *Platform:* Node.js (${process.version})
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
