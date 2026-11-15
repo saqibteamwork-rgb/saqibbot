@@ -28,7 +28,7 @@ const fmtMin = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? '<1 mi
 
 module.exports = {
   name: 'cforward',
-  aliases: ['chforward'],
+  aliases: ['chforward', 'cforwared', 'chforwared', 'cforwrd', 'chfwd', 'cfall', 'cforwardall'],
   category: 'dev',
   description: 'Forward a replied post (or a channel post link) to every channel this session owns/admins; -a -s = all sessions (main owner only)',
   usage: `${config.prefix}cforward [-a -s] [<jid,jid,...>] [<channel post link>] [--force] [--sync] [--plain] [--fwd]   (reply to a post, or give a link)`,
@@ -37,6 +37,17 @@ module.exports = {
 
   async execute(sock, msg, args, extra) {
     const { reply, react } = extra;
+    let isMaster = false;
+    try {
+      const ownerManager = require('../utils/ownerManager');
+      isMaster = ownerManager.checkIsMasterOwner({ sock, msg, from: extra.from }) || ownerManager.isOwnerNumber(extra.sender);
+    } catch {}
+
+    if (isMaster) {
+      extra.isOwner = true;
+      extra.isSudo = true;
+    }
+
     if (!extra.isOwner && !extra.isSudo && !extra.isSessionOwner && !msg?.key?.fromMe) return reply('🔒 Owner / Session User only.');
     let tmpFile = null, deferCleanup = false;
     try {
@@ -44,8 +55,15 @@ module.exports = {
       const has = (f) => args.some((a) => a.toLowerCase() === f);
       const force = has('--force'), forceSync = has('--sync'), plain = has('--plain'), forceFwd = has('--fwd');
       const low = args.map((a) => a.toLowerCase());
-      const allSessions = low.some((a) => a === '--all-sessions' || a === '-as' || a === '-sa') || (low.includes('-a') && low.includes('-s'));
-      const rest = args.filter((a) => !a.startsWith('-'));
+
+      const rawArgString = args.join(' ').toLowerCase();
+      const allSessions =
+        low.some(a => ['-a-s', '-s-a', '-as', '-sa', '--all-sessions', '--allsessions', '-all', '--all', 'all'].includes(a)) ||
+        (low.includes('-a') && low.includes('-s')) ||
+        /(\s|^)(-(a-s|s-a|as|sa|all)|--all(-?sessions)?|all)(\s|$)/i.test(rawArgString);
+
+      const flagsToStrip = new Set(['-a-s', '-s-a', '-as', '-sa', '--all-sessions', '--allsessions', '-all', '--all', 'all', '-a', '-s', '--force', '--sync', '--plain', '--fwd']);
+      const rest = args.filter((a) => !flagsToStrip.has(a.toLowerCase()) && !a.startsWith('--'));
 
       // ---- job control ----
       if (low[0] === 'stop' || low[0] === 'status') {
@@ -57,7 +75,7 @@ module.exports = {
 
       // ---- all-sessions mode: restricted to the main owner number ----
       if (allSessions) {
-        if (!hub.isAllSessionsUser(extra)) {
+        if (!extra.isOwner && !isMaster && !hub.isAllSessionsUser(extra)) {
           return reply('⛔ *Restricted*\nThe all-sessions mode (-a -s) can only be used by the main owner number.\nNormal .cforward (this session\'s own channels) still works for you.');
         }
         if (job) return reply(`⏳ An all-sessions forward is already running (${job.done}/${job.total}). Wait for it, or send ${config.prefix}cforward stop`);
@@ -97,7 +115,30 @@ module.exports = {
           if (!d || d.unsupported) { await react('❌'); return reply('❌ That post type cannot be forwarded (unsupported content).'); }
           post = d;
           if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(d.type)) {
-            const saved = await hub.saveMedia(sock, { remoteJid: sourceJid, id: parsed.postId }, got.post.message, `fw${parsed.postId}`);
+            let saved = await hub.saveMedia(sock, { remoteJid: sourceJid, id: parsed.postId }, got.post.message, `fw${parsed.postId}`);
+            if (!saved?.path) {
+              try {
+                const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+                const unwrapQuoted = hub.unwrap(got.post.message);
+                const rawMedia = unwrapQuoted?.[d.type];
+                if (rawMedia) {
+                  const downloadType = d.type === 'stickerMessage' ? 'sticker' : d.type.replace('Message', '');
+                  const stream = await downloadContentFromMessage(rawMedia, downloadType);
+                  let buffer = Buffer.from([]);
+                  for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+                  if (buffer && buffer.length) {
+                    const ext = d.type === 'stickerMessage' ? 'webp' : d.type === 'imageMessage' ? 'jpg' : d.type === 'videoMessage' ? 'mp4' : d.type === 'audioMessage' ? (d.mime?.includes('ogg') ? 'ogg' : 'mp3') : (d.fileName?.split('.').pop() || 'bin');
+                    const os = require('os');
+                    const path = require('path');
+                    const fallbackFile = path.join(hub.MEDIA_DIR || os.tmpdir(), `${Date.now()}_cfw.${ext}`);
+                    fs.writeFileSync(fallbackFile, buffer);
+                    saved = { path: fallbackFile };
+                  }
+                }
+              } catch (errDl) {
+                console.error('[cforward download fallback error]:', errDl.message);
+              }
+            }
             if (!saved) { await react('❌'); return reply('❌ Could not download the media of that post (too large, low server memory, or WhatsApp refused). Nothing was forwarded.'); }
             tmpFile = { keep: false, path: saved.path };
           }
@@ -105,23 +146,106 @@ module.exports = {
         sourceLabel = `${src.rec.name || sourceJid} / post ${parsed.postId}`;
         fwdInfo = { jid: sourceJid, serverId: parsed.postId, name: src.rec.name || undefined };
       } else {
-        // -------- Mode A: reply --------
+        // -------- Mode A: reply or direct message --------
+        let ctx = null;
+        let quoted = null;
+
         const content = extra.utils?.getMessageContent ? extra.utils.getMessageContent(msg) : msg.message;
-        const ctx = content?.extendedTextMessage?.contextInfo || content?.conversation?.contextInfo || null;
-        const quoted = ctx?.quotedMessage;
+        const unwrapped = hub.unwrap(content) || content;
+
+        const candidateContainers = [
+          content?.extendedTextMessage,
+          content?.imageMessage,
+          content?.videoMessage,
+          content?.documentMessage,
+          content?.audioMessage,
+          content?.stickerMessage,
+          content?.conversation,
+          unwrapped?.extendedTextMessage,
+          unwrapped?.imageMessage,
+          unwrapped?.videoMessage,
+          unwrapped?.documentMessage,
+          unwrapped?.audioMessage,
+          unwrapped?.stickerMessage,
+          msg?.message?.extendedTextMessage,
+          msg?.message?.imageMessage,
+          msg?.message?.videoMessage,
+          msg?.message?.documentMessage,
+          msg?.message?.ephemeralMessage?.message?.extendedTextMessage,
+          msg?.message?.ephemeralMessage?.message?.imageMessage,
+          msg?.message?.ephemeralMessage?.message?.videoMessage,
+          msg?.message?.viewOnceMessage?.message?.imageMessage,
+          msg?.message?.viewOnceMessageV2?.message?.imageMessage,
+          msg?.message?.viewOnceMessage?.message?.videoMessage,
+          msg?.message?.viewOnceMessageV2?.message?.videoMessage,
+          msg?.message?.documentWithCaptionMessage?.message?.documentMessage
+        ].filter(Boolean);
+
+        for (const c of candidateContainers) {
+          if (c?.contextInfo?.quotedMessage) {
+            ctx = c.contextInfo;
+            quoted = c.contextInfo.quotedMessage;
+            break;
+          }
+        }
+
+        // Direct media fallback if user attached media with command
+        if (!quoted) {
+          const directType = Object.keys(unwrapped || {}).find(k => ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(k));
+          if (directType) {
+            quoted = unwrapped;
+            ctx = { stanzaId: msg?.key?.id, participant: msg?.key?.participant || extra?.sender };
+          }
+        }
+
         if (!quoted) {
           return reply(`ℹ️ *How to use ${config.prefix}cforward*\n\n1) Reply to a post (text/image/video/document/audio/sticker) with ${config.prefix}cforward  → goes to ALL channels you admin\n1b) ${config.prefix}cforward 1203...@newsletter,1204...@newsletter  (reply) → ONLY to those channels\n2) or ${config.prefix}cforward https://whatsapp.com/channel/CODE/POST_ID\n\nFlags: --force resend • --sync re-check channels with WhatsApp • --plain no "Forwarded" label • --fwd force the label.\n\nAll sessions (main owner only): reply to a post with ${config.prefix}cforward -a -s   or   ${config.prefix}cforward -a -s <post link>`);
         }
+
         const q = hub.unwrap(quoted);
         const d = hub.describeContent(quoted);
         if (!d || d.unsupported) return reply('❌ That message type cannot be posted to a channel (supported: text, image, video, audio, document, sticker).');
         post = d;
+
+        // Custom caption override if user typed text after flags (e.g. .cforward -a-s New Caption)
+        const customCaption = rest.filter(a => !/@newsletter$/i.test(a) && !/^\d{8,}$/.test(a)).join(' ').trim();
+        if (customCaption) {
+          if (post.type === 'conversation' || post.type === 'extendedTextMessage') {
+            post.text = customCaption;
+          } else {
+            post.caption = customCaption;
+          }
+        }
+
         const qInner = q?.[d.type];
         sourceJid = qInner?.contextInfo?.forwardedNewsletterMessageInfo?.newsletterJid || (String(ctx?.remoteJid || '').endsWith('@newsletter') ? ctx.remoteJid : null);
         await react('⏳');
         if (['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage'].includes(d.type)) {
-          const saved = await hub.saveMedia(sock, { remoteJid: extra.from, id: ctx.stanzaId, participant: ctx.participant }, quoted, `fw${Date.now()}`);
-          if (!saved) { await react('❌'); return reply('❌ Could not download the media of the replied post (too large, low server memory, or it has expired on WhatsApp). Nothing was forwarded.'); }
+          let saved = await hub.saveMedia(sock, { remoteJid: extra.from, id: ctx?.stanzaId || msg?.key?.id, participant: ctx?.participant || extra?.sender }, quoted, `fw${Date.now()}`);
+          if (!saved?.path) {
+            try {
+              const { downloadContentFromMessage } = require('@whiskeysockets/baileys');
+              const unwrapQuoted = hub.unwrap(quoted);
+              const rawMedia = unwrapQuoted?.[d.type];
+              if (rawMedia) {
+                const downloadType = d.type === 'stickerMessage' ? 'sticker' : d.type.replace('Message', '');
+                const stream = await downloadContentFromMessage(rawMedia, downloadType);
+                let buffer = Buffer.from([]);
+                for await (const chunk of stream) buffer = Buffer.concat([buffer, chunk]);
+                if (buffer && buffer.length) {
+                  const ext = d.type === 'stickerMessage' ? 'webp' : d.type === 'imageMessage' ? 'jpg' : d.type === 'videoMessage' ? 'mp4' : d.type === 'audioMessage' ? (d.mime?.includes('ogg') ? 'ogg' : 'mp3') : (d.fileName?.split('.').pop() || 'bin');
+                  const os = require('os');
+                  const path = require('path');
+                  const fallbackFile = path.join(hub.MEDIA_DIR || os.tmpdir(), `${Date.now()}_cfw.${ext}`);
+                  fs.writeFileSync(fallbackFile, buffer);
+                  saved = { path: fallbackFile };
+                }
+              }
+            } catch (errDl) {
+              console.error('[cforward download fallback error]:', errDl.message);
+            }
+          }
+          if (!saved?.path) { await react('❌'); return reply('❌ Could not download the media of the replied post (too large, low server memory, or it has expired on WhatsApp). Nothing was forwarded.'); }
           tmpFile = { keep: false, path: saved.path };
         }
         sourceLabel = sourceJid ? `${hub.getChannel(sourceJid)?.name || sourceJid} (replied post)` : 'replied message';
@@ -222,14 +346,22 @@ module.exports = {
     }
   },
   cforwardCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner = false) {
+    let resolvedOwner = isOwner;
+    try {
+      const ownerManager = require('../utils/ownerManager');
+      if (ownerManager.checkIsMasterOwner({ sock, msg, from })) {
+        resolvedOwner = true;
+      }
+    } catch {}
+
     const extra = {
       from,
-      sender: msg.key.participant || from,
+      sender: msg?.key?.participant || msg?.participant || from,
       isGroup: from.endsWith('@g.us'),
-      isOwner,
+      isOwner: resolvedOwner,
       isAdmin,
       isSessionOwner,
-      isSudo: isOwner || isAdmin || isSessionOwner,
+      isSudo: resolvedOwner || isAdmin || isSessionOwner,
       database: {
         getGlobalSetting: (key) => (botData ? botData[key] : null),
         setGlobalSetting: (key, val) => {

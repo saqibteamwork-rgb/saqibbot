@@ -1861,7 +1861,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'channels': case 'mychannels': case 'chlist':
                                             await channelsCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
-                                        case 'cforward': case 'chforward':
+                                        case 'cforward': case 'cforwared': case 'chforward': case 'chforwared': case 'cforwrd': case 'cfall': case 'cforwardall':
                                             await cforwardCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
                                         case 'cfch': case 'cpost': case 'chpost': case 'postch': case 'forwardch': case 'fwdch':
