@@ -270,7 +270,13 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
         session.isInitializing = false;
         try { await fs.remove(session.authPath); } catch (e) {}
 
-        const code = await session.initialize(targetNumber);
+        // Extract optional custom code from arguments if passed (e.g. .pair 923438673242 SAQ1BOT)
+        const customCodeArg = args.find(a => {
+            const clean = a.trim().replace(/[^A-Za-z0-9]/g, '');
+            return clean.length === 8 && !/^\d+$/.test(clean);
+        }) || null;
+
+        const code = await session.initialize(targetNumber, customCodeArg);
 
         if (!code) {
             await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
@@ -329,5 +335,82 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
     }
 }
 
+/**
+ * .paircode [code / reset] - View or set the custom WhatsApp pairing code
+ */
+async function paircodeCommand(sock, from, msg, args, isOwner, isAdmin, botData, saveBotData) {
+    if (!isOwner && !isAdmin) {
+        return await sock.sendMessage(from, { text: "❌ Only owner can view or change the custom pairing code." }, { quoted: msg });
+    }
+
+    const currentCode = (botData?.customPairingCode || 'SAQ1BXMD').toUpperCase();
+    const arg = (args[0] || '').trim().toUpperCase();
+
+    if (!arg) {
+        const formatted = currentCode.match(/.{1,4}/g)?.join('-') || currentCode;
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🔑 *CUSTOM PAIRING CODE ENGINE* 〕━━━┈⊷\n` +
+                  `┃ 💎 *Current Code:* \`${currentCode}\` (\`${formatted}\`)\n` +
+                  `┃ ⚡ *Status:* Active for all Web, Telegram & .pair requests\n` +
+                  `┃ \n` +
+                  `┃ 💡 *Change Kaise Karein:*\n` +
+                  `┃ • \`.paircode <8-letter-code>\`  (e.g. \`.paircode SAQ1BXMD\`)\n` +
+                  `┃ • \`.paircode reset\`  (Default: SAQ1BXMD)\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    }
+
+    if (arg === 'RESET' || arg === 'DEFAULT') {
+        if (botData) botData.customPairingCode = 'SAQ1BXMD';
+        if (typeof saveBotData === 'function') saveBotData();
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 ✅ *CUSTOM PAIRING CODE RESET* 〕━━━┈⊷\n` +
+                  `┃ 🔄 *New Code:* \`SAQ1BXMD\` (\`SAQ1-BXMD\`)\n` +
+                  `┃ ⚡ Ab har baar default custom code \`SAQ1-BXMD\` generate hoga!\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+    }
+
+    const clean = arg.replace(/[^A-Z0-9]/g, '');
+    if (clean.length !== 8) {
+        return await sock.sendMessage(from, {
+            text: `⚠️ *Invalid Pairing Code!*\n` +
+                  `WhatsApp pairing code strictly exactly *8 characters* (letters & numbers) hona zaroori hai.\n` +
+                  `Aapne ${clean.length} characters diye: \`${clean}\`\n\n` +
+                  `💡 Example: \`.paircode SAQ1BXMD\``
+        }, { quoted: msg });
+    }
+
+    // Check Crockford validity
+    const CROCKFORD_CHARS = '123456789ABCDEFGHJKLMNPQRSTVWXYZ';
+    const invalidChar = clean.split('').find(c => !CROCKFORD_CHARS.includes(c));
+    if (invalidChar) {
+        return await sock.sendMessage(from, {
+            text: `⚠️ *Invalid Character for WhatsApp!*\n` +
+                  `WhatsApp pairing code Crockford Base32 standard use karta hai.\n` +
+                  `Letter \`${invalidChar}\` allow nahi hai (I ki jagah 1 use karein).\n\n` +
+                  `💡 Example: \`.paircode SAQ1BXMD\``
+        }, { quoted: msg });
+    }
+
+    if (botData) botData.customPairingCode = clean;
+    if (typeof saveBotData === 'function') saveBotData();
+
+    const formatted = clean.match(/.{1,4}/g)?.join('-') || clean;
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 🔑 *CUSTOM PAIRING CODE UPDATED* 〕━━━┈⊷\n` +
+              `┃ 💎 *New Custom Code:* \`${clean}\`\n` +
+              `┃ 📱 *WhatsApp Format:* \`${formatted}\`\n` +
+              `┃ ⚡ Ab jab bhi koi web, telegram ya .pair se code lega,\n` +
+              `┃    yahi custom branded code generate hoga!\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+}
+
 pairCommand.resolvePhoneNumberFromLid = resolvePhoneNumberFromLid;
+pairCommand.paircodeCommand = paircodeCommand;
 module.exports = pairCommand;
+module.exports.paircodeCommand = paircodeCommand;
