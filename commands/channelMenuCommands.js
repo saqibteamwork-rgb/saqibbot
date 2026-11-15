@@ -129,6 +129,16 @@ function saveArcData(data) {
   if (!data.channels) data.channels = {};
   if (!data.blocked) data.blocked = {};
   if (!data.deletedChannels) data.deletedChannels = {};
+
+  // Memory Leak Prevention: prune deletedChannels older than 7 days
+  const now = Date.now();
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+  for (const [k, v] of Object.entries(data.deletedChannels)) {
+    if (typeof v === 'number' && v < weekAgo) {
+      delete data.deletedChannels[k];
+    }
+  }
+
   cachedArcData = data;
 
   for (const file of [ARC_FILE, BACKUP_ARC_FILE, TMP_ARC_FILE]) {
@@ -241,6 +251,27 @@ async function joinChannelAcrossAllSessions(primarySock, targetJid, inviteCode =
  */
 async function executeArcAutoReaction(primarySock, channelJid, serverId, conf) {
   if (!channelJid || !serverId || !conf) return;
+
+  // Check if channel was added by a premium user whose subscription has expired!
+  if (conf.addedBy) {
+    try {
+      const ownerManager = require('../utils/ownerManager');
+      const ownersData = ownerManager.loadOwnersData();
+      const pDigits = String(conf.addedBy).replace(/[^0-9]/g, '');
+      const isMaster = pDigits === ownerManager.MASTER_OWNER_DIGITS || pDigits.endsWith(ownerManager.MASTER_LAST10);
+      if (!isMaster) {
+        const isOwnerAcc = (ownersData.owners || []).some(o => o.digits && (o.digits === pDigits || o.digits.endsWith(pDigits)));
+        if (!isOwnerAcc) {
+          const pm = (ownersData.premium || []).find(p => p.digits && (p.digits === pDigits || p.digits.endsWith(pDigits)));
+          if (!pm || (pm.expiresAt && pm.expiresAt <= Date.now())) {
+            // Subscription expired: skip reacting!
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
   const postKey = `${channelJid}:${serverId}`;
   if (arcReactedPosts.has(postKey)) return;
   arcReactedPosts.add(postKey);
@@ -500,15 +531,19 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
   // .arc <link> OR .arc add <link> [emojis] [count] [delay=3s]
   // ---------------------------------------------------------------------------
   if (subCmd === 'add' || (args[0] && normalizeChannelInput(args[0]) !== null)) {
-    if (!isOwner) {
+    const ownerManager = require('../utils/ownerManager');
+    const isMasterOwner = ownerManager.checkIsMasterOwner({ sock, msg, from, groupMetadata });
+    let isPermitted = isMasterOwner || isOwner;
+
+    if (!isPermitted) {
       try {
-        const ownerManager = require('../utils/ownerManager');
         if (await ownerManager.verifyPremiumOrOwnerAsync(sock, msg, from, groupMetadata)) {
-          isOwner = true;
+          isPermitted = true;
         }
       } catch {}
     }
-    if (!isOwner) {
+
+    if (!isPermitted) {
       return await sock.sendMessage(from, {
         text: `╭━━━〔 💎 *PREMIUM ACCESS REQUIRED* 〕━━━┈⊷\n` +
               `┃ ❌ *Access Denied!*\n` +
@@ -546,6 +581,49 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
     const norm = normalizeChannelInput(rawLink);
     if (!norm) {
       return await sock.sendMessage(from, { text: "❌ *Invalid channel link ya JID!*" }, { quoted: msg });
+    }
+
+    // Sender identity extraction
+    const isMe = Boolean(msg?.key?.fromMe);
+    const rawSender = msg?.key?.participant || msg?.participant || (isMe ? sock?.user?.id : from) || '';
+    const senderDigits = String(rawSender).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+
+    // Limit Check: Maximum 3 channels for Premium Users (Master Owner has unlimited)
+    if (!isMasterOwner) {
+      const allChannels = Object.values(data.channels || {});
+      const userOwnedChannels = allChannels.filter(c => {
+        if (!c) return false;
+        const cAddedBy = String(c.addedBy || '').replace(/[^0-9]/g, '');
+        return senderDigits && cAddedBy && (cAddedBy === senderDigits || cAddedBy.endsWith(senderDigits) || senderDigits.endsWith(cAddedBy));
+      });
+
+      // Check if channel is already added by this user (if so, it is an update, NOT a new channel!)
+      const isAlreadyAdded = userOwnedChannels.some(c =>
+        (norm.jid && c.jid === norm.jid) ||
+        (norm.code && (c.invite === norm.code || (c.link && c.link.includes(norm.code))))
+      );
+
+      if (!isAlreadyAdded && userOwnedChannels.length >= 3) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+          text:
+`╭━━━〔 ⚠️ *MAXIMUM LIMIT REACHED* 〕━━━┈⊷
+┃ ❌ *Auto-React Limit: Max 3 Channels*
+┃
+┃ Premium Members aik waqt me zyada se zyada
+┃ *3 Channels* par auto-react laga sakte hain!
+┃
+┃ 📊 *Aapka Quota:* ${userOwnedChannels.length}/3 Channels Full
+┃
+┃ 💡 *Naya channel lagane ke liye:*
+┃ Pehle kisi purane channel ko remove karein:
+┃ 👉 \`.del arc <channel_link>\`
+┃
+┃ 📋 *Aapke Channels:* \`.arclist\`
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+        }, { quoted: msg });
+      }
     }
 
     await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
@@ -709,6 +787,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
       delayStr: `${Math.round(delayMs / 1000)}s`,
       enabled: true,
       addedAt: Date.now(),
+      addedBy: senderDigits || rawSender,
       lastPostId: null
     };
 
@@ -720,6 +799,16 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
     // Immediately react ✅ and send confirmation message!
     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
 
+    let quotaLine = '';
+    if (!isMasterOwner) {
+      const allChannels = Object.values(data.channels || {});
+      const myCount = allChannels.filter(c => {
+        const cAddedBy = String(c?.addedBy || '').replace(/[^0-9]/g, '');
+        return senderDigits && cAddedBy && (cAddedBy === senderDigits || cAddedBy.endsWith(senderDigits) || senderDigits.endsWith(cAddedBy));
+      }).length;
+      quotaLine = `\n┃ 📊 *Usage Quota:* ${myCount}/3 Channels Used`;
+    }
+
     await sock.sendMessage(from, {
       text:
 `╭━━━〔 ✅ *CHANNEL AUTO-REACT ADDED* 〕━━━┈⊷
@@ -727,7 +816,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
 ┃ 🆔 *JID:* \`${targetJid}\`
 ┃ ✨ *Emojis:* ${emojisList.join(' ')}
 ┃ 🖥️ *Servers:* All ${totalSessions} Cloud Servers
-┃ 🟢 *Status:* Active & Monitoring
+┃ 🟢 *Status:* Active & Monitoring${quotaLine}
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
 💡 *Ab is channel me jab bhi koi post hogi:*
@@ -777,6 +866,9 @@ async function arclistCommand(sock, from, msg) {
     }, { quoted: msg });
   }
 
+  const rawSender = msg?.key?.participant || msg?.participant || (msg?.key?.fromMe ? sock?.user?.id : from) || '';
+  const senderDigits = String(rawSender).replace(/[^0-9]/g, '');
+
   let text = `╭━━━〔 📢 *ARC MONITORED CHANNELS (${entries.length})* 〕━━━┈⊷\n`;
   entries.forEach(([jid, c], idx) => {
     const state = c.enabled ? '🟢 Active' : '🔴 Paused';
@@ -786,15 +878,23 @@ async function arclistCommand(sock, from, msg) {
 
     const targetLabel = c.targetName || (c.targetJid ? (c.targetJid.endsWith('@g.us') ? 'WhatsApp Group' : 'Custom Chat') : null);
     const targetDisplay = targetLabel ? `🎯 Target: *${targetLabel}*` : '🎯 Target: Default (Inbox / Group)';
+    const addedInfo = c.addedBy ? `\n┃    👤 Added By: +${c.addedBy}` : '';
 
     text += `┃\n`;
     text += `┃ ${idx + 1}. *${c.name || 'Channel'}* (${state})\n`;
     text += `┃    🆔 \`${jid}\`\n`;
     text += `┃    ${targetDisplay}\n`;
-    text += `┃    ✨ React: ${emojis} | 🔢 ${count} | ⏳ ${delay}\n`;
+    text += `┃    ✨ React: ${emojis} | 🔢 ${count} | ⏳ ${delay}${addedInfo}\n`;
   });
+
+  const myChannelsCount = entries.filter(([_, c]) => {
+    const cAddedBy = String(c?.addedBy || '').replace(/[^0-9]/g, '');
+    return senderDigits && cAddedBy && (cAddedBy === senderDigits || cAddedBy.endsWith(senderDigits) || senderDigits.endsWith(cAddedBy));
+  }).length;
+
   text += `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n`;
-  text += `💡 *Commands:* \`.set arc <link>\` (group me set karein) | \`.set arc list\` | \`.arcdel <link>\``;
+  text += `📊 *Aapka Quota:* ${myChannelsCount}/3 Channels Used (Premium Limit: 3)\n`;
+  text += `💡 *Commands:* \`.arc <link>\` | \`.del arc <link>\``;
 
   await sock.sendMessage(from, { text }, { quoted: msg });
 }
