@@ -94,6 +94,7 @@ const { mtCommand } = require('./commands/mimicVoice');
 const channelHub = require('./utils/channelHub');
 const { channelsCommand } = require('./commands/channels');
 const { cforwardCommand } = require('./commands/cforward');
+const { cfchCommand } = require('./commands/cfch');
 const { chfollowCommand, chunfollowCommand } = require('./commands/chfollow');
 const { chreactCommand, voteCommand, chvoteCommand } = require('./commands/chreact');
 const channelPostForwarder = require('./utils/channelPostForwarder');
@@ -1862,6 +1863,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'cforward': case 'chforward':
                                             await cforwardCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
+                                            break;
+                                        case 'cfch': case 'cpost': case 'chpost': case 'postch': case 'forwardch': case 'fwdch':
+                                            await cfchCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
                                         case 'chfollow': case 'followall': case 'boostchannel': case 'chboost':
                                             await chfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);

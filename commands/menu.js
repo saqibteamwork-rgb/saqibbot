@@ -85,7 +85,7 @@ const CATEGORIES = {
     'CHANNEL': [
         'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock',
         'arclocklist', 'arcprem', 'arcpremiumlist', 'arcremoveall', 'arcstop',
-        'arcunblock', 'arcunlock', 'autochreact', 'cforward', 'channelid',
+        'arcunblock', 'arcunlock', 'autochreact', 'cfch', 'cforward', 'channelid',
         'channels', 'chfollow', 'chreact', 'chreactall', 'chunfollow',
         'chunreact', 'chvote', 'pollrand', 'pollunvote', 'pollvfix',
         'pollvinfo', 'pollvote', 'pollvstop', 'vote1', 'vote2', 'vote3', 'vote4'
