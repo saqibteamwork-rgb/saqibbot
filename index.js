@@ -116,7 +116,7 @@ const { handleStatusUpdate } = require('./commands/autostatus');
 const { storeMessage, handleMessageRevocation } = require('./commands/antidelete');
 const settings = require('./settings');
 const config = require('./config');
-const { menuCommand } = require('./commands/menu');
+const { menuCommand, setmenuCommand } = require('./commands/menu');
 const { setppCommand, setgppCommand } = require('./commands/setpp');
 const {
     setbotnameCommand,
@@ -1821,6 +1821,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'setmenupic': case 'setmenuimg': case 'setmenudp':
                                             await setmenupicCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId, args);
+                                            break;
+                                        case 'setmenu': case 'menustyle': case 'setmenustyle': case 'menudesign': case 'menulist':
+                                            await setmenuCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'resetmenu': case 'resetprofile':
                                             await resetprofileCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, saveBotData, this.userId);

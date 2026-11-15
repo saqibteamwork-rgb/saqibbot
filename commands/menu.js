@@ -29,6 +29,13 @@ const os = require('os');
 const settings = require('../settings');
 const { getEffectiveProfile } = require('./customProfile');
 const {
+    STYLES,
+    initPrecompiledStyles,
+    PRECOMPILED_STYLES,
+    getStyleCatalog,
+    setmenuCommand
+} = require('./menuStyles');
+const {
     sendInteractiveButtons,
     quickReplyButton,
     urlButton
@@ -177,6 +184,7 @@ function initPrecompiledMenu() {
     TOTAL_COMMANDS_COUNT = count;
 }
 initPrecompiledMenu();
+initPrecompiledStyles(CATEGORIES);
 
 // Pre-buffered in-RAM Image Buffer (zero hard disk latency!)
 let PRELOADED_MENU_IMAGE = null;
@@ -242,47 +250,60 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         year: 'numeric'
     });
 
-    // 2. Build Bold & Italic Aesthetic Header Box
-    const headerText = 
-`╭━━━〔 ⚡ ${toSansBold(effectiveBotName)} ⚡ 〕━━━┈⊷
-┃ 👤 ${toSansBold('User')}: _${customName}_
-┃ 👑 ${toSansBold('Owner')}: ${toSansBold(effectiveOwnerName)}
-┃ 🟢 ${toSansBold('Status')}: ${toSansBold('Connected')} 🟢
-┃ ⚙️ ${toSansBold('System')}: ${toSansBold('Active')} ⚡
-┃ 🌐 ${toSansBold('Server')}: ${toSansBold('Running')} 🚀
-┃ 🔥 ${toSansBold('Modules')}: ${toSansBold('Active')} 🔥
-┃ 📱 ${toSansBold('Baileys')}: _Multi-Device_
-┃ 📅 ${toSansBold('Date')}: _${dateStr}_
-┃ ⏳ ${toSansBold('Uptime')}: _${runtimeStr}_
-┃ 🔑 ${toSansBold('Prefix')}: [ . ]
-┃ 🛡️ ${toSansBold('Mode')}: _${isPublic ? 'Public 🌍' : 'Private 🔒'}_
-┃ 📊 ${toSansBold('RAM')}: _${usedMem}MB / ${totalMem}MB_
-┃ 📂 ${toSansBold('Total Commands')}: ${toSansBold(String(TOTAL_COMMANDS_COUNT))}
-┃ 📦 ${toSansBold('Version')}: _2.0.0_
-╰━━━━━━━━━━━━━━━━━━┈⊷
+    // Parse requested style or filter category
+    let requestedStyle = null;
+    let filterArg = null;
 
- ➤ .${toSansBold('menu')} _type karein commands ke liye_\n\n`;
+    if (Array.isArray(args) && args.length > 0) {
+        const firstClean = String(args[0]).trim();
+        const firstNum = parseInt(firstClean, 10);
+        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 12 && String(firstNum) === firstClean) {
+            requestedStyle = firstNum;
+            if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
+        } else {
+            filterArg = firstClean.toLowerCase();
+        }
+    }
+
+    const effectiveStyleId = requestedStyle || profile.menuStyle || 1;
+    const styleObj = STYLES[effectiveStyleId] || STYLES[1];
+
+    const profileData = {
+        botName: effectiveBotName,
+        ownerName: effectiveOwnerName,
+        userName: customName
+    };
+
+    const statsData = {
+        isPublic,
+        dateStr,
+        runtimeStr,
+        usedMem,
+        totalMem,
+        totalCommands: TOTAL_COMMANDS_COUNT
+    };
+
+    // 2. Build Aesthetic Header Box
+    const headerText = styleObj.makeHeader(profileData, statsData);
 
     // 3. Category Body Selection (Instant In-RAM retrieval)
     let bodyText = '';
-    const filterArg = (Array.isArray(args) && args[0]) ? String(args[0]).toLowerCase() : null;
-    if (filterArg) {
-        for (const [key, item] of PRECOMPILED_BOXES.entries()) {
+    const styleCache = PRECOMPILED_STYLES.get(effectiveStyleId) || PRECOMPILED_STYLES.get(1);
+
+    if (filterArg && styleCache?.categoryMap) {
+        for (const [key, item] of styleCache.categoryMap.entries()) {
             if (key.includes(filterArg) || item.name.toLowerCase().includes(filterArg)) {
                 bodyText += item.box;
             }
         }
     }
+
     if (!bodyText) {
-        bodyText = FULL_MENU_PRECOMPILED_BODY;
+        bodyText = styleCache?.fullBody || FULL_MENU_PRECOMPILED_BODY;
     }
 
     // 4. Build Powered By Footer
-    const footerText = 
-`╭━━━〔 👑 ${toSansBold('POWERED BY')} 〕━━━┈⊷
-┃ 🚀 ${toSansBold(effectiveOwnerName)}
-┃ 🔍 google.com/search?q=mr+saqib
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
+    const footerText = styleObj.makeFooter(profileData);
 
     const menuText = (headerText + bodyText + footerText).trim();
 
@@ -324,6 +345,9 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 
 module.exports = {
     menuCommand,
+    setmenuCommand,
+    getStyleCatalog,
+    STYLES,
     CATEGORIES,
     toSansBold,
     toSansItalic,

@@ -336,12 +336,15 @@ function getEffectiveProfile(botData, userId) {
         menuImage = globalSettings.menuImage;
     }
 
+    const menuStyle = Number(userProfile.menuStyle || globalSettings.menuStyle || 1);
+
     return {
         botName,
         ownerName,
         menuImage,
-        isSessionCustom: !!(userProfile.botName || userProfile.ownerName || userProfile.menuImage),
-        isGlobalCustom: !!(globalSettings.botName || globalSettings.ownerName || globalSettings.menuImage)
+        menuStyle,
+        isSessionCustom: !!(userProfile.botName || userProfile.ownerName || userProfile.menuImage || userProfile.menuStyle),
+        isGlobalCustom: !!(globalSettings.botName || globalSettings.ownerName || globalSettings.menuImage || globalSettings.menuStyle)
     };
 }
 
