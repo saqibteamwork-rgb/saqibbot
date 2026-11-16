@@ -86,90 +86,159 @@ function makeBox(title, commands) {
 
 const CATEGORIES = {
     'AI & MEDIA': [
-        'ai', 'ai2', 'aimodels', 'blur', 'bw', 'circle', 'codestral', 'devstral',
-        'emojimix', 'enhance', 'flip', 'flux', 'hd', 'imagine', 'invert', 'luxai',
-        'malik', 'ministral', 'mistral', 'pinterest', 'qr', 'rmbg', 'sensenova',
-        'sepia', 'sharpen', 'sigma', 'silentsave', 'sticker', 'summarize', 'take',
-        'toimg', 'tourl', 'vc'
+        'ai', 'ai2', 'aimodels', 'attp', 'bard', 'blur', 'bomber', 'bot',
+        'brainai', 'bw', 'chatgpt', 'circle', 'claudeai', 'codeai', 'codestral', 'comedy',
+        'copilot', 'deepseek', 'devstral', 'dj', 'emojimix', 'enhance', 'felo', 'flip',
+        'flux', 'gemini', 'githubstalk', 'gpt', 'gpt5', 'hd', 'imagine', 'invert',
+        'luxai', 'malik', 'mememaker', 'metai', 'ministral', 'mistral', 'perplexity', 'pinterest',
+        'professor', 'qr', 'repo', 'rmbg', 'sensenova', 'sepia', 'sharpen', 'sigma',
+        'silentsave', 'silver', 'sticker', 'stickerinfo', 'stickerpack', 'studyai', 'summarize', 'take',
+        'toimg', 'tourl', 'vc', 'watermark'
     ],
     'CHANNEL': [
-        'achr', 'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock',
-        'arclocklist', 'arcprem', 'arcpremiumlist', 'arcremoveall', 'arcstop',
-        'arcunblock', 'arcunlock', 'autochreact', 'cc', 'cfch', 'cforward', 'channelid',
-        'channels', 'chautoreact', 'chfollow', 'chreact', 'chreactall', 'chstatus', 'chunfollow',
-        'chunreact', 'chvote', 'pollrand', 'pollunvote', 'pollvfix',
-        'pollvinfo', 'pollvote', 'pollvstop', 'vote1', 'vote2', 'vote3', 'vote4'
+        'achr', 'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock', 'arclocklist',
+        'arcprem', 'arcpremiumlist', 'arcremoveall', 'arcstop', 'arcunblock', 'arcunlock', 'autochreact', 'cc',
+        'cfch', 'cforward', 'channelid', 'channels', 'chautoreact', 'chfollow', 'chreact', 'chreactall',
+        'chstatus', 'chunfollow', 'chunreact', 'chvote', 'pollrand', 'pollunvote', 'pollvfix', 'pollvinfo',
+        'pollvote', 'pollvstop', 'vote1', 'vote2', 'vote3', 'vote4'
     ],
     'AUDIO EDIT': [
         'baby', 'bass', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
         'fat', 'nightcore', 'radio', 'reverse', 'robot', 'say', 'slow', 'smooth',
+        'sound', 'sound10', 'sound11', 'sound12', 'sound13', 'sound14', 'sound15', 'sound16',
+        'sound2', 'sound3', 'sound4', 'sound5', 'sound6', 'sound7', 'sound8', 'sound9',
         'tomp3', 'toptt', 'tts', 'tupai', 'v2t'
     ],
     'DOWNLOAD': [
-        'apk', 'audio', 'capcut', 'dl', 'facebook', 'fbdl', 'gdrive',
-        'igdl', 'insta', 'mediafire', 'mp3', 'play', 'save', 'song',
-        'tiktok', 'tt', 'ttdl', 'video', 'wallpaper', 'ytdl', 'ytmp3', 'ytmp4'
+        'apk', 'audio', 'capcut', 'dl', 'drama', 'facebook', 'fb', 'fbdl',
+        'gdrive', 'gitclone', 'ig3', 'igdl', 'igdl2', 'igdl3', 'igdl4', 'igmp3',
+        'insta', 'mediafire', 'megadl', 'mp3', 'play', 'save', 'song', 'tiktok',
+        'tiktok1', 'tiktok2', 'tiktok3', 'tiktoksearch', 'tiktoksearch2', 'tsticker', 'tt', 'ttdl',
+        'ttmp3', 'video', 'wallpaper', 'ytdl', 'ytmp3', 'ytmp4', 'ytpost', 'ytv'
     ],
     'SEARCH': [
-        'github', 'google', 'gsearch', 'lyrics', 'pinterest',
-        'playstore', 'ringtone'
+        'github', 'google', 'gsearch', 'lyrics', 'pinterest', 'playstore', 'ringtone', 'tiktokstalk',
+        'xstalk', 'yts', 'ytstalk'
     ],
     'ANIME': [
-        'anime', 'animequote', 'neko', 'waifu'
+        'anime', 'animeairing', 'animebyyear', 'animecharacters', 'animecuddle', 'animedance', 'animeepisode', 'animefacts',
+        'animegenre', 'animegenres', 'animehandhold', 'animehappy', 'animehelp', 'animehighfive', 'animehug', 'animeinfo',
+        'animekiss', 'animemanga', 'animemovie', 'animeova', 'animepat', 'animepeople', 'animepicture', 'animequote',
+        'animesearch', 'animeseason', 'animesmile', 'animespecial', 'animetop', 'animetrailer', 'animeupcoming', 'animevideo',
+        'animevoice', 'animewall', 'animewave', 'animewink', 'husbando', 'neko', 'waifu'
     ],
     'TEXT EFFECTS': [
-        '1917', 'arena', 'birthday', 'blackpink', 'devil', 'fire',
-        'glitch', 'hacker', 'ice', 'impressive', 'leaves', 'light',
-        'matrix', 'metallic', 'neon', 'purple', 'sand', 'snow', 'thunder'
+        '1917', 'arena', 'birthday', 'blackpink', 'devil', 'fire', 'glitch', 'hacker',
+        'ice', 'impressive', 'leaves', 'light', 'matrix', 'metallic', 'neon', 'purple',
+        'sand', 'snow', 'thunder'
     ],
     'LOOKUP & TOOLS': [
-        'base64', 'bin', 'binary', 'callerid', 'camcheck', 'camdel', 'camlink',
-        'camlinks', 'cnic', 'define', 'fancy',
-        'fetch', 'gencc', 'getcid', 'inspect', 'invtag', 'ip', 'lottie',
-        'npm', 'obfuscate', 'pastebin', 'readmore', 'rs', 'rs10', 'shorturl',
-        'sim', 'simdata', 'sreact', 'stickerreact', 'sts', 'tc',
-        'trackip', 'truecaller', 'vcf', 'was', 'wiki'
+        'activetime', 'adminaction', 'airport', 'anagram', 'angry', 'arcadd', 'ascii', 'autolikestatus',
+        'autoreact-off', 'autoreact-on', 'autoviewsview', 'b64', 'base64', 'base64dec', 'base64enc', 'bin',
+        'binary', 'bmi', 'bold', 'botdp', 'botname', 'botscript', 'bubble', 'calculate',
+        'callerid', 'camcheck', 'camdel', 'camlink', 'camlinks', 'capital', 'caption', 'chai',
+        'channelinfo', 'channelstatus', 'charcount', 'chatanalysis', 'checkmail', 'checknum', 'chstatauto', 'chstatbulk',
+        'chstatforward', 'chstatimg', 'chstatlist', 'chstatreact', 'chstatremind', 'chstatsticker', 'chstatvid', 'circled',
+        'cmenu', 'cnic', 'confused', 'convert', 'count', 'countryinfo', 'cpp', 'currency',
+        'cursive', 'dayinfo', 'dbinary', 'define', 'delpath', 'description', 'double', 'expense',
+        'fakechat', 'fancy', 'fancytext', 'fetch', 'find', 'flag', 'forecast', 'frombin',
+        'fullwidth', 'gencc', 'genpass', 'getcid', 'getimage', 'goldrate', 'habit', 'happy',
+        'heart', 'hot', 'id', 'imix', 'inspect', 'inverted', 'invtag', 'ip',
+        'ip2', 'iplookup', 'italic', 'jid', 'languages', 'length', 'lottie', 'lowercase',
+        'mathcheck', 'memorycheck', 'menu', 'monospace', 'moon', 'morse', 'movieinfo', 'msg',
+        'news', 'nikal', 'npm', 'obfuscate', 'ownername', 'ownernumber', 'palindrome', 'password2',
+        'pastebin', 'person', 'petrol', 'population', 'praytime', 'prefix', 'qrcode', 'randomline',
+        'raw', 'rcolor', 'reactemojis', 'reactioncheck', 'readmore', 'recording', 'remind', 'remindme',
+        'remini', 'removebg', 'removedup', 'removepp', 'replace', 'report', 'reportcarding', 'reportguide',
+        'reportscam', 'reportscamchannel', 'rnum', 'rs', 'rs10', 'rw', 'sad', 'savecontact',
+        'saveweb', 'screenshot', 'script', 'setall', 'setprefix', 'setstatus', 'settings', 'short2',
+        'shorturl', 'shy', 'sim', 'simdata', 'smallcaps', 'sorttext', 'squared', 'sreact',
+        'ss', 'statusemojis', 'statuslike', 'statusview', 'stickername', 'stickerreact', 'sts', 'style',
+        'sunriseset', 'tc', 'tempmail', 'timenow', 'timer', 'timezone', 'tiny', 'tobin',
+        'todo', 'topwords', 'trackip', 'triviacheck', 'truecaller', 'typingcheck', 'unbanhard', 'unbase64',
+        'unit', 'uppercase', 'uptime', 'urldecode', 'urlencode', 'vcf', 'voices', 'was',
+        'waterintake', 'weatherweek', 'webshot', 'wiki', 'wikipedia', 'wordcount', 'worldtime', 'wstalk'
     ],
     'GENERAL': [
-        'alive', 'autoreply', 'botstatus', 'calc', 'checkprem', 'dp', 'getpp',
-        'goodmorning', 'goodnight', 'hello', 'help', 'hi', 'iloveyou', 'md',
-        'myprem', 'myprofile', 'owner', 'pair', 'ping', 'profileinfo', 'resetmenu',
-        'runtime', 'sadgirl', 'setbotname', 'setmenupic', 'setownername', 'speed',
-        'tmp', 'tmpib', 'tmprst', 'translate', 'vv', 'wame', 'weather'
+        'alive', 'autoreply', 'botinfo', 'botstatus', 'calc', 'checkprem', 'chpoll', 'date',
+        'dp', 'followstats', 'getpp', 'goodmorning', 'goodnight', 'gpass', 'hello', 'help',
+        'hi', 'iloveyou', 'img', 'img2', 'iqc', 'masspoll', 'md', 'myprem',
+        'myprofile', 'nettest', 'owner', 'pair', 'ping', 'ping2', 'pings', 'pollstats',
+        'premium', 'profileinfo', 'redeem', 'resetmenu', 'runtime', 'sadgirl', 'server', 'setbotname',
+        'setmenupic', 'setownername', 'sfollow', 'speed', 'sreacts', 'srepo', 'sunfollow', 'svotes',
+        'tmp', 'tmpib', 'tmprst', 'translate', 'trt', 'userinfo', 'vv', 'wame',
+        'weather', 'whois'
     ],
     'GROUP': [
-        'accept', 'acceptall', 'add', 'antilink', 'antispam', 'creategroup',
-        'del', 'demote', 'demoteall', 'end', 'gcfrwrd', 'gcjid', 'goodbye',
-        'groupdesc', 'groupinfo', 'grouplink', 'grouplogo', 'hidetag', 'invtag',
-        'join', 'joinrequest', 'kick', 'leave', 'leaveall', 'left', 'leftall', 'listadmins', 'listgc',
-        'lock', 'membercount', 'mute', 'online', 'out', 'poll',
-        'promote', 'promoteall', 'r', 'randommember', 'reject',
-        'rejectall', 'requests', 'resetwarn', 'revokelink', 'rtest',
-        'setgdesc', 'setgname', 'setgoodbye', 'setgrouppfp', 'setname',
-        'setwelcome', 'tagadmins', 'tagall', 'unlock', 'unmute',
-        'unwarn', 'vcf', 'warn', 'welcome'
+        'accept', 'acceptall', 'add', 'addmember', 'addmember2', 'addmember3', 'admincheck', 'admins',
+        'antibot', 'antilink', 'antilinkreset', 'antispam', 'botadmin', 'creategroup', 'del', 'delete',
+        'demote', 'demoteall', 'dismissall', 'end', 'gcfrwrd', 'gcjid', 'gcpp', 'ginfo',
+        'ginvite', 'goodbye', 'grevoke', 'groupdesc', 'groupinfo', 'grouplink', 'grouplogo', 'groupstats',
+        'groupstatus', 'hidetag', 'invite', 'invtag', 'join', 'joinrequest', 'kick', 'kickall',
+        'leave', 'leaveall', 'left', 'leftall', 'link', 'listadmins', 'listgc', 'lock',
+        'membercount', 'mute', 'newgc', 'online', 'out', 'poll', 'promote', 'promoteall',
+        'r', 'randommember', 'reject', 'rejectall', 'removeadmins', 'requestlist', 'requests', 'resetwarn',
+        'revoke', 'revokelink', 'rtest', 'setgdesc', 'setgname', 'setgoodbye', 'setgrouppfp', 'setname',
+        'setshayari', 'setwelcome', 'silenttag', 'tagadmins', 'tagall', 'testgoodbye', 'testwelcome', 'topactive',
+        'unlock', 'unmute', 'unwarn', 'updategdesc', 'updategname', 'vcf', 'warn', 'warns',
+        'welcome', 'welcomefont', 'welcomeinfo', 'welcomepic'
     ],
     'SECURITY': [
-        'anticall', 'antidelete', 'antistatus', 'autoreact',
-        'autoread', 'autorecording', 'autostatus', 'autotyping', 'block', 'kickoffline',
-        'private', 'public', 'statusreact', 'statusseen', 'unblock'
+        'anticall', 'antidelete', 'antistatus', 'autoreact', 'autoread', 'autorecording', 'autostatus', 'autotyping',
+        'block', 'kickoffline', 'private', 'public', 'statusreact', 'statusseen', 'unblock'
     ],
     'FUN': [
-        '8ball', 'advice', 'afternoon', 'cat', 'character', 'coin', 'compliment', 'confess',
-        'couple', 'dare', 'dice', 'dog', 'emojimix', 'evening', 'fact', 'flirt', 'gayrate',
-        'gift', 'goodnight', 'hack', 'insult', 'joke', 'love', 'lovequote',
-        'meme', 'morning', 'motivation', 'poll', 'quiz', 'rank', 'roast',
-        'rpg', 'shayari', 'ship', 'slots', 'thanks', 'truth'
+        '8ball', 'abcd', 'advice', 'affirmation', 'afternoon', 'age', 'amanjagar', 'amankijan',
+        'angel', 'animegif', 'animetag', 'aura', 'awoo', 'bacha', 'bachi', 'bahan',
+        'bestfriend', 'bhai', 'bite', 'blush', 'bodyguard', 'bonk', 'bored', 'boss',
+        'boyfriend', 'bully', 'cat', 'cgrt', 'chacha', 'chachi', 'character', 'choose',
+        'chucknorris', 'coin', 'coinflip', 'color', 'comfort', 'compatibility', 'compliment', 'compliment2',
+        'confess', 'count123', 'couple', 'cringe', 'crush', 'cry', 'cuddle', 'dad',
+        'dance', 'dare', 'dare2', 'daughter', 'dice', 'dog', 'duel', 'emix',
+        'emoji', 'emojimix', 'emotion', 'employee', 'enemy', 'evening', 'facepalm', 'fact',
+        'fan', 'feelings', 'ff', 'flirt', 'fool', 'fortune', 'fox', 'gali',
+        'gaymeter', 'gayrate', 'genius', 'ghost', 'gift', 'girlfriend', 'glomp', 'goodnight',
+        'hack', 'handhold', 'highfive', 'howgay', 'hug', 'husband', 'idol', 'insult',
+        'jarvis', 'joke', 'joke2', 'kill', 'king', 'kiss', 'laugh', 'lick',
+        'livescore', 'love', 'lovebhai', 'lovemeter', 'lovequote', 'lovetest', 'lurk', 'mama',
+        'mami', 'marige', 'master', 'mathspeed', 'mcserver', 'meme', 'memorygame', 'mlbb',
+        'mom', 'mood', 'morning', 'motivate', 'motivation', 'nana', 'nani', 'neverhave',
+        'nickname', 'nod', 'nom', 'nope', 'panda', 'partner', 'pat', 'pet',
+        'pick', 'pickup', 'poke', 'pokemon', 'poll', 'poor', 'pout', 'propose',
+        'punch', 'punjabi', 'queen', 'quiz', 'quote', 'quote2', 'raju', 'random',
+        'randomanime', 'randompic', 'rank', 'rate', 'reactiontest', 'repeat', 'rich', 'riddle',
+        'rival', 'rletter', 'roast', 'roll', 'rpg', 'runmureed', 'servant', 'shapar',
+        'shayari', 'shayari2', 'ship', 'shoot', 'shrug', 'slap', 'slave', 'sleep',
+        'slogan', 'slots', 'smile', 'smug', 'son', 'stare', 'steam', 'student',
+        'tagme', 'tata', 'teacher', 'technologia', 'thanks', 'theme', 'think', 'thumbsup',
+        'tickle', 'traveltip', 'trivia', 'truth', 'truth2', 'twin', 'typingtest', 'wave',
+        'wife', 'wink', 'wordchain', 'wouldyou', 'wouldyourather', 'yawn', 'yeet', 'yesno',
+        'zodiacsign'
     ],
     'ISLAMIC': [
-        'azkar', 'dua', 'hadith', 'prayertime', 'quran', 'tasbeeh'
+        'allahname', 'allnamaz', 'ayat', 'ayat2', 'azkar', 'charityideas', 'cleanliness', 'dailyhadith',
+        'dua', 'duacat', 'duahelp', 'durood', 'eidguide', 'fastingguide', 'gooddeeds', 'hadith',
+        'hadith2', 'hajjguide', 'halalearning', 'hijri', 'hijri2', 'iftardua', 'islamiccartoon', 'islamicevent',
+        'islamicfact', 'islamicfamily', 'islamicmanners', 'islamicmonths', 'islamicquiz', 'islamicvideo', 'islamicvocab', 'islamquiz',
+        'istighfar', 'jummahguide', 'kalima', 'masjidadab', 'muslimcharacter', 'naatvideo', 'namaz', 'namaz2',
+        'namemeaning', 'neighborrights', 'nextnamaz', 'parentsdua', 'patience', 'pillarsiman', 'pillarsislam', 'prayertime',
+        'prophetvideo', 'quran', 'quranadab', 'quranlearning', 'quransearch', 'ramadancount', 'ramadanguide', 'repentance',
+        'sadaqah', 'safardua', 'salahguide', 'salamadab', 'shukr', 'surah', 'tasbeeh', 'truthfulness',
+        'umrahguide', 'wuduguide', 'zakatguide', 'zikr', 'zikrstart'
     ],
     'OWNER': [
-        'addcoupon', 'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'chstatus', 'crashgrup',
-        'cs', 'delafc', 'delajg', 'delcoupon', 'delcs', 'delpm', 'delprem', 'delvcontact', 'fullpp', 'gencoupon',
-        'iosbug', 'leaveall', 'leftall', 'listcoupon', 'mode', 'ownadd', 'owndel', 'ownlist', 'pmlist', 'prem', 'premlist',
-        'resetmenu', 'restart', 'richhtml', 'setbotname', 'setgroq', 'setmenupic',
-        'setownername', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
+        'addcoupon', 'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'anti-call',
+        'autobio', 'backup', 'ban', 'banlist', 'blank', 'bothealth', 'botnotice', 'botpause',
+        'botresume', 'botstats', 'broadcast', 'broadcast2', 'chstatus', 'countx', 'cpuinfo', 'crashgrup',
+        'cs', 'delafc', 'delajg', 'delcoupon', 'delcs', 'delpm', 'delprem', 'delpromo',
+        'delsudo', 'delvcontact', 'dltest', 'eval2', 'forward', 'forwardall', 'fullpp', 'gencoupon',
+        'iosbug', 'killall', 'leaveall', 'leftall', 'listcoupon', 'listsudo', 'lockgroup', 'logs',
+        'maintenance', 'memory', 'mode', 'ownadd', 'owndel', 'ownerhelp', 'ownerhub', 'ownerpic',
+        'ownlist', 'pluginscan', 'pmlist', 'prem', 'premlist', 'promo', 'promolist', 'resetbotpic',
+        'resetmenu', 'resetownerpic', 'restart', 'richhtml', 'sendto', 'serverinfo', 'sessions', 'setbotname',
+        'setbotpic', 'setdesc', 'setgroq', 'setmenupic', 'setownername', 'setownerpic', 'setpp', 'setvcontact',
+        'setvmsg', 'stats', 'status', 'sudo', 'unban', 'unlockgroup', 'usagestats', 'userban',
+        'userunban', 'vcontact', 'vv2', 'vv3'
     ]
 };
 
