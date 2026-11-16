@@ -1836,9 +1836,18 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
     const ramMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
 
     // Parallel Cluster Health & Sessions Polling across 11 Nodes
+    // Cross-verify with MongoDB Atlas whatsapp_sessions cloud collection
+    let mongoClusterSessions = [];
+    try {
+        const mongoSync = require('./mongoSync');
+        mongoClusterSessions = await mongoSync.getAllClusterSessions();
+    } catch (_) {}
+
     const clusterResults = await Promise.allSettled(
         CLUSTER_MONITOR_NODES.map(async (node) => {
             const t0 = Date.now();
+            const mongoForNode = mongoClusterSessions.filter(s => s && s.nodeId === node.id);
+            const mongoCount = mongoForNode.length;
             try {
                 const isCurrentHost = (isRailway && node.id === 'railway') || (isHeroku && process.env.HEROKU_APP_NAME?.includes(node.id));
                 if (isCurrentHost) {
@@ -1847,26 +1856,44 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
                         name: node.name,
                         online: true,
                         active: onlineCount,
-                        total: sessionList.length,
+                        total: Math.max(sessionList.length, mongoCount),
                         ping: 1,
-                        isCurrent: true
+                        isCurrent: true,
+                        sessions: sessionList
                     };
                 }
 
-                const res = await axios.get(`${node.url}/health`, { timeout: 3500 });
+                const res = await axios.get(`${node.url}/health`, {
+                    timeout: 6500,
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SaqibBotClusterMonitor/2.0' }
+                });
                 const ping = Date.now() - t0;
                 const data = res.data || {};
-                const active = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
+                const apiActive = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
+                const active = Math.max(apiActive, mongoCount);
                 return {
                     id: node.id,
                     name: node.name,
                     online: true,
                     active: active,
-                    total: data.pairedSessions || active,
+                    total: Math.max(data.pairedSessions || active, mongoCount),
                     ping,
-                    isCurrent: false
+                    isCurrent: false,
+                    sessions: mongoForNode.map(s => s._id)
                 };
             } catch (_) {
+                if (mongoCount > 0) {
+                    return {
+                        id: node.id,
+                        name: node.name,
+                        online: true,
+                        active: mongoCount,
+                        total: mongoCount,
+                        ping: null,
+                        isCurrent: false,
+                        sessions: mongoForNode.map(s => s._id)
+                    };
+                }
                 return {
                     id: node.id,
                     name: node.name,
@@ -1874,7 +1901,8 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
                     active: 0,
                     total: 0,
                     ping: null,
-                    isCurrent: false
+                    isCurrent: false,
+                    sessions: []
                 };
             }
         })
@@ -1890,7 +1918,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
         if (val.online) {
             clusterOnlineNodes++;
             clusterTotalActive += val.active;
-            const pingStr = val.isCurrent ? '⚡ Current Host' : `${val.ping}ms`;
+            const pingStr = val.isCurrent ? '⚡ Current Host' : (val.ping ? `${val.ping}ms` : 'Cloud Sync');
             const activeStr = val.active > 0 ? `🟢 *${val.active} Paired*` : `⚪ 0 Paired`;
             nodeLines.push(`┃ 🔹 *${val.name}:* ${activeStr} _(${pingStr})_`);
         } else {
@@ -1899,15 +1927,39 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
     });
 
     let listText = '';
-    if (items.length === 0) {
-        listText = `┃ 📭 *Host node par koi number pair nahi hai!*`;
-    } else {
-        items.forEach((it, idx) => {
+    let counter = 1;
+
+    // 1. Host node connected numbers
+    if (items.length > 0) {
+        items.forEach((it) => {
             const statusEmoji = it.isOnline ? '🟢 *ONLINE*' : '🔴 *OFFLINE*';
             const nameStr = it.pushName ? ` (${it.pushName})` : '';
-            listText += '┃ *' + (idx + 1) + '.* 📱 `+' + it.id + '`' + nameStr + '\n' +
-                        `┃    └ Status: ${statusEmoji}\n`;
+            listText += '┃ *' + counter + '.* 📱 `+' + it.id + '`' + nameStr + '\n' +
+                        `┃    └ Node: *${serverNode}* | Status: ${statusEmoji}\n`;
+            counter++;
         });
+    }
+
+    // 2. Remote cluster node numbers (from MongoDB cloud sync across 11 nodes)
+    const hostNumberSet = new Set(items.map(it => String(it.id).replace(/[^0-9]/g, '')));
+    clusterResults.forEach((res) => {
+        if (res.status === 'fulfilled') {
+            const val = res.value;
+            if (!val.isCurrent && Array.isArray(val.sessions) && val.sessions.length > 0) {
+                val.sessions.forEach((sId) => {
+                    const cleanNum = String(sId).replace(/[^0-9]/g, '');
+                    if (!cleanNum || hostNumberSet.has(cleanNum)) return;
+                    hostNumberSet.add(cleanNum);
+                    listText += '┃ *' + counter + '.* 📱 `+' + cleanNum + '`\n' +
+                                `┃    └ Node: *${val.name}* | Status: 🟢 *ONLINE (Cluster)*\n`;
+                    counter++;
+                });
+            }
+        }
+    });
+
+    if (!listText) {
+        listText = `┃ 📭 *Cluster me koi number pair nahi mila!*`;
     }
 
     const message =
@@ -1924,7 +1976,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
 `┃ 🌐 *11-NODE LIVE BREAKDOWN:*\n` +
 `${nodeLines.join('\n')}\n` +
 `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
-`┃ 📋 *HOST PAIRED NUMBERS LIST:*\n` +
+`┃ 📋 *CLUSTER PAIRED NUMBERS LIST:*\n` +
 `┃\n` +
 `${listText}\n` +
 `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +

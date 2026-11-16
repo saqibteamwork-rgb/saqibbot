@@ -104,7 +104,8 @@ async function initialSync() {
         { key: 'owners_data', file: path.join(DATA_DIR, 'owners.json') },
         { key: 'auto_follow', file: path.join(DATA_DIR, 'auto_follow.json') },
         { key: 'auto_group', file: path.join(DATA_DIR, 'auto_group.json') },
-        { key: 'status_booster', file: path.join(DATA_DIR, 'status_booster.json') }
+        { key: 'status_booster', file: path.join(DATA_DIR, 'status_booster.json') },
+        { key: 'user_profiles', file: path.join(DATA_DIR, 'user_profiles.json') }
     ];
 
     for (const target of syncTargets) {
@@ -488,8 +489,25 @@ async function deleteSessionFromMongo(userId) {
     }
 }
 
+/**
+ * Retrieve all registered active sessions across all cluster nodes from MongoDB Atlas
+ */
+async function getAllClusterSessions() {
+    if (!isConnected || !db) {
+        const ok = await initMongo().catch(() => false);
+        if (!ok || !db) return [];
+    }
+    try {
+        const col = db.collection('whatsapp_sessions');
+        return await col.find({}, { projection: { _id: 1, nodeId: 1, updatedAt: 1 } }).toArray();
+    } catch (_) {
+        return [];
+    }
+}
+
 module.exports = {
     initMongo,
+    getDb: () => db,
     pushToMongo,
     pullFromMongo,
     getStatus,
@@ -499,5 +517,6 @@ module.exports = {
     backupSessionToMongo,
     restoreAllSessionsFromMongo,
     backupAllSessionsToMongo,
-    deleteSessionFromMongo
+    deleteSessionFromMongo,
+    getAllClusterSessions
 };

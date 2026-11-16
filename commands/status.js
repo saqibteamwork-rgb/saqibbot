@@ -82,7 +82,13 @@ function ensureStatusSettings(botData, userId, sock = null) {
     let existingKey = userKeys.find(k => botData.statusSettings[k]);
     if (!existingKey) {
         existingKey = userKeys[0] || 'default';
-        botData.statusSettings[existingKey] = {
+        let saved = null;
+        try {
+            const zeroLoss = require('../utils/zeroLossManager');
+            saved = zeroLoss.getUserSettings(existingKey) || (userKeys[1] ? zeroLoss.getUserSettings(userKeys[1]) : null);
+        } catch (_) {}
+
+        botData.statusSettings[existingKey] = saved || {
             autoStatus: false,
             autoSeen: false,
             autoLike: false,
@@ -90,6 +96,7 @@ function ensureStatusSettings(botData, userId, sock = null) {
             autoTyping: false,
             autoRecording: false,
             alwaysOnline: false,
+            autoRead: false,
             system: 1,
             isPublic: false
         };
@@ -109,6 +116,11 @@ function ensureStatusSettings(botData, userId, sock = null) {
     userKeys.forEach(k => {
         botData.statusSettings[k] = s;
     });
+
+    try {
+        const zeroLoss = require('../utils/zeroLossManager');
+        zeroLoss.persistUserSettings(existingKey, s);
+    } catch (_) {}
 
     return s;
 }

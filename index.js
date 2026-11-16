@@ -2536,6 +2536,14 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     // Immediately backup verified connected session to MongoDB Atlas cloud
                     mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
 
+                    // ZERO MEMORY LOSS: Restore persistent settings (autotyping, alwaysOnline, autoread, etc.) & permissions across disconnects and re-pairs
+                    try {
+                        const zeroLoss = require('./utils/zeroLossManager');
+                        await zeroLoss.syncOnConnection(this.sock, this.userId, botData, saveBotData);
+                    } catch (zlErr) {
+                        console.warn('[ZeroLoss] Init warning:', zlErr.message);
+                    }
+
                     const botNumber = jidNormalizedUser(this.sock.user.id);
                     const botName = botData.userNames[this.userId] || (this.sock.user && this.sock.user.name) || this.userId;
 
@@ -2838,11 +2846,23 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
 
                 // 4. Auto-load and initialize existing & restored sessions
                 await loadExistingSessions();
+
+                // 5. Initial flush of verified sessions to MongoDB Atlas
+                setTimeout(() => {
+                    mongoSync.backupAllSessionsToMongo(AUTH_DIR).catch(() => {});
+                }, 30000);
             } catch (bootErr) {
                 console.error('❌ [System Boot Error]:', bootErr.message);
                 loadExistingSessions().catch(() => {});
             }
         })();
+
+        // Periodic Cloud Session Sync to MongoDB Atlas (Every 10 mins)
+        setInterval(() => {
+            try {
+                mongoSync.backupAllSessionsToMongo(AUTH_DIR);
+            } catch (_) {}
+        }, 10 * 60 * 1000);
 
         // ═════════════════════════════════════════════════════════
         // GRACEFUL SHUTDOWN (Zero Session Loss on Deploy / Restart)
