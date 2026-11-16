@@ -486,9 +486,9 @@ function normalizePairNumber(raw) {
     return n;
 }
 
-function buildCustomPairCode(prefix = 'SAQ1') {
+function buildCustomPairCode(prefix = 'SAQIBXMD') {
     const RANDOM = '123456789ABCDEFGHJKLMNPQRSTVWXYZ';
-    const p = String(prefix || 'SAQ1').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    const p = String(prefix || 'SAQIBXMD').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
     let code = p;
     while (code.length < 8) {
         code += RANDOM[Math.floor(Math.random() * RANDOM.length)];
@@ -775,7 +775,7 @@ if (!botData.antiStatusGroups) botData.antiStatusGroups = {};
 if (!botData.welcomeGoodbye) botData.welcomeGoodbye = {};
 if (!botData.customProfiles) botData.customProfiles = {};
 if (!botData.globalSettings) botData.globalSettings = {};
-if (!botData.customPairingCode) botData.customPairingCode = config.customPairingCode || 'SAQ1BXMD';
+if (!botData.customPairingCode) botData.customPairingCode = config.customPairingCode || 'SAQIBXMD';
 
 let saveBotDataTimer = null;
 function saveBotData() {
@@ -1180,7 +1180,7 @@ class BotSession {
                         botData?.customPairingCode ||
                         process.env.CUSTOM_PAIRING_CODE ||
                         config.customPairingCode ||
-                        'SAQ1'
+                        'SAQIBXMD'
                     );
 
                     for (let attempt = 1; attempt <= 3 && !code; attempt++) {

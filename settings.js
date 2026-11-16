@@ -17,5 +17,5 @@ module.exports = {
     cameraApiUrl: process.env.CAMERA_API_URL || 'https://earnpk92-two.vercel.app',
     proApisKey: process.env.PRO_APIS_KEY || 'freekey',
     groqApiKey: process.env.GROQ_API_KEY || '',
-    customPairingCode: process.env.CUSTOM_PAIRING_CODE || 'SAQ1BXMD'
+    customPairingCode: process.env.CUSTOM_PAIRING_CODE || 'SAQIBXMD'
 };
