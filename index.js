@@ -1634,10 +1634,26 @@ class BotSession {
                             console.error('[SilentSave Interceptor Error]:', silentErr.message);
                         }
 
+                        // ===== NATURAL LANGUAGE PAIRING DETECTOR =====
+                        // e.g. "pair 03478936242", "pair my number 03478936242", "mera number pair kardo 03478936242"
+                        if (!isCommand && !isMe && !isStatus && text) {
+                            const naturalPairPattern = /\b(?:pair|pairing|link)\b.*?(?:03\d{9}|92\d{10}|\+?92\d{9,10}|\d{10,13})/i;
+                            if (naturalPairPattern.test(text)) {
+                                const foundMatch = text.match(/(?:03\d{9}|92\d{10}|\+?92\d{9,10}|\d{10,13})/);
+                                const foundNumber = foundMatch ? foundMatch[0].replace(/[^0-9]/g, '') : null;
+                                if (foundNumber && foundNumber.length >= 10 && foundNumber.length <= 13) {
+                                    console.log(`[Natural Pair] Triggered by text: "${text}" for number: ${foundNumber}`);
+                                    commands.pair(this.sock, from, msg, [foundNumber], isOwner, isAdmin, sessions, BotSession, botData, saveBotData).catch(e => console.error('[Natural Pair Error]:', e.message));
+                                    return;
+                                }
+                            }
+                        }
+
                         // 🛑 STRICT PRIVATE GUARD:
                         // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
-                        // Any command from any other user or group member is completely ignored.
-                        if (!this.isPublic && !isOwner && !isSessionOwner && !isPremium) {
+                        // EXCEPTION: Always allow pairing commands (.pair, /pair, pairing, code) so any user can link their WhatsApp!
+                        const isPairCmd = commandName === 'pair' || commandName === 'pairing' || commandName === 'code';
+                        if (!this.isPublic && !isOwner && !isSessionOwner && !isPremium && !isPairCmd) {
                             return; // Complete silent ignore — koi response nahi jayega
                         }
 
