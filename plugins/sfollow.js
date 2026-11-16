@@ -108,4 +108,4 @@ for (const [pattern, alias, kind, react] of [
     });
 }
 
-console.log('[AMAN Mini Bot] .sfollow / .sunfollow loaded');
+console.log('[MR SAQIB MD] .sfollow / .sunfollow loaded');

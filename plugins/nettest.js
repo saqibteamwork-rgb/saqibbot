@@ -101,4 +101,4 @@ cmd({
     }
 });
 
-console.log('[AMAN Mini Bot] .nettest loaded');
+console.log('[MR SAQIB MD] .nettest loaded');

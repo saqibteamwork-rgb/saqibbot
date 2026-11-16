@@ -225,7 +225,7 @@ async (conn, mek, m, { from, isGroup, isAdmins, isBotAdmins, reply }) => {
     }
 
 });
-//REMOVE ADMINS BY 𝗔𝗠𝗔𝗡-𝐌𝐃 OFFICIAL 
+//REMOVE ADMINS BY MR SAQIB MD OFFICIAL 
 cmd({
     pattern: "removeadmins",
     alias: ["kickadmins", "kickall3", "deladmins"],

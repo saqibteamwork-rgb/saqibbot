@@ -21,9 +21,9 @@ let EdgeTTS = null;
 try {
     const edge = require('edge-tts-universal');
     EdgeTTS = edge.UniversalEdgeTTS || edge.EdgeTTS;
-    console.log('[AMAN TTS] Edge-TTS loaded');
+    console.log('[SAQIB TTS] Edge-TTS loaded');
 } catch (error) {
-    console.error('[AMAN TTS] Module missing:', error.message);
+    console.error('[SAQIB TTS] Module missing:', error.message);
 }
 
 const VOICES = {
@@ -52,7 +52,7 @@ async function createVoice(text, voice) {
     }
 
     const workDir = await fs.mkdtemp(
-        path.join(os.tmpdir(), 'AMAN-tts-')
+        path.join(os.tmpdir(), 'SAQIB-tts-')
     );
 
     const mp3Path = path.join(workDir, 'input.mp3');
@@ -111,7 +111,7 @@ async function createVoice(text, voice) {
         return oggBuffer;
 
     } catch (error) {
-        console.error('[AMAN TTS ERROR]', error.message);
+        console.error('[SAQIB TTS ERROR]', error.message);
         throw error;
     } finally {
         await fs.remove(workDir).catch(() => {});
@@ -190,7 +190,7 @@ async function handleTTS(conn, mek, ctx, input, defaultVoice) {
         });
 
     } catch (error) {
-        console.error('[AMAN TTS]', error);
+        console.error('[SAQIB TTS]', error);
 
         await conn.sendMessage(ctx.from, {
             react: { text: '❌', key: mek.key }
@@ -207,7 +207,7 @@ async function handleTTS(conn, mek, ctx, input, defaultVoice) {
         }
         return ctx.reply(
             '❌ Voice generate nahi hui.\n' +
-            'Railway deployment logs mein [AMAN TTS ERROR] check karo.'
+            'Railway deployment logs mein [SAQIB TTS ERROR] check karo.'
         );
     }
 }

@@ -7,7 +7,7 @@ const axios = require('axios');
 
 const NEKOS_BEST = 'https://nekos.best/api/v2';
 const WAIFU_PICS = 'https://api.waifu.pics/sfw';
-const UA = 'AMAN-HELL-MD/3.0';
+const UA = 'SAQIB-MD/3.0';
 
 async function get(url) {
     const res = await axios.get(url, {
@@ -179,7 +179,7 @@ cmd({
     filename: __filename
 }, async (conn, mek, m, ctx) => {
     return ctx.reply(
-`💫 *AMAN EMOTIONS — 40+ Commands*
+`💫 *SAQIB EMOTIONS — 40+ Commands*
 
 😄 *HAPPY (6):*
 .happy .smile .laugh .dance .wink .wave
@@ -334,4 +334,4 @@ cmd({
     filename: __filename
 }, async (conn, mek, m, ctx) => ctx.reply(pick(affirmations)));
 
-console.log('[AMAN Mini Bot] emotion commands loaded');
+console.log('[MR SAQIB MD] emotion commands loaded');

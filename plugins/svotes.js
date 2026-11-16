@@ -166,4 +166,4 @@ ${used}\n\n⚙️ Method: ${Object.entries(res.methods || {}).map(([k, v]) => k 
     return ctx.reply(out);
 }
 
-console.log('[AMAN Mini Bot] .svotes loaded');
+console.log('[MR SAQIB MD] .svotes loaded');

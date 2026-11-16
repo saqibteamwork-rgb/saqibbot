@@ -1,4 +1,5 @@
 const { cmd } = require('../arslan');
+const config = require('../config');
 const fs = require('fs-extra');
 const path = require('path');
 
@@ -67,7 +68,7 @@ function isProtected(sender, isOwner, isAdmins) {
 
 function statusText(from, c) {
   return [
-    '🛡️ *𝗔𝗠𝗔𝗡-𝐌𝐃 ANTILINK*',
+    `🛡️ *${config.BOT_NAME || 'MR SAQIB MD'} ANTILINK*`,
     '',
     `• Status: *${c.enabled ? 'ON' : 'OFF'}*`,
     `• Action: *${c.action.toUpperCase()}*`,

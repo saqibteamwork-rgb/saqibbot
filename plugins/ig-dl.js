@@ -28,7 +28,7 @@ cmd({
             await conn.sendMessage(from, {
                 video: local.buffer,
                 mimetype: 'video/mp4',
-                caption: `*_ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ_*\n\n> © AMAN-ᴍᴅ`
+                caption: `*_ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ_*\n\n> © SAQIB-ᴍᴅ`
             }, { quoted: fakevCard });
             await conn.sendMessage(from, { react: { text: '✅', key: m.key } });
             return;
@@ -52,8 +52,8 @@ cmd({
                 [item.type === 'video' ? 'video' : 'image']: { url: item.url },
                 caption: `‎*_ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ_*
 
-‎╔ஜ۩▒█ *AMAN X ᴍᴅ* █▒۩ஜ╗
-‎*|* 𝙿𝙾𝚆𝙴𝚁𝙴𝙳 𝙱𝚈 *AMAN-ᴍᴅ* 
+‎╔ஜ۩▒█ *SAQIB X ᴍᴅ* █▒۩ஜ╗
+‎*|* 𝙿𝙾𝚆𝙴𝚁𝙴𝙳 𝙱𝚈 *SAQIB-ᴍᴅ* 
 ‎*╰━━━━━━━━━━━━━━━━━━⊷*
 ‎`
             }, { quoted: fakevCard });
@@ -109,8 +109,8 @@ cmd({
       video: videoBuffer,
       caption: `*_ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ_*
 
-‎‎╔ஜ۩▒█ *AMAN X ᴍᴅ* █▒۩ஜ╗
-‎*|* 𝙿𝙾𝚆𝙴𝚁𝙴𝙳 𝙱𝚈 *AMAN-ᴍᴅ* 
+‎‎╔ஜ۩▒█ *SAQIB X ᴍᴅ* █▒۩ஜ╗
+‎*|* 𝙿𝙾𝚆𝙴𝚁𝙴𝙳 𝙱𝚈 *SAQIB-ᴍᴅ* 
 ‎*╰━━━━━━━━━━━━━━━━━━⊷*`
     }, { quoted: fakevCard });
 
@@ -197,8 +197,8 @@ async (conn, mek, m, { from, args, q, reply }) => {
         const caption = 
 `*_ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ_*
 
-‎╔ஜ۩▒█ *AMAN X ᴍᴅ* █▒۩ஜ╗
-‎*|* 𝙿𝙾𝚆𝙴𝚁𝙴𝙳 𝙱𝚈 *AMAN-ᴍᴅ* 
+‎╔ஜ۩▒█ *SAQIB X ᴍᴅ* █▒۩ஜ╗
+‎*|* 𝙿𝙾𝚆𝙴𝚁𝙴𝙳 𝙱𝚈 *SAQIB-ᴍᴅ* 
 ‎*╰━━━━━━━━━━━━━━━━━━⊷*`;
         
         await conn.sendMessage(from, {

@@ -1,4 +1,5 @@
 const { cmd } = require('../arslan')
+const config = require('../config')
 const yts = require('yt-search')
 
 cmd({
@@ -40,7 +41,7 @@ async (conn, mek, m, { from, q, reply }) => {
 `
         }
 
-        text += "*👑 𝗔𝗠𝗔𝗡-𝐌𝐃-MINI WHATSAPP BOT 👑*"
+        text += `*👑 ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`
 
         await conn.sendMessage(
             from,

@@ -188,7 +188,7 @@ const CATEGORIES = {
         'block', 'kickoffline', 'private', 'public', 'statusreact', 'statusseen', 'unblock'
     ],
     'FUN': [
-        '8ball', 'abcd', 'advice', 'affirmation', 'afternoon', 'age', 'amanjagar', 'amankijan',
+        '8ball', 'abcd', 'advice', 'affirmation', 'afternoon', 'age', 'amanjagar', 'amankijan', 'saqibjagar', 'saqibkijan',
         'angel', 'animegif', 'animetag', 'aura', 'awoo', 'bacha', 'bachi', 'bahan',
         'bestfriend', 'bhai', 'bite', 'blush', 'bodyguard', 'bonk', 'bored', 'boss',
         'boyfriend', 'bully', 'cat', 'cgrt', 'chacha', 'chachi', 'character', 'choose',

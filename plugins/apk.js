@@ -4,7 +4,7 @@ const { cmd } = require('../arslan');
 const axios = require('axios');
 
 const API_TIMEOUT = 30000;
-const API_HEADERS = { 'User-Agent': 'AMAN-HELL-MD/1.0 (Aptoide app search)' };
+const API_HEADERS = { 'User-Agent': 'SAQIB-MD/1.0 (Aptoide app search)' };
 
 function cleanFileName(value) {
   return String(value || 'app')
@@ -26,7 +26,7 @@ cmd({
   try {
     const query = String(q || '').trim();
     if (!query) {
-      return reply('📦 *AMAN APK DOWNLOADER*\n\nUse: `.apk WhatsApp`\n\nApp ka naam likhein jise search karna hai.');
+      return reply('📦 *SAQIB APK DOWNLOADER*\n\nUse: `.apk WhatsApp`\n\nApp ka naam likhein jise search karna hai.');
     }
     if (query.length > 100) return reply('❌ App name 100 characters se chhota rakhein.');
 
@@ -60,7 +60,7 @@ cmd({
     const version = String(app.file?.vername || app.file?.vercode || 'Unknown');
     const updated = String(app.updated || 'Unknown');
     const caption = [
-      '╭━━━〔 📦 AMAN APK DOWNLOADER 〕━━━',
+      '╭━━━〔 📦 SAQIB APK DOWNLOADER 〕━━━',
       `┃ 📱 Name: ${appName}`,
       `┃ 📦 Size: ${sizeText}`,
       `┃ 🆔 Package: ${packageName}`,

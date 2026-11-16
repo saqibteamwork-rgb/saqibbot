@@ -7,7 +7,7 @@ const clean = (value, max = 180) => String(value || 'N/A').replace(/[\r\n]+/g, '
 async function api(path) {
     const response = await axios.get(`${API}${path}`, {
         timeout: 15000,
-        headers: { 'User-Agent': 'AMAN-HELL-MD/2.3 anime-video-commands' }
+        headers: { 'User-Agent': 'SAQIB-MD/2.3 anime-video-commands' }
     });
     return response.data;
 }
@@ -55,7 +55,7 @@ register('animetrailer', ['anitrailer', 'animepv'], 'Find available anime traile
         const result = await api(`/anime/${anime.mal_id}/videos`);
         const videos = (result.data?.promo || []).filter(v => videoUrl(v)).slice(0, 6);
         const trailer = anime.trailer?.url;
-        let body = `🎬 *AMAN ANIME TRAILERS*\n\n📺 *${clean(anime.title)}*\n`;
+        let body = `🎬 *SAQIB ANIME TRAILERS*\n\n📺 *${clean(anime.title)}*\n`;
         if (trailer) body += `\n▶️ Main trailer: ${trailer}\n`;
         if (videos.length) body += '\n' + videos.map((v, i) => formatVideo(v, i, 'Promo')).filter(Boolean).join('\n\n');
         if (!trailer && !videos.length) body += '\nIs anime ka trailer API par available nahi hai.';

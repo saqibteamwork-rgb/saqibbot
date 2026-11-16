@@ -1,4 +1,5 @@
 const { cmd } = require('../arslan');
+const config = require('../config');
 const axios = require('axios');
 const mediaDl = require('../lib/media-dl');
 
@@ -19,7 +20,7 @@ cmd({
       return await conn.sendMessage(from, {
         video: local.buffer,
         mimetype: "video/mp4",
-        caption: "*👑 FB VIDEO 👑*\n*👑 BY :❯ 𝗔𝗠𝗔𝗡-𝐌𝐃 👑*"
+        caption: `*👑 FB VIDEO 👑*\n*👑 BY :❯ ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`
       }, { quoted: mek });
     } catch (localErr) {
       localWhy = mediaDl.explainError(localErr);
@@ -56,7 +57,7 @@ cmd({
     const caption = `*👑 FB VIDEO 👑*
 *👑 TIME :❯ ${result.duration}*
 *👑 CREATER :❯ ${data.creator}*
-*👑 BY :❯ 𝗔𝗠𝗔𝗡-𝐌𝐃 👑*`;
+*👑 BY :❯ ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`;
 
     await conn.sendMessage(
       from,

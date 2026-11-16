@@ -44,7 +44,7 @@ async (conn, mek, m, { from, participants, reply, isGroup, senderNumber, groupAd
             teks += `${randomEmoji} @${mem.id.split('@')[0]}\n`;
         }
 
-        teks += "\n\n*👑 𝗔𝗠𝗔𝗡-𝐌𝐃 MINI WHATSAPP BOT 👑*";
+        teks += `\n\n*👑 ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`;
 
         conn.sendMessage(from, { text: teks, mentions: participants.map(a => a.id) }, { quoted: mek });
 

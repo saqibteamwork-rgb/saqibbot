@@ -146,4 +146,4 @@ ${P}sreacts <channel-post-link> ❤️ follow\n(Group mein kisi message ko *repl
     return ctx.reply(out);
 }
 
-console.log('[AMAN Mini Bot] .sreacts loaded');
+console.log('[MR SAQIB MD] .sreacts loaded');

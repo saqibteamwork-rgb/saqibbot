@@ -530,7 +530,7 @@ cmd({
     const img = quoted?.imageMessage || mek.message?.imageMessage;
     if (!img) return ctx.reply('❌ Image pe reply karo.');
 
-    const text = (ctx.q || 'AMAN-MD').slice(0, 50);
+    const text = (ctx.q || config.BOT_NAME || 'SAQIB-MD').slice(0, 50);
     try {
         await ctx.reply(`💧 *Watermark lag raha hai:* ${text}`);
         const filePath = await conn.downloadAndSaveMediaMessage(

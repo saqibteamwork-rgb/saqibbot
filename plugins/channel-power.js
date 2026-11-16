@@ -193,8 +193,8 @@ cmd({
         );
         const { Sticker, StickerTypes } = require('wa-sticker-formatter');
         const sticker = new Sticker(filePath, {
-            pack: config.BOT_NAME,
-            author: '𝗔𝗠𝗔𝗡-𝐌𝐃',
+            pack: config.BOT_NAME || 'MR SAQIB MD',
+            author: config.OWNER_NAME || 'MR SAQIB',
             type: StickerTypes.FULL,
             quality: 80
         });

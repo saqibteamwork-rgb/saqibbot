@@ -2,6 +2,7 @@
 // 1) yt-dlp (lib/media-dl.js) se local download  2) Pinterest ke liye page ke og:video / og:image se
 const axios = require('axios');
 const { cmd } = require('../arslan');
+const config = require('../config');
 const mediaDl = require('../lib/media-dl');
 
 const UA = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36';
@@ -35,7 +36,7 @@ cmd({
         await conn.sendMessage(from, {
             video: local.buffer,
             mimetype: 'video/mp4',
-            caption: '*🎵 TIKTOK VIDEO 🎵*\n*👑 BY :❯ 𝗔𝗠𝗔𝗡-𝐌𝐃 👑*'
+            caption: `*🎵 TIKTOK VIDEO 🎵*\n*👑 BY :❯ ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`
         }, { quoted: mek });
         await conn.sendMessage(from, { react: { text: '✅', key: mek.key } }).catch(() => {});
     } catch (e) {
@@ -92,7 +93,7 @@ cmd({
             await conn.sendMessage(from, {
                 video: local.buffer,
                 mimetype: 'video/mp4',
-                caption: '*📌 PINTEREST VIDEO 📌*\n*👑 BY :❯ 𝗔𝗠𝗔𝗡-𝐌𝐃 👑*'
+                caption: `*📌 PINTEREST VIDEO 📌*\n*👑 BY :❯ ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`
             }, { quoted: mek });
             return await conn.sendMessage(from, { react: { text: '✅', key: mek.key } }).catch(() => {});
         } catch (e) {
@@ -101,7 +102,7 @@ cmd({
 
         // 2) page ke og:video / og:image se (image pins bhi yahin se)
         const page = await pinterestPage(url);
-        const caption = `*📌 PINTEREST ${page.video && /\.mp4/i.test(page.video) ? 'VIDEO' : 'PHOTO'} 📌*${page.title ? `\n*${page.title}*` : ''}\n*👑 BY :❯ 𝗔𝗠𝗔𝗡-𝐌𝐃 👑*`;
+        const caption = `*📌 PINTEREST ${page.video && /\.mp4/i.test(page.video) ? 'VIDEO' : 'PHOTO'} 📌*${page.title ? `\n*${page.title}*` : ''}\n*👑 BY :❯ ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`;
         if (page.video && /\.mp4/i.test(page.video)) {
             await conn.sendMessage(from, { video: { url: page.video }, mimetype: 'video/mp4', caption }, { quoted: mek });
         } else if (page.image) {

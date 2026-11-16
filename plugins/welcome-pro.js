@@ -139,7 +139,7 @@ cmd({
         return ctx.reply(`🔤 *WELCOME FONTS*\n\n${list}\n\nSet: ${P()}welcomefont 2`);
     }
     W.setSetting(conn, ctx.from, { font: n });
-    return ctx.reply(`✅ Font set: ${W.fancy('Welcome AMAN', n)}\n💡 Test: ${P()}testwelcome`);
+    return ctx.reply(`✅ Font set: ${W.fancy('Welcome SAQIB', n)}\n💡 Test: ${P()}testwelcome`);
 });
 
 // ───────────────────────── shayari ─────────────────────────
@@ -320,4 +320,4 @@ cmd({
     return ctx.reply('✅ Owner photo hata di.');
 });
 
-console.log('[AMAN Mini Bot] welcome-pro loaded');
+console.log('[MR SAQIB MD] welcome-pro loaded');

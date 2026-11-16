@@ -17,15 +17,15 @@ const CATEGORY_ICONS = {
     main: '🏠', general: '🏠', settings: '⚙️', pair: '🔗', channel: '📢', sticker: '🏷️',
     owner: '👑', group: '👥', download: '📥', music: '🎵', anime: '🎌', fun: '🎮',
     games: '🎲', love: '💞', emotions: '😊', islamic: '🕌', tools: '🧰', utility: '🛠️',
-    image: '🖼️', system: '💻', search: '🔎', misc: '📦', personal: '👤', extra: '✨', aman: '👑'
+    image: '🖼️', system: '💻', search: '🔎', misc: '📦', personal: '👤', extra: '✨', owner: '👑', saqib: '👑'
 };
 // Saare menus me ek hi category order: pehle bot basics, phir group/download/tools, fun/islamic, aakhir me owner/settings/system
-const CATEGORY_ORDER = ['main', 'aman', 'general', 'group', 'download', 'music', 'tools', 'utility', 'image', 'sticker', 'search',
-    'fun', 'games', 'anime', 'love', 'emotions', 'islamic', 'extra', 'owner', 'settings', 'system'];
+const CATEGORY_ORDER = ['main', 'owner', 'general', 'group', 'download', 'music', 'tools', 'utility', 'image', 'sticker', 'search',
+    'fun', 'games', 'anime', 'love', 'emotions', 'islamic', 'extra', 'settings', 'system'];
 // -------------------------------------------------
 
 const PREFIX = () => config.PREFIX || '.';
-const botName = () => String(config.BOT_NAME || 'AMAN-MD').trim();
+const botName = () => String(config.BOT_NAME || 'MR SAQIB MD').trim();
 
 function uptimeText() {
     let s = Math.floor(process.uptime());
@@ -151,7 +151,7 @@ function ownerNumberIntl() {
 }
 
 // Chat Owner dabane par ye message pehle se likha hua khulega (user bas send dabaye)
-const OWNER_GREETING = '𝐇𝐢 𝐀𝐌𝐀𝐍 𝐒𝐢𝐫 👋✨\n𝐈 𝐜𝐨𝐧𝐭𝐚𝐜𝐭𝐞𝐝 𝐲𝐨𝐮 𝐟𝐫𝐨𝐦 𝐲𝐨𝐮𝐫 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐁𝐨𝐭 🤖';
+const OWNER_GREETING = '𝐇𝐢 𝐒𝐀𝐐𝐈𝐁 𝐒𝐢𝐫 👋✨\n𝐈 𝐜𝐨𝐧𝐭𝐚𝐜𝐭𝐞𝐝 𝐲𝐨𝐮 𝐟𝐫𝐨𝐦 𝐲𝐨𝐮𝐫 𝐖𝐡𝐚𝐭𝐬𝐀𝐩𝐩 𝐁𝐨𝐭 🤖';
 
 function ownerLink(withText) {
     const n = ownerNumberIntl();
@@ -260,10 +260,8 @@ async function buildCarousel(conn, page, pageCards, total, totalPages, baileys, 
 // Carousel bhejta hai. Success par true, fail par false (throw nahi karta).
 // ---------- CATEGORY VIEW: commands sirf text me, neeche 4 link buttons (links yahan se badlein) ----------
 const CATEGORY_LINK_BUTTONS = [
-    { button: '🌐 PORTFOLIO',        url: 'https://amanullah5911.vercel.app' },
-    { button: '🧰 TOOLKIT',          url: 'https://google.com/search?q=aman-tools46' },
-    { button: '▶️ YOUTUBE CHANNEL',  url: 'https://youtube.com/@amantechzone5911' },
-    { button: '📢 VIEW CHANNEL',     url: 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I' }
+    { button: '🌐 PORTFOLIO',        url: config.websiteUrl || 'https://mrsaqib.me' },
+    { button: '📢 VIEW CHANNEL',     url: config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I' }
 ];
 
 // Category ke commands sirf is box-style mein:  ┏━═❲ NAME / ┋╭┈⌖ cmd / ┋├┈⌖ cmd / ┋╰┈⌖ cmd / ┗───𒁍
@@ -352,11 +350,8 @@ async function sendCarouselMenu(conn, mek, m, ctx, pageArg, catFilter) {
 
 // ---------- OWNER CARD (links yahan se badlein) ----------
 const OWNER_LINKS = [
-    { name: 'YOUTUBE',        button: '▶️ YouTube',         url: 'https://www.youtube.com/@amantechzone5911' },
-    { name: 'TELEGRAM',       button: '✈️ Telegram',        url: 'https://t.me/amaantechzone' },
-    { name: 'TIKTOK',         button: '🎵 TikTok',          url: 'https://www.tiktok.com/@amanullah.736' },
-    { name: 'AMAN TOOLKIT',   button: '🧰 Aman Toolkit',    url: 'https://www.google.com/search?q=aman-tools46' },
-    { name: 'AMAN PORTFOLIO', button: '🌐 Aman Portfolio',  url: 'https://amanullah5911.vercel.app' }
+    { name: 'PORTFOLIO', button: '🌐 Portfolio',  url: config.websiteUrl || 'https://mrsaqib.me' },
+    { name: 'CHANNEL',   button: '📢 Channel',    url: config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I' }
 ];
 
 // Body text mein links bhi hain (WhatsApp unhe khud tappable bana deta hai), buttons alag se

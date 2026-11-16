@@ -1,10 +1,11 @@
-// AMAN-MD ANTIBOT — group me doosre bots ko rokta hai.
+// SAQIB-MD ANTIBOT — group me doosre bots ko rokta hai.
 // .antibot on | off | kick | delete | status | check (kisi message par reply karke uska ID check karo)
 //
 // Kaise pehchanta hai: doosre bots ke message IDs ka pattern alag hota hai (Baileys wale bots
 // "BAE5…" ya "3EB0…" se shuru hone wale lambe ID banate hain; asli phone/WhatsApp Web ke ID alag hote hain).
 // Ye ek andaza (heuristic) hai, 100% nahi — isliye `.antibot check` se pehle test kar lo.
 const { cmd } = require('../arslan');
+const config = require('../config');
 const fs = require('fs-extra');
 const path = require('path');
 
@@ -54,7 +55,7 @@ cmd({
 
     if (!sub || sub === 'status') {
         return reply(
-`🤖 *AMAN-MD ANTIBOT*
+`🤖 *${config.BOT_NAME || 'SAQIB-MD'} ANTIBOT*
 
 • Status: *${c.enabled ? 'ON ✅' : 'OFF ❌'}*
 • Action: *${c.action === 'kick' ? 'DELETE + KICK' : 'SIRF DELETE'}*

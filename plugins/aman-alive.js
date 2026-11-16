@@ -21,16 +21,16 @@ async (conn, mek, m, { from, reply }) => {
         };
 
         const status = `
-        *${config.BOT_NAME || 'AMAN Mini Bot'} is online 🤗♥️*
+        *${config.BOT_NAME || 'MR SAQIB MD'} is online 🤗♥️*
 *┏────〘 INFO 〙───⊷*
 *┃👑 MODE :❯ ${(config.WORK_TYPE || 'public').toUpperCase()}*
-*┃👑 OWNER :❯ Private*
+*┃👑 OWNER :❯ ${config.OWNER_NAME || 'MR SAQIB'}*
 *┃👑 PREFIX :❯ ❮ ${config.PREFIX || '.'} ❯*
 *┃👑 VERSION :❯ 2.4.0*
 *┃👑 TOTAL CMNDS :❯ ❮ ${totalCmds} ❯*
 *┃👑 UPTIME :❯ ${uptime()}*
 *┗──────────────⊷*
-*👑 ${config.BOT_NAME || 'AMAN Mini Bot'} 👑*`;
+*👑 ${config.BOT_NAME || 'MR SAQIB MD'} 👑*`;
 
         await conn.sendMessage(from, { text: status }, { quoted: mek });
 

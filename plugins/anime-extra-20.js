@@ -7,7 +7,7 @@ const axios = require('axios');
 const api = require('../lib/anime-api');
 
 const JIKAN = 'https://api.jikan.moe/v4';
-const UA = 'AMAN-HELL-MD/3.0';
+const UA = 'SAQIB-MD/3.0';
 
 async function get(url, opts = {}) {
     // Jikan rate-limits (429) and sometimes 5xx: retry with backoff
@@ -292,7 +292,7 @@ register('animevoice', ['anivoice'], 'Search anime voice actor', async (conn, me
 register('animepicture', ['anipic', 'animepic'], 'Send a safe anime picture', async (conn, mek, m, ctx) => {
     const r = await getRandomAnimeImage('waifu');
     if (!r) return ctx.reply('❌ Image APIs unavailable hain. Kuch dair baad try karo.');
-    let cap = '🎌 *AMAN ANIME PICTURE*';
+    let cap = '🎌 *SAQIB ANIME PICTURE*';
     if (r.artist) cap += `\n🎨 ${safe(r.artist)}`;
     return conn.sendMessage(ctx.from, { image: { url: r.url }, caption: cap }, { quoted: mek });
 });

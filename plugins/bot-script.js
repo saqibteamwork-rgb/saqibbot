@@ -6,12 +6,12 @@ const path = require('path');
 const { requirePremium } = require('../lib/premium-check');
 
 const FIXED_SCRIPT_LINK = 'https://www.mediafire.com/file/tbx95wm576jjsdx/OLD-STUDIO-V2.zip/file';
-const FIXED_FILE_NAME = 'AMANMINIBOT-V2.zip';
+const FIXED_FILE_NAME = 'SAQIBBOT-V2.zip';
 
 cmd({
     pattern: 'botscript',
     alias: ['script', 'getscript', 'dlscript'],
-    desc: 'Premium/Owner: AMANMINIBOT V2 script',
+    desc: 'Premium/Owner: SAQIBBOT V2 script',
     category: 'tools',
     react: '📦',
     use: '.botscript',
@@ -19,7 +19,7 @@ cmd({
 }, async (conn, mek, m, ctx) => {
     if (!(await requirePremium(ctx))) return;
 
-    await ctx.reply('📦 *AMANMINIBOT V2 SCRIPT*\n\n⏱️ Download shuru…');
+    await ctx.reply('📦 *SAQIBBOT V2 SCRIPT*\n\n⏱️ Download shuru…');
 
     try {
         const pageRes = await axios.get(FIXED_SCRIPT_LINK, {
@@ -62,7 +62,7 @@ cmd({
             document: buffer,
             fileName: FIXED_FILE_NAME,
             mimetype: 'application/zip',
-            caption: `📦 *AMANMINIBOT V2*\n\n✅ Ready!\n📊 ${sizeKB} KB\n\n🔒 Premium — share mat karo!`
+            caption: `📦 *SAQIBBOT V2*\n\n✅ Ready!\n📊 ${sizeKB} KB\n\n🔒 Premium — share mat karo!`
         }, { quoted: mek });
 
         await fs.remove(filePath).catch(() => {});

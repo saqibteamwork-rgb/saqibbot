@@ -50,12 +50,12 @@ const LINE_BLOOD = `${BLOOD}•·•·•·•·•·•·•·•·•·•·�
 const LINE_GUN = `${GUN}━━━━━━━━━━━━━━━━━━━━━━━━━━━${GUN}`;
 
 cmd({
-    pattern: 'amanjagar',
-    alias: ['mujeeb', 'bro', 'bhai', 'mybro', 'gangster', 'haters', 'amangang'],
-    desc: 'Gangster mode — Mujeeb & AMAN vs haters',
+    pattern: 'saqibjagar',
+    alias: ['amanjagar', 'mujeeb', 'bro', 'bhai', 'mybro', 'gangster', 'haters', 'saqibgang', 'amangang'],
+    desc: 'Gangster mode — Mujeeb & SAQIB vs haters',
     category: 'fun',
     react: '🔫',
-    use: '.amanjagar',
+    use: '.saqibjagar',
     filename: __filename
 }, async (conn, mek, m, { from, pushname }) => {
     try {
@@ -67,7 +67,7 @@ cmd({
             caption:
 `${CROWN} ${G.double('GANGSTER MODE')} ${CROWN}
 
-${G.bold('MUJEEB')}  ✖  ${G.bold('AMAN')}
+${G.bold('MUJEEB')}  ✖  ${G.bold('SAQIB')}
 
 ${G.small('two brothers. one soul. zero mercy.')}`
         }, { quoted: mek });
@@ -95,7 +95,7 @@ ${G.script('Woh teri zindagi badal dega...')}
 
 ${LINE_BLOOD}
 
-${G.bold('MUJEEB')} ${G.small('aur')} ${G.bold('AMAN')}
+${G.bold('MUJEEB')} ${G.small('aur')} ${G.bold('SAQIB')}
 ${G.small('ke baare mein...')}
 
 ${G.script('Har jagah baat hoti hai...')}
@@ -167,7 +167,7 @@ ${GUN}━━━━━━━━━━━━━━━━━━━━━━━━�
             text:
 `${SKULL}━━━━━━━━━━━━━━━━━━━━━━━━━━━${SKULL}
 
-  ${G.double('AMAN GANG DIALOGUES')}
+  ${G.double('SAQIB GANG DIALOGUES')}
 
 ${SKULL}━━━━━━━━━━━━━━━━━━━━━━━━━━━${SKULL}
 
@@ -193,7 +193,7 @@ ${G.bold('yaad rahega."')}
 
 ${LINE_BLOOD}
 
-${CROWN} ${G.bold('"MUJEEB aur AMAN se panga...')}
+${CROWN} ${G.bold('"MUJEEB aur SAQIB se panga...')}
 ${G.bold('Bhagwan se panga lene se')}
 ${G.bold('bhi bura hota hai."')}
 
@@ -233,7 +233,7 @@ ${G.bold('SUHAAG')} ${G.script('khatam...')}
 
 ${LINE_BLOOD}
 
-${G.bold('AMAN')} ${G.small('ke saamne aaya...')}
+${G.bold('SAQIB')} ${G.small('ke saamne aaya...')}
 ${G.script('Toh teri')} ${G.bold('BEHEN')} ${G.script('ki')}
 ${G.bold('IZZAT')} ${G.script('khatam...')}
 
@@ -262,13 +262,13 @@ ${G.double('GAME OVER')}
 
 ${SKULL}━━━━━━━━━━━━━━━━━━━━━━━━━━━${SKULL}
 
-${CROWN} ${G.bold('MUJEEB')}  ✖  ${G.bold('AMAN')} ${CROWN}
+${CROWN} ${G.bold('MUJEEB')}  ✖  ${G.bold('SAQIB')} ${CROWN}
 
 ${G.script('Family first. Haters gone. Forever.')}
 
 ${SKULL}━━━━━━━━━━━━━━━━━━━━━━━━━━━${SKULL}
 
-${BLOOD} ${G.small('© AMAN GANG — The Untouchables')} ${BLOOD}`
+${BLOOD} ${G.small('© SAQIB GANG — The Untouchables')} ${BLOOD}`
         }, { quoted: mek });
 
         // Final gunfire reactions
@@ -300,11 +300,11 @@ cmd({
     const message =
 `${SKULL}━━━━━━━━━━━━━━━━━━━━━━━━━━━${SKULL}
 
-${CROWN} ${G.double('AMAN GANG')} ${CROWN}
+${CROWN} ${G.double('SAQIB GANG')} ${CROWN}
 
 ${SKULL}━━━━━━━━━━━━━━━━━━━━━━━━━━━${SKULL}
 
-${G.bold('MUJEEB')}  ✖  ${G.bold('AMAN')}
+${G.bold('MUJEEB')}  ✖  ${G.bold('SAQIB')}
 
 ${G.small('do bhai. ek rooh. zero mercy.')}
 
@@ -344,4 +344,4 @@ ${BLOOD} — ${G.bold(user)} ${BLOOD}`;
     return conn.sendMessage(from, { text: message }, { quoted: mek });
 });
 
-console.log('[MR SAQIB MD] AMANJAGAR gangster FIXED loaded 🔫');
+console.log('[MR SAQIB MD] SAQIBJAGAR gangster FIXED loaded 🔫');

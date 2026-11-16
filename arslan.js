@@ -1,4 +1,4 @@
-// arslan.js - Compatibility bridge for AMAN HELL-MD / AMAN TECH plugin ecosystem
+// arslan.js - Compatibility bridge for SAQIB-MD plugin ecosystem
 'use strict';
 
 const commandModule = require('./command');

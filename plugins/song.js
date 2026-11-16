@@ -22,7 +22,7 @@ function getCobaltConfig() {
     try {
         const base = new URL(configuredUrl);
         if (!['https:', 'http:'].includes(base.protocol) || base.username || base.password) {
-            console.warn('[AMAN MUSIC] COBALT_API_URL must be an HTTP(S) instance URL without embedded credentials.');
+            console.warn('[SAQIB MUSIC] COBALT_API_URL must be an HTTP(S) instance URL without embedded credentials.');
             return null;
         }
         base.pathname = '/';
@@ -32,7 +32,7 @@ function getCobaltConfig() {
         if (process.env.COBALT_API_KEY) headers.Authorization = `Api-Key ${process.env.COBALT_API_KEY}`;
         return { url: base.toString(), headers };
     } catch (_) {
-        console.warn('[AMAN MUSIC] COBALT_API_URL is not a valid URL.');
+        console.warn('[SAQIB MUSIC] COBALT_API_URL is not a valid URL.');
         return null;
     }
 }
@@ -109,7 +109,7 @@ async function getAudioUrl(youtubeUrl) {
 
     for (const api of apis) {
         try {
-            console.log(`[AMAN MUSIC] Trying ${api.name}`);
+            console.log(`[SAQIB MUSIC] Trying ${api.name}`);
 
             const cfg = {
                 method: api.method || 'GET',
@@ -133,12 +133,12 @@ async function getAudioUrl(youtubeUrl) {
                     if (final) return { download: final, title: result.title };
                     continue;
                 }
-            console.log(`[AMAN MUSIC] ✅ ${api.name} returned an audio link.`);
+            console.log(`[SAQIB MUSIC] ✅ ${api.name} returned an audio link.`);
                 return result;
             }
-            console.warn(`[AMAN MUSIC] ${api.name}: no download field`);
+            console.warn(`[SAQIB MUSIC] ${api.name}: no download field`);
         } catch (err) {
-            console.warn(`[AMAN MUSIC] ${api.name} failed (${err.code || err.response?.status || 'request error'}).`);
+            console.warn(`[SAQIB MUSIC] ${api.name} failed (${err.code || err.response?.status || 'request error'}).`);
         }
     }
 
@@ -200,7 +200,7 @@ async function downloadAudioBuffer(audioUrl) {
             return buf;
         } catch (err) {
             lastError = err;
-            console.error(`[AMAN MUSIC] Download attempt ${attempt} failed (${err.code || err.response?.status || 'request error'}).`);
+            console.error(`[SAQIB MUSIC] Download attempt ${attempt} failed (${err.code || err.response?.status || 'request error'}).`);
             if (attempt < 3) await sleep(1500);
         }
     }
@@ -234,7 +234,7 @@ cmd({
 }, async (conn, mek, m, ctx) => {
     const query = (ctx.q || '').trim();
     if (!query) {
-        return ctx.reply(`🎵 *${config.BOT_NAME || 'AMAN Mini Bot'} MUSIC*\n\nUse: .play song name\nExample: .play a song title`);
+        return ctx.reply(`🎵 *${config.BOT_NAME || 'MR SAQIB MD'} MUSIC*\n\nUse: .play song name\nExample: .play a song title`);
     }
 
     await conn.sendMessage(ctx.from, { react: { text: '⏳', key: mek.key } });
@@ -244,7 +244,7 @@ cmd({
         const video = await searchSong(query);
 
         const songCaption =
-            `🎵 *${config.BOT_NAME || 'AMAN Mini Bot'}*\n\n` +
+            `🎵 *${config.BOT_NAME || 'MR SAQIB MD'}*\n\n` +
             `📌 ${video.title}\n` +
             `🎤 ${video.author?.name || 'Unknown'}\n` +
             `⏱️ ${video.timestamp || 'Unknown'}\n\n` +
@@ -257,14 +257,14 @@ cmd({
                     caption: songCaption
                 }, { quoted: mek });
             } catch (thumbnailError) {
-                console.warn('[AMAN MUSIC] Thumbnail send failed:', thumbnailError.message);
+                console.warn('[SAQIB MUSIC] Thumbnail send failed:', thumbnailError.message);
                 await conn.sendMessage(ctx.from, { text: songCaption }, { quoted: mek });
             }
         } else {
             await conn.sendMessage(ctx.from, { text: songCaption }, { quoted: mek });
         }
 
-        const baseName = (video.title || 'AMAN-Song').replace(/[\\/:*?"<>|]/g, '').slice(0, 100) || 'AMAN-Song';
+        const baseName = (video.title || 'SAQIB-Song').replace(/[\\/:*?"<>|]/g, '').slice(0, 100) || 'SAQIB-Song';
         let buffer = null;
         let ext = 'mp3';
         let finalTitle = baseName;
@@ -276,7 +276,7 @@ cmd({
             ext = local.ext || 'mp3';
         } catch (localErr) {
             localReason = (localErr.details || [localErr.message]).slice(-3).join('\n');
-            console.warn('[AMAN MUSIC] Local download failed, trying API fallbacks:', (localErr.details || [localErr.message]).join(' | '));
+            console.warn('[SAQIB MUSIC] Local download failed, trying API fallbacks:', (localErr.details || [localErr.message]).join(' | '));
         }
 
         // 2) LAST RESORT: public APIs (only if local method failed)
@@ -302,7 +302,7 @@ cmd({
 
         await conn.sendMessage(ctx.from, { react: { text: '✅', key: mek.key } });
     } catch (error) {
-        console.error('[AMAN SONG ERROR]', error.code || error.response?.status || error.message || 'Unknown error');
+        console.error('[SAQIB SONG ERROR]', error.code || error.response?.status || error.message || 'Unknown error');
         await conn.sendMessage(ctx.from, { react: { text: '❌', key: mek.key } });
 
         if (error.message === 'TOO_LARGE') return ctx.reply('❌ Audio bohat bari hai (100MB se zyada).');
@@ -325,4 +325,4 @@ cmd({
     }
 });
 
-console.log('[AMAN Mini Bot] Song command loaded');
+console.log('[MR SAQIB MD] Song command loaded');

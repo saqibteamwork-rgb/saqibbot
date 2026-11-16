@@ -38,7 +38,7 @@ cmd({
         if (!video) return reply('❌ 15 minutes ya usse lamba suitable drama nahi mila.');
 
         const caption = [
-            '╭━━〔 🎬 AMAN DRAMA DOWNLOADER 〕━━╮',
+            '╭━━〔 🎬 SAQIB DRAMA DOWNLOADER 〕━━╮',
             `┃ 🎞️ Title: ${video.title}`,
             `┃ ⏱️ Duration: ${video.timestamp}`,
             `┃ 👁️ Views: ${Number(video.views || 0).toLocaleString()}`,
@@ -69,12 +69,12 @@ cmd({
                 await conn.sendMessage(chat, { video: { url: dl.path }, mimetype: 'video/mp4', caption: cap }, { quoted: mek });
             } catch (e) {
                 // video send fail ho to document ke tor par bhej do
-                console.warn('[AMAN DRAMA] video send failed, trying document:', e.message);
+                console.warn('[SAQIB DRAMA] video send failed, trying document:', e.message);
                 await conn.sendMessage(chat, { document: { url: dl.path }, mimetype: 'video/mp4', fileName: `${title}.mp4`, caption: cap }, { quoted: mek });
             }
             await conn.sendMessage(chat, { react: { text: '✅', key: mek.key } }).catch(() => {});
         } catch (error) {
-            console.error('[AMAN DRAMA] Failed:', error.details || error.message);
+            console.error('[SAQIB DRAMA] Failed:', error.details || error.message);
             await conn.sendMessage(chat, { react: { text: '❌', key: mek.key } }).catch(() => {});
             const why = mediaDl.explainError(error);
             await reply('❌ Drama download/send nahi ho saki.' + (why ? '\n\n💡 ' + why : '\nThori der baad dobara try karo.'));
@@ -82,7 +82,7 @@ cmd({
             if (dl && dl.cleanup) dl.cleanup();
         }
     } catch (error) {
-        console.error('[AMAN DRAMA] Command failed:', error.message);
+        console.error('[SAQIB DRAMA] Command failed:', error.message);
         return reply('❌ Drama search mein error aaya. Thori dair baad dobara try karo.');
     }
 });

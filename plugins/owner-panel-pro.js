@@ -22,7 +22,7 @@ cmd({
 
     let savedOwnerConfig = {};
     try { savedOwnerConfig = await getUserConfigFromMongoDB(String(ctx.botNumber || '')); } catch (_) {}
-    const ownerDisplayName = savedOwnerConfig.OWNER_NAME || config.OWNER_NAME || 'AMAN HACKER';
+    const ownerDisplayName = savedOwnerConfig.OWNER_NAME || config.OWNER_NAME || 'MR SAQIB';
     const ownerDisplayNumber = savedOwnerConfig.OWNER_DISPLAY_NUMBER || config.OWNER_DISPLAY_NUMBER || ctx.botNumber || 'Private';
 
     const sockets = global.activeSockets || new Map();
@@ -44,7 +44,7 @@ cmd({
     } catch {}
 
     return ctx.reply([
-        '👑 *𝗔𝗠𝗔𝗡-𝐌𝐃 OWNER HUB*',
+        `👑 *${config.BOT_NAME || 'MR SAQIB MD'} OWNER HUB*`,
         '',
         '╭━━━━━━━━━━━━━━━━━⊷',
         '┃ *🖥️ SYSTEM*',

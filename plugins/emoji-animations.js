@@ -21,7 +21,7 @@ async function animateOwnMessage(conn, from, reply, initial, frames) {
       }, {});
     }
   } catch (error) {
-    console.error('[AMAN emoji animation]', error);
+    console.error('[SAQIB emoji animation]', error);
     if (typeof reply === 'function') await reply(`❌ Animation failed: ${error.message}`);
   }
 }
@@ -35,7 +35,7 @@ const animations = [
   { pattern: 'moon', desc: 'Moon phase animation', react: '🌚', initial: '🌝', frames: ['🌗','🌘','🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘','🌑','🌒','🌓','🌔','🌕','🌖','🌝🌚'] },
   { pattern: 'confused', desc: 'Confused emoji animation', react: '🤔', initial: '🤔', frames: ['😕','😟','😵','🤔','😖','😲','😦','🤷','🤷‍♂️','🤷‍♀️'] },
   { pattern: 'hot', desc: 'Hot emoji animation', react: '💋', initial: '💋', frames: ['🥵','❤️','💋','😫','🤤','😋','🥵','🥶','🙊','😻','🙈','💋','🫂','🫀','👅','👄','💋'] },
-  { pattern: 'nikal', desc: 'Animated AMAN ASCII joke', react: '🗿', initial: 'MR SAQIB MD 🗿', frames: [
+  { pattern: 'nikal', desc: 'Animated SAQIB ASCII joke', react: '🗿', initial: 'MR SAQIB MD 🗿', frames: [
     '⠀⠀⠀⣠⣶⡾⠏⠉⠙⠳⢦⡀\n⠀⠀⠀ NIKAL 🗿\n⠀⠀⠀⠹⣶⠆⠀⠀⠀⠀⠀⡴⠃',
     '⠀⠀⠀⣠⣶⡾⠏⠉⠙⠳⢦⡀\n⠀⠀⠀ FUR-SAT 😎\n⠀⠀⠀⠹⣶⠆⠀⠀⠀⠀⠀⡴⠃',
     '⠀⠀⠀⣠⣶⡾⠏⠉⠙⠳⢦⡀\n⠀⠀⠀ PEHLI FURSAT 😂\n⠀⠀⠀⠹⣶⠆⠀⠀⠀⠀⠀⡴⠃',

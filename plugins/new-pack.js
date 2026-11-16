@@ -51,7 +51,7 @@ cmd({
         const { Sticker, StickerTypes } = require('wa-sticker-formatter');
         const stk = new Sticker(filePath, {
             pack: packName,
-            author: config.BOT_NAME || 'AMAN Mini Bot',
+            author: config.BOT_NAME || 'MR SAQIB MD',
             type: StickerTypes.FULL,
             quality: 80
         });
@@ -119,7 +119,7 @@ cmd({
 cmd({
     pattern: 'flip',
     alias: ['mirror'],
-    desc: 'Image ko hoamanntal/vertical flip',
+    desc: 'Image ko horizontal/vertical flip',
     category: 'image',
     react: '🔄',
     use: '.flip h  OR  .flip v',

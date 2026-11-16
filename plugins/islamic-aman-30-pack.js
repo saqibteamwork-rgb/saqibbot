@@ -1,8 +1,9 @@
 const { cmd } = require('../arslan');
+const config = require('../config');
 
 // MR SAQIB MD: 28 additional Islamic learning and reminder commands.
 // General educational guidance; consult a trusted scholar for detailed rulings.
-const reply = (ctx, title, lines) => ctx.reply([title, '', ...lines, '', 'ℹ️ Tafseeli masail ke liye trusted alim/imam se rehnumai lein.', '💗 AMAN ki taraf se 🥲'].join('\n'));
+const reply = (ctx, title, lines) => ctx.reply([title, '', ...lines, '', 'ℹ️ Tafseeli masail ke liye trusted alim/imam se rehnumai lein.', `💗 ${config.OWNER_NAME || 'SAQIB'} ki taraf se 🥲`].join('\n'));
 const register = (pattern, alias, desc, emoji, title, lines) => cmd({ pattern, alias, desc, category: 'islamic', react: emoji, filename: __filename }, async (conn, mek, m, ctx) => reply(ctx, title, lines));
 
 register('pillarsislam', ['islampillars'], 'Islam ke 5 arkaan', '🕌', '🕌 ISLAM KE 5 ARKAAN', [

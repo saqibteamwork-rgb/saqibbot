@@ -210,13 +210,27 @@ cmd({
     desc: "Change the displayed owner name",
     category: "settings",
     react: "👑",
-    use: ".ownername 𝐀𝐌𝐀𝐍 HACKER"
+    use: ".ownername MR SAQIB"
 }, async (conn, mek, m, { args, isOwner, reply, botNumber, config }) => {
     if (!isOwner) return reply("⛔ Yeh command sirf bot owner ke liye hai.");
     const name = args.join(" ").trim();
-    if (!name) return reply(`👑 Current owner name: *${config.OWNER_NAME || 'AMAN HACKER'}*\nUse: *.ownername AMAN HACKER*`);
+    if (!name) return reply(`👑 Current owner name: *${config.OWNER_NAME || 'MR SAQIB'}*\nUse: *.ownername MR SAQIB*`);
     if (name.length > 40) return reply("❌ Owner name 40 characters se chhota rakho.");
     await updateConfig('OWNER_NAME', name, botNumber, config, reply);
+    try {
+        const fsSync = require('fs');
+        const path = require('path');
+        const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
+        let botData = {};
+        if (fsSync.existsSync(dataPath)) {
+            try { botData = JSON.parse(fsSync.readFileSync(dataPath, 'utf8')); } catch (_) {}
+        }
+        if (!botData.globalSettings) botData.globalSettings = {};
+        botData.globalSettings.ownerName = name;
+        fsSync.writeFileSync(dataPath, JSON.stringify(botData, null, 2), 'utf8');
+        const mongoSync = require('../utils/mongoSync');
+        if (mongoSync.pushToMongo) mongoSync.pushToMongo('bot_data', botData);
+    } catch (_) {}
 });
 
 cmd({

@@ -5,7 +5,7 @@ const { getUserConfigFromMongoDB } = require('../lib/database');
 const os = require('os');
 const config = require('../config');
 
-const AMAN_STARTED_AT = Date.now();
+const SAQIB_STARTED_AT = Date.now();
 function duration(ms) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const d = Math.floor(total / 86400), h = Math.floor(total % 86400 / 3600);
@@ -25,11 +25,11 @@ function safeCalculate(expression) {
 }
 
 cmd({ pattern:'uptime', alias:['runtime','up'], desc:'Bot uptime check', category:'utility', react:'⏱️', filename:__filename }, async (conn, mek, m, ctx) => {
-  return ctx.reply(`⚡ *${config.BOT_NAME || 'AMAN Mini Bot'} UPTIME*\n\n⏱️ ${duration(Date.now()-AMAN_STARTED_AT)}\n🟢 Process: Online`);
+  return ctx.reply(`⚡ *${config.BOT_NAME || 'MR SAQIB MD'} UPTIME*\n\n⏱️ ${duration(Date.now()-SAQIB_STARTED_AT)}\n🟢 Process: Online`);
 });
 cmd({ pattern:'botinfo', alias:['systeminfo','sysinfo'], desc:'Bot and host system info', category:'utility', react:'🖥️', filename:__filename }, async (conn, mek, m, ctx) => {
   const mem = process.memoryUsage();
-  return ctx.reply(`╭━━━〔 *${config.BOT_NAME || 'AMAN Mini Bot'} SYSTEM* 〕━━━╮\n┃ 🤖 Name: ${config.BOT_NAME || 'AMAN Mini Bot'}\n┃ 📦 Node: ${process.version}\n┃ 🧠 RAM: ${(mem.rss/1024/1024).toFixed(1)} MB RSS\n┃ 💻 Platform: ${os.platform()} ${os.arch()}\n┃ ⚙️ CPUs: ${os.cpus().length}\n┃ ⏱️ Uptime: ${duration(process.uptime()*1000)}\n╰━━━━━━━━━━━━━━━━━━╯`);
+  return ctx.reply(`╭━━━〔 *${config.BOT_NAME || 'MR SAQIB MD'} SYSTEM* 〕━━━╮\n┃ 🤖 Name: ${config.BOT_NAME || 'MR SAQIB MD'}\n┃ 📦 Node: ${process.version}\n┃ 🧠 RAM: ${(mem.rss/1024/1024).toFixed(1)} MB RSS\n┃ 💻 Platform: ${os.platform()} ${os.arch()}\n┃ ⚙️ CPUs: ${os.cpus().length}\n┃ ⏱️ Uptime: ${duration(process.uptime()*1000)}\n╰━━━━━━━━━━━━━━━━━━╯`);
 });
 cmd({ pattern:'owner', alias:['creator','dev'], desc:'Owner card with tappable links', category:'main', react:'👑', filename:__filename }, async (conn, mek, m, ctx) => {
   // Sab ke liye khula hai (info card ka "Owner" button bhi yahi chalata hai). Links: plugins/carousel-menu.js -> OWNER_LINKS
@@ -95,7 +95,7 @@ cmd({ pattern:'jid', alias:['chatid','myjid'], desc:'Show chat/sender ID, or get
 cmd({ pattern:'calc', alias:['calculate','math'], desc:'Safe basic calculator', category:'utility', react:'🧮', filename:__filename }, async (conn, mek, m, ctx) => {
   const result = safeCalculate(ctx.q || '');
   if (result === null) return ctx.reply('🧮 Use: .calc (25 + 5) * 2\nAllowed: numbers, + - * / % and brackets.');
-  return ctx.reply(`🧮 *${config.BOT_NAME || 'AMAN Mini Bot'} CALCULATOR*\n\n${ctx.q} = *${result}*`);
+  return ctx.reply(`🧮 *${config.BOT_NAME || 'MR SAQIB MD'} CALCULATOR*\n\n${ctx.q} = *${result}*`);
 });
 cmd({ pattern:'base64enc', alias:['b64enc'], desc:'Encode text to Base64', category:'utility', react:'🔐', filename:__filename }, async (conn, mek, m, ctx) => {
   const input=String(ctx.q||''); if(!input) return ctx.reply('Use: .base64enc your text');

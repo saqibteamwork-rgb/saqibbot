@@ -19,7 +19,7 @@ cmd({ pattern: 'ownerhelp', alias: ['ownercommands', 'ohhelp'], desc: 'Owner: li
   ].join('\n'));
 });
 
-cmd({ pattern: 'bothealth', alias: ['healthcheck', 'amanhealth'], desc: 'Owner: detailed runtime health', category: 'owner', react: '🩺', filename: __filename }, async (conn, mek, m, ctx) => {
+cmd({ pattern: 'bothealth', alias: ['healthcheck', 'saqibhealth', 'amanhealth'], desc: 'Owner: detailed runtime health', category: 'owner', react: '🩺', filename: __filename }, async (conn, mek, m, ctx) => {
   if (!ownerOnly(ctx)) return deny(ctx);
   const mem = process.memoryUsage();
   const seconds = Math.floor(process.uptime());
@@ -57,4 +57,4 @@ cmd({ pattern: 'pluginscan', alias: ['plugincheck'], desc: 'Owner: list plugin f
 });
 
 
-console.log('[AMAN] Extra owner panel commands loaded');
+console.log('[MR SAQIB MD] Extra owner panel commands loaded');

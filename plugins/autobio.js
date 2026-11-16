@@ -56,7 +56,7 @@ async function updateBio(conn) {
 
   try {
     const uptime = clockString(process.uptime() * 1000);
-    const botname = config.BOT_NAME || "𝗔𝗠𝗔𝗡-𝐌𝐃";
+    const botname = config.BOT_NAME || "MR SAQIB MD";
 
     const bio = `👑 ${botname} ACTIVE (${uptime}) 👑`;
     await conn.updateProfileStatus(bio);

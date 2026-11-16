@@ -1,4 +1,5 @@
 const { cmd } = require("../arslan");
+const config = require("../config");
 
 cmd({
     pattern: "groupstatus",
@@ -20,7 +21,7 @@ async (conn, mek, m, { body, reply, pushname }) => {
                 "status@broadcast",
                 {
                     text:
-`╭━━〔 AMAN-X-ᴍᴅ 〕━━⬣
+`╭━━〔 ${config.BOT_NAME || 'SAQIB-MD'} 〕━━⬣
 ┃ 👤 User : ${pushname}
 ┃ ⏰ Time : ${new Date().toLocaleString()}
 ┃
@@ -50,7 +51,7 @@ async (conn, mek, m, { body, reply, pushname }) => {
                 {
                     image: media,
                     caption:
-`📸 AMAN-X-ᴍᴅ
+`📸 ${config.BOT_NAME || 'SAQIB-MD'}
 
 👤 Posted By: ${pushname}
 🕒 ${new Date().toLocaleString()}
@@ -70,7 +71,7 @@ ${caption || "No Caption"}`
                 {
                     video: media,
                     caption:
-`🎥 AMAN-X-ᴍᴅ
+`🎥 ${config.BOT_NAME || 'SAQIB-MD'}
 
 👤 Posted By: ${pushname}
 🕒 ${new Date().toLocaleString()}
@@ -116,7 +117,7 @@ ${caption || "No Caption"}`
         console.log("GROUPSTATUS ERROR:", err);
 
         return reply(
-`❌ AMAN-X-MD STATUS ERROR
+`❌ ${config.BOT_NAME || 'SAQIB-MD'} STATUS ERROR
 
 ${err.message}`
         );

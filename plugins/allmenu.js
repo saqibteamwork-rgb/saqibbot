@@ -42,7 +42,7 @@ const audioDir = path.join(__dirname, "../data/menu-voice");
 
 // Menu image: .menu par ye photo jayegi (video hata di gayi hai). Badalni ho to sirf ye link badlein.
 // Link na khule to bot ki apni photo (getBotPic) chali jayegi.
-const MENU_IMAGE_URL = process.env.MENU_IMAGE || "https://i.postimg.cc/RFpBBRrz/AMAN-MINI-BOT.png";
+const MENU_IMAGE_URL = process.env.MENU_IMAGE || config.MENU_IMAGE || settings.menuImage || "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png";
 
 let VERSION = "1.0.0";
 try { VERSION = require("../package.json").version || VERSION; } catch (_) {}
@@ -129,7 +129,7 @@ const DESIGN = {
     ].join("\n"),
 
     ALL_TITLE: "> {TITLE}",                       // sari commands se pehle wali line
-    ALL_TITLE_TEXT: "ALL COMMANDS BY AMAN",
+    ALL_TITLE_TEXT: "ALL COMMANDS BY " + (config.OWNER_NAME || "MR SAQIB"),
 
     // har category ka dabba (naya design: ┏━═❲ TITLE / ┋╭┈⌖ cmd / ┋├┈⌖ cmd / ┋╰┈⌖ cmd / ┗───𒁍)
     CATEGORY_TOP:    "",                          // khali = is line ko skip karo
@@ -148,7 +148,7 @@ const DESIGN = {
 
     USE_STATIC_MENU: true,   // true = neeche MENU_BLOCKS wali list (khud edit karein); false = commands se auto banega
 
-    FOOTER: "©𝐏𝐨𝐰𝐞𝐫𝐝 𝐁𝐲 𝗔𝗠𝗔𝗡 𝗨𝗟𝗟𝗔𝗛",   // null = config.BOT_FOOTER ya "© Powered by BOT"
+    FOOTER: "©𝐏𝐨𝐰𝐞𝐫𝐝 𝐁𝐲 " + (config.OWNER_NAME || "MR SAQIB"),   // null = config.BOT_FOOTER ya "© Powered by BOT"
     SORT_COMMANDS: true,     // true = A-Z, false = jaise plugins mein likhe hain
     SHOW_HIDDEN: false,      // true = dontAddCommandList wale commands bhi dikhao
     VIDEO_AS_GIF: false,      // true = video GIF ki tarah autoplay/loop; false = normal video
@@ -210,7 +210,7 @@ const splitBlocks = (blocks, max) => {
     return out;
 };
 
-const LIST_ORDER = ["main", "aman", "general", "group", "download", "music", "tools", "utility", "image", "sticker", "search",
+const LIST_ORDER = ["main", "owner", "general", "group", "download", "music", "tools", "utility", "image", "sticker", "search",
     "fun", "games", "anime", "love", "emotions", "islamic", "extra", "owner", "settings", "system"];
 
 const ORDER = LIST_ORDER;
@@ -245,7 +245,7 @@ cmd({
         }
 
         const PREFIX = config.PREFIX || ".";
-        const BOT_NAME = String(config.BOT_NAME || "𝗔𝗠𝗔𝗡-𝐌𝐃").replace(/(\s*[-_ ]\s*bot)+\s*$/i, "").trim() || "𝗔𝗠𝗔𝗡-𝐌𝐃";
+        const BOT_NAME = String(config.BOT_NAME || "MR SAQIB MD").replace(/(\s*[-_ ]\s*bot)+\s*$/i, "").trim() || "MR SAQIB MD";
         const OWNER_NAME = config.OWNER_NAME || "Owner";
         const MODE = config.WORK_TYPE || "public";
         const FOOTER = DESIGN.FOOTER || config.BOT_FOOTER || `> ©𝐏𝐨𝐰𝐞𝐫𝐝 𝐁𝐲 ${BOT_NAME}`;
@@ -254,7 +254,7 @@ cmd({
 
         // 🆕 Tappable menus: ".menu" (category buttons) / ".menu 2" / ".menu list" / ".menu <category> [page]"
         // Fail ho to purana text menu chalega.
-        const CAT_ALIAS = { misc: "utility", anime: "utility", games: "utility", emotions: "utility", system: "utility", settings: "extra", love: "extra", owner: "aman", main: "aman", image: "tools" };
+        const CAT_ALIAS = { misc: "utility", anime: "utility", games: "utility", emotions: "utility", system: "utility", settings: "extra", love: "extra", owner: "owner", main: "main", saqib: "owner", aman: "owner", image: "tools" };
         const wantedEarly = String(ctx.text || ctx.q || (ctx.args || []).join(" ") || "").trim().toLowerCase().replace(/^\S+/, w => (grouped[w] ? w : (CAT_ALIAS[w] || w))); // asli category ho to alias nahi lagta (ANIME -> anime hi khule)
         try {
             const cm = require("./carousel-menu");
@@ -503,7 +503,7 @@ const MENU_BLOCKS = [
 ┋╰┈⌖ 𝚆ᴏʀʟᴅᴛɪᴍᴇ
 ┗───────────────────𒁍` },
 
-    { cat: "aman", text: `┏━═❲ 𝐎𝐖𝐍𝐄𝐑
+    { cat: "owner", text: `┏━═❲ 𝐎𝐖𝐍𝐄𝐑
 ┋╭┈⌖ 𝙰ɴᴛɪ-ᴄᴀʟʟ
 ┋├┈⌖ 𝙰ᴜᴛᴏʙɪᴏ
 ┋├┈⌖ 𝙱ᴀɴʟɪsᴛ
@@ -636,7 +636,7 @@ const MENU_BLOCKS = [
 ┋╰┈⌖ 𝚆ᴇʟᴄᴏᴍᴇᴘɪᴄ
 ┗───────────────────𒁍` },
 
-    { cat: "aman", text: `┏━═❲ 𝐌𝐀𝐈𝐍
+    { cat: "main", text: `┏━═❲ 𝐌𝐀𝐈𝐍
 ┋╭┈⌖ 𝙰ɪ <ǫᴜᴇsᴛɪᴏɴ>
 ┋├┈⌖ 𝙰ʟɪᴠᴇ
 ┋├┈⌖ 𝙾ɴʟɪɴᴇ
@@ -648,8 +648,8 @@ const MENU_BLOCKS = [
 ┋├┈⌖ 𝙰ʙᴄᴅ
 ┋├┈⌖ 𝙰ᴅᴠɪᴄᴇ
 ┋├┈⌖ 𝙰ɢᴇ
-┋├┈⌖ 𝙰ᴍᴀɴᴊᴀɢᴀʀ
-┋├┈⌖ 𝙰ᴍᴀɴᴋɪᴊᴀɴ
+┋├┈⌖ 𝚂ᴀǫɪʙᴊᴀɢᴀʀ
+┋├┈⌖ 𝚂ᴀǫɪʙᴋɪᴊᴀɴ
 ┋├┈⌖ 𝙰ɴɪᴍᴇ <ᴄʜᴀʀᴀᴄᴛᴇ>
 ┋├┈⌖ 𝙰ɴɪᴍᴇɢɪғ <ᴄᴀᴛ>
 ┋├┈⌖ 𝙰ɴɪᴍᴇᴛᴀɢ <ᴛᴀɢ>

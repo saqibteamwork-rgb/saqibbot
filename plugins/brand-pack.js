@@ -72,7 +72,7 @@ cmd({
     desc: 'Premium/Owner: Bot ka WhatsApp naam change karo',
     category: 'tools',
     react: '✏️',
-    use: '.setbotname 𝗔𝗠𝗔𝗡-𝐌𝐃 V2',
+    use: '.setbotname MR SAQIB MD',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
     if (!(await requirePremium(ctx))) return;
@@ -85,6 +85,19 @@ cmd({
     try {
         await conn.updateProfileName(name);
         config.BOT_NAME = name;
+        try {
+            const fsSync = require('fs');
+            const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
+            let botData = {};
+            if (fsSync.existsSync(dataPath)) {
+                try { botData = JSON.parse(fsSync.readFileSync(dataPath, 'utf8')); } catch (_) {}
+            }
+            if (!botData.globalSettings) botData.globalSettings = {};
+            botData.globalSettings.botName = name;
+            fsSync.writeFileSync(dataPath, JSON.stringify(botData, null, 2), 'utf8');
+            const mongoSync = require('../utils/mongoSync');
+            if (mongoSync.pushToMongo) mongoSync.pushToMongo('bot_data', botData);
+        } catch (_) {}
         return ctx.reply(`✅ *Bot ka naam update ho gaya:* ${name}`);
     } catch (e) {
         return ctx.reply('❌ ' + e.message);
@@ -135,17 +148,17 @@ cmd({
     const [status] = await conn.fetchStatus(conn.user.id).catch(() => [{}]);
 
     const text = [
-        `🤖 *${config.BOT_NAME || 'AMAN Mini Bot'} BOT INFO*`,
+        `🤖 *${config.BOT_NAME || 'MR SAQIB MD'} BOT INFO*`,
         '',
-        `📛 Name: *${config.BOT_NAME}*`,
-        `👑 Owner: *Private*`,
-        `🔧 Prefix: *${config.PREFIX}*`,
+        `📛 Name: *${config.BOT_NAME || 'MR SAQIB MD'}*`,
+        `👑 Owner: *${config.OWNER_NAME || 'MR SAQIB'}*`,
+        `🔧 Prefix: *${config.PREFIX || '.'}*`,
         `⚙️ Mode: *${config.WORK_TYPE || 'public'}*`,
         `💬 About: *${status?.status || 'N/A'}*`,
         `🖼️ PP: *${pp ? 'Available' : 'Hidden'}*`,
         '',
         `📢 Channel: ${config.CHANNEL_LINK}`,
-        `© Powered by ${config.BOT_NAME || 'AMAN Mini Bot'}`
+        `© Powered by ${config.BOT_NAME || 'MR SAQIB MD'}`
     ].join('\n');
 
     if (pp) {
@@ -179,7 +192,7 @@ cmd({
         return ctx.reply(
             '❌ Kuch bhi set karne ke liye do.\n\n' +
             '*Examples:*\n' +
-            '• `.setall 𝗔𝗠𝗔𝗡-𝐌𝐃 V2 | Online 24/7 |`\n' +
+            '• `.setall MR SAQIB MD | Online 24/7 |`\n' +
             '• `.setall | |` (sirf image reply ke saath)'
         );
     }

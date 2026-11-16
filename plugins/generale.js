@@ -1,4 +1,5 @@
 const { cmd } = require('../arslan');
+const config = require('../config');
 const os = require('os');
 
 // =================================================================
@@ -28,7 +29,7 @@ async(conn, mek, m, { from, reply, myquoted }) => {
 
         // 3. Message Final Stylé
         const pingMsg = `
-*👑 𝗔𝗠𝗔𝗡-𝐌𝐃 UPTIME 👑* ⚡
+*👑 ${config.BOT_NAME || 'MR SAQIB MD'} UPTIME 👑* ⚡
 
 * UPTIME :❯  ${latency}*
 

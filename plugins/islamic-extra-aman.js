@@ -1,4 +1,5 @@
 const { cmd } = require('../arslan');
+const config = require('../config');
 
 // Helpful, general Islamic learning commands. For detailed rulings, ask a trusted scholar.
 cmd({ pattern: 'wuduguide', alias: ['wudu', 'wuzu'], desc: 'Wuzu ke basic steps', category: 'islamic', react: '💧', filename: __filename }, async (conn, mek, m, ctx) => {
@@ -12,7 +13,7 @@ cmd({ pattern: 'wuduguide', alias: ['wudu', 'wuzu'], desc: 'Wuzu ke basic steps'
     '6️⃣ Geelay haath se sar ka masah karo.',
     '7️⃣ Dono paon takhnon samait dho lo.', '',
     '🤲 Tafseeli masail mein apne maslak ke trusted alim se rehnumai lein.',
-    '💗 AMAN ki taraf se'
+    `💗 ${config.OWNER_NAME || 'SAQIB'} ki taraf se`
   ].join('\n'));
 });
 
@@ -25,7 +26,7 @@ cmd({ pattern: 'salahguide', alias: ['namazguide', 'salahsteps'], desc: 'Namaz k
     '📿 Rakat aur parhne ka tareeqa namaz ke mutabiq hota hai.',
     '🤍 Aakhir mein qaida aur salam ada karo.', '',
     'ℹ️ Fiqhi tafseel ke liye trusted alim ya apni masjid ke imam se seekho.',
-    '💗 AMAN ki taraf se'
+    `💗 ${config.OWNER_NAME || 'SAQIB'} ki taraf se`
   ].join('\n'));
 });
 
@@ -39,7 +40,7 @@ cmd({ pattern: 'islamicquiz', alias: ['deenquiz', 'muslimquiz'], desc: 'Islamic 
     { q: 'Hajj kis shehar mein ada hota hai?', a: 'Makkah' }
   ];
   const x = qs[Math.floor(Math.random() * qs.length)];
-  return ctx.reply(`📚 *AMAN DEEN QUIZ*\n\n❓ ${x.q}\n\nJawab dekhne ke liye reply mein *.quizanswer* likho.\n💡 Answer: ${x.a}\n\n💗 AMAN ki taraf se`);
+  return ctx.reply(`📚 *${config.OWNER_NAME || 'SAQIB'} DEEN QUIZ*\n\n❓ ${x.q}\n\nJawab dekhne ke liye reply mein *.quizanswer* likho.\n💡 Answer: ${x.a}\n\n💗 ${config.OWNER_NAME || 'SAQIB'} ki taraf se`);
 });
 
 cmd({ pattern: 'gooddeeds', alias: ['nekiaaj', 'gooddeed'], desc: 'Aaj ki ek achi aadat', category: 'islamic', react: '🤍', filename: __filename }, async (conn, mek, m, ctx) => {
@@ -53,7 +54,7 @@ cmd({ pattern: 'gooddeeds', alias: ['nekiaaj', 'gooddeed'], desc: 'Aaj ki ek ach
     'Kisi pareshan dost ki baat tawajjo se suno. 🫶'
   ];
   const deed = deeds[Math.floor(Math.random() * deeds.length)];
-  return ctx.reply(`🤍 *AAJ KI NEKI*\n\n${deed}\n\nChoti si neki bhi kisi ke liye khushi ban sakti hai.\n💗 AMAN ki taraf se`);
+  return ctx.reply(`🤍 *AAJ KI NEKI*\n\n${deed}\n\nChoti si neki bhi kisi ke liye khushi ban sakti hai.\n💗 ${config.OWNER_NAME || 'SAQIB'} ki taraf se`);
 });
 
 cmd({ pattern: 'islamicmonths', alias: ['hijrimonths', 'islamicmahine'], desc: 'Hijri calendar ke mahine', category: 'islamic', react: '🌙', filename: __filename }, async (conn, mek, m, ctx) => {
@@ -63,6 +64,6 @@ cmd({ pattern: 'islamicmonths', alias: ['hijrimonths', 'islamicmahine'], desc: '
     '5. Jumada al Awwal', '6. Jumada al Akhir', '7. Rajab', '8. Shaban',
     '9. Ramadan', '10. Shawwal', '11. Dhul Qadah', '12. Dhul Hijjah', '',
     '📅 Chand dekhne aur local announcement se mahine ki shuruat confirm hoti hai.',
-    '💗 AMAN ki taraf se'
+    `💗 ${config.OWNER_NAME || 'SAQIB'} ki taraf se`
   ].join('\n'));
 });

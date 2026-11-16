@@ -155,7 +155,7 @@ cmd({
 📌 *Usage:* .style <text>
 
 📖 *Example:*
-.style AMAN-MD
+.style SAQIB-MD
 
 💡 *Available styles:*
 bold, italic, cursive, circled, squared, fullwidth, monospace, bubble, inverted, smallcaps, script, double`

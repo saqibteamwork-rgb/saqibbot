@@ -7,7 +7,7 @@ const axios = require('axios');
 const api = require('../lib/anime-api');
 
 const TIMEOUT = 12000;
-const UA = 'AMAN-MINI-BOT/3.0';
+const UA = 'SAQIB-MD/3.0';
 
 // ═══════════════════════════════════════════
 //  HELPERS
@@ -82,7 +82,7 @@ cmd({
 
     if (!query) {
         return ctx.reply(
-`🎀 *AMAN ANIME CENTER*
+`🎀 *SAQIB ANIME CENTER*
 
 📌 *Commands:*
 • \`.anime <name>\` — character/series search
@@ -116,7 +116,7 @@ cmd({
             try {
                 await conn.sendMessage(ctx.from, {
                     image: { url },
-                    caption: `🎀 *AMAN ANIME*\n🔎 ${clean(query)}\n🖼️ ${sent + 1}/${images.length}`
+                    caption: `🎀 *SAQIB ANIME*\n🔎 ${clean(query)}\n🖼️ ${sent + 1}/${images.length}`
                 }, { quoted: mek });
                 sent++;
                 await new Promise(r => setTimeout(r, 400));
@@ -149,7 +149,7 @@ cmd({
 
         if (!pick) return ctx.reply('❌ Random API unavailable.');
 
-        let caption = '🖼️ *AMAN RANDOM ANIME*';
+        let caption = '🖼️ *SAQIB RANDOM ANIME*';
         if (pick.artist) caption += `\n🎨 Artist: ${clean(pick.artist)}`;
         if (pick.anime) caption += `\n📺 Anime: ${clean(pick.anime)}`;
 
@@ -203,7 +203,7 @@ ${validCats.slice(0, 20).map(c => `• \`${c}\``).join('\n')}
         const result = await nekosBestRandom(category);
         if (!result?.url) return ctx.reply('❌ GIF nahi mila.');
 
-        let caption = `🎬 *AMAN ANIME GIF*\n✨ Category: \`${category}\``;
+        let caption = `🎬 *SAQIB ANIME GIF*\n✨ Category: \`${category}\``;
         if (result.anime) caption += `\n📺 Anime: ${clean(result.anime)}`;
         if (result.artist) caption += `\n🎨 Artist: ${clean(result.artist)}`;
 
@@ -279,7 +279,7 @@ cmd({
         const pick = await api.randomImage('neko');
         if (!pick) return ctx.reply('❌ Neko API unavailable.');
 
-        let caption = '🐱 *AMAN NEKO*';
+        let caption = '🐱 *SAQIB NEKO*';
         if (pick.artist) caption += `\n🎨 ${clean(pick.artist)}`;
 
         return conn.sendMessage(ctx.from, {
@@ -307,7 +307,7 @@ cmd({
         const pick = await api.randomImage('waifu');
         if (!pick) return ctx.reply('❌ Waifu API unavailable.');
 
-        let caption = '💗 *AMAN WAIFU*';
+        let caption = '💗 *SAQIB WAIFU*';
         if (pick.artist) caption += `\n🎨 ${clean(pick.artist)}`;
 
         return conn.sendMessage(ctx.from, {
@@ -335,7 +335,7 @@ cmd({
         const pick = await api.randomImage('husbando');
         if (!pick) return ctx.reply('❌ Husbando API unavailable.');
 
-        let caption = '💙 *AMAN HUSBANDO*';
+        let caption = '💙 *SAQIB HUSBANDO*';
         if (pick.artist) caption += `\n🎨 ${clean(pick.artist)}`;
 
         return conn.sendMessage(ctx.from, {
