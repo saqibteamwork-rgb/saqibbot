@@ -1738,7 +1738,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'owner': case 'onwer': case 'creator': case 'developer': case 'contact': case 'dev': case 'profile':
                                             await commands.owner(this.sock, from, msg);
                                             break;
-                                        case 'ai': await commands.ai(this.sock, from, msg, isAdmin, this, args); break;
+                                        case 'ai': case 'ask': case 'gpt': case 'chatgpt': case 'bot':
+                                            await commands.ai(this.sock, from, msg, isAdmin, this, args);
+                                            break;
                                         case 'antilink': await commands.antilink(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
                                         case 'anticall': await commands.anticall(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
                                         case 'antidelete': await commands.antidelete(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
