@@ -1,0 +1,171 @@
+// commands/webSummarizer.js - Smart AI Webpage & Article Summarizer
+'use strict';
+
+const axios = require('axios');
+const cheerio = require('cheerio');
+
+let queryAI = null;
+try {
+    const luxury = require('../plugins/luxury-ai');
+    queryAI = luxury.queryAI;
+} catch (e) {
+    console.warn('[Web Summarizer] Luxury AI not loaded:', e.message);
+}
+
+/**
+ * Extract first HTTP/HTTPS URL from text or quoted message
+ */
+function extractUrl(text, msg) {
+    const urlRegex = /(https?:\/\/[^\s]+)/i;
+    let match = text ? text.match(urlRegex) : null;
+    if (match) return match[0];
+
+    const quoted = msg.message?.extendedTextMessage?.contextInfo?.quotedMessage;
+    if (quoted) {
+        const quotedText = quoted.conversation ||
+                           quoted.extendedTextMessage?.text ||
+                           quoted.imageMessage?.caption ||
+                           quoted.videoMessage?.caption ||
+                           '';
+        match = quotedText.match(urlRegex);
+        if (match) return match[0];
+    }
+    return null;
+}
+
+/**
+ * .summarize / .webread / .summary
+ */
+async function summarizeCommand(sock, from, msg, args = []) {
+    try {
+        const rawInput = args.join(' ').trim();
+        const targetUrl = extractUrl(rawInput, msg);
+
+        if (!targetUrl) {
+            return await sock.sendMessage(from, {
+                text:
+`╭━━━〔 🌐 *AI WEBPAGE & ARTICLE SUMMARIZER* 〕━━━┈⊷
+┃ 📌 *Usage:*
+┃ • *.summarize <url>*
+┃ • Kisi bhi article link ko reply karke *.summarize* likhein
+┃ 
+┃ 💡 *Example:*
+┃ 👉 *.summarize https://en.wikipedia.org/wiki/Artificial_intelligence*
+┃ 👉 *.summarize https://www.bbc.com/news/...*
+┃ 
+┃ ✨ *Features:*
+┃ • Automated page content extraction
+┃ • Removes ads, popups & scripts
+┃ • Deep bullet-point summary via AI
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+🚀 *Powered by MR SAQIB MD*`
+            }, { quoted: msg });
+        }
+
+        await sock.sendMessage(from, { react: { text: '🔍', key: msg.key } }).catch(() => {});
+
+        // Fetch page HTML
+        const response = await axios.get(targetUrl, {
+            timeout: 15000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            maxContentLength: 10 * 1024 * 1024 // 10MB limit
+        });
+
+        const $ = cheerio.load(response.data);
+
+        // Extract title
+        const pageTitle = $('meta[property="og:title"]').attr('content') ||
+                          $('title').text().trim() ||
+                          'Web Article';
+
+        // Strip non-content elements
+        $('script, style, nav, footer, header, noscript, aside, form, svg, iframe, .ads, .advertisement, #comments').remove();
+
+        // Extract main text paragraphs
+        let paragraphs = [];
+        $('article p, main p, p').each((_, el) => {
+            const txt = $(el).text().replace(/\s+/g, ' ').trim();
+            if (txt.length > 40) {
+                paragraphs.push(txt);
+            }
+        });
+
+        const bodyContent = paragraphs.slice(0, 15).join('\n\n').substring(0, 3500);
+
+        if (!bodyContent || bodyContent.length < 50) {
+            return await sock.sendMessage(from, {
+                text: `❌ Is webpage se article text extract nahi ho saka. Page login-protected ya dynamic JavaScript-only ho sakta hai.`
+            }, { quoted: msg });
+        }
+
+        await sock.sendMessage(from, { react: { text: '🧠', key: msg.key } }).catch(() => {});
+
+        let summaryText = '';
+
+        if (queryAI) {
+            const prompt = 
+`You are an expert article analyst for a WhatsApp bot.
+Please analyze the following article content and generate a crisp, highly readable executive summary in Urdu/Hindi and English.
+
+Format strictly as:
+📌 *Title:* [Clean title]
+🌐 *Source Domain:* [Domain name]
+📝 *Key Points:*
+• [Key point 1]
+• [Key point 2]
+• [Key point 3]
+• [Key point 4]
+💡 *Conclusion / Takeaway:*
+[Brief conclusion]
+
+Article Title: ${pageTitle}
+Article URL: ${targetUrl}
+Article Body:
+${bodyContent}`;
+
+            try {
+                const aiResult = await queryAI('mistralMedium', prompt);
+                if (aiResult?.success && aiResult?.reply) {
+                    summaryText = aiResult.reply.trim();
+                }
+            } catch (aiErr) {
+                console.warn('[Summarizer AI Error]:', aiErr.message);
+            }
+        }
+
+        // Fallback if AI is offline
+        if (!summaryText) {
+            const previewLines = paragraphs.slice(0, 4).map(p => `• ${p}`).join('\n\n');
+            summaryText = 
+`📌 *Title:* ${pageTitle}
+🌐 *Source:* ${new URL(targetUrl).hostname}
+
+📝 *Article Excerpt:*
+${previewLines}`;
+        }
+
+        const finalMessage = 
+`╭━━━〔 📑 *ARTICLE SUMMARY* 〕━━━┈⊷
+${summaryText}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+🚀 *Generated by MR SAQIB MD*`;
+
+        await sock.sendMessage(from, {
+            text: finalMessage
+        }, { quoted: msg });
+
+        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+    } catch (error) {
+        console.error('[Summarizer Error]:', error);
+        await sock.sendMessage(from, {
+            text: `❌ Webpage summary fail ho gayi: ${error.message || 'Unknown error'}`
+        }, { quoted: msg });
+    }
+}
+
+module.exports = { summarizeCommand };

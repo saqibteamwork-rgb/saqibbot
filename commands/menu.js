@@ -86,9 +86,11 @@ function makeBox(title, commands) {
 
 const CATEGORIES = {
     'AI & MEDIA': [
-        'ai', 'ai2', 'aimodels', 'codestral', 'devstral', 'emojimix', 'flux',
-        'imagine', 'luxai', 'malik', 'ministral', 'mistral', 'pinterest',
-        'qr', 'rmbg', 'sensenova', 'sigma', 'silentsave', 'sticker', 'take', 'tourl', 'vc'
+        'ai', 'ai2', 'aimodels', 'blur', 'bw', 'circle', 'codestral', 'devstral',
+        'emojimix', 'enhance', 'flip', 'flux', 'hd', 'imagine', 'invert', 'luxai',
+        'malik', 'ministral', 'mistral', 'pinterest', 'qr', 'rmbg', 'sensenova',
+        'sepia', 'sharpen', 'sigma', 'silentsave', 'sticker', 'summarize', 'take',
+        'toimg', 'tourl', 'vc'
     ],
     'CHANNEL': [
         'achr', 'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock',
@@ -100,8 +102,8 @@ const CATEGORIES = {
     ],
     'AUDIO EDIT': [
         'baby', 'bass', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
-        'fat', 'nightcore', 'radio', 'reverse', 'robot', 'slow', 'smooth',
-        'tomp3', 'toptt', 'tupai'
+        'fat', 'nightcore', 'radio', 'reverse', 'robot', 'say', 'slow', 'smooth',
+        'tomp3', 'toptt', 'tts', 'tupai'
     ],
     'DOWNLOAD': [
         'apk', 'audio', 'capcut', 'dl', 'facebook', 'fbdl', 'gdrive',

@@ -128,6 +128,10 @@ const {
 
 // Newly integrated modules from D:\Mmm-main & D:\Server2-main
 const { stickerCommand, takeCommand } = require('./commands/sticker');
+const { toimgCommand } = require('./commands/toimg');
+const { ttsCommand } = require('./commands/tts');
+const { photoFilterCommand } = require('./commands/photoFilter');
+const { summarizeCommand } = require('./commands/webSummarizer');
 const tourlCommand = require('./commands/tourl');
 const pinterestCommand = require('./commands/pinterest');
 const aiImageCommand = require('./commands/ai-image');
@@ -2105,8 +2109,38 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'sticker': case 's': case 'stickergif':
                                             await stickerCommand(this.sock, from, msg, args);
                                             break;
+                                        case 'toimg': case 'photo': case 's2img': case 'stoimg': case 'stickertoimage':
+                                            await toimgCommand(this.sock, from, msg);
+                                            break;
                                         case 'take': case 'wm':
                                             await takeCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'say': case 'tts': case 'speak': case 'voicenote':
+                                            await ttsCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'enhance': case 'sharpen': case 'hd': case 'upscale':
+                                            await photoFilterCommand(this.sock, from, msg, 'enhance', args);
+                                            break;
+                                        case 'bw': case 'grayscale': case 'gray': case 'blackandwhite':
+                                            await photoFilterCommand(this.sock, from, msg, 'bw', args);
+                                            break;
+                                        case 'blur':
+                                            await photoFilterCommand(this.sock, from, msg, 'blur', args);
+                                            break;
+                                        case 'invert': case 'negative':
+                                            await photoFilterCommand(this.sock, from, msg, 'invert', args);
+                                            break;
+                                        case 'sepia': case 'vintage':
+                                            await photoFilterCommand(this.sock, from, msg, 'sepia', args);
+                                            break;
+                                        case 'flip': case 'mirror':
+                                            await photoFilterCommand(this.sock, from, msg, 'flip', args);
+                                            break;
+                                        case 'circle': case 'round':
+                                            await photoFilterCommand(this.sock, from, msg, 'circle', args);
+                                            break;
+                                        case 'summarize': case 'webread': case 'readweb': case 'summary': case 'article':
+                                            await summarizeCommand(this.sock, from, msg, args);
                                             break;
                                         case 'tourl': case 'url':
                                             await tourlCommand(this.sock, from, msg);

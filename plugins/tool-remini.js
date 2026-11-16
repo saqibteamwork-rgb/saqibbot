@@ -1,96 +1,45 @@
-const axios = require("axios");
-const FormData = require('form-data');
-const fs = require('fs');
-const os = require('os');
-const path = require("path");
+// plugins/tool-remini.js - Fast & Reliable HD Image Enhancer using Sharp
+'use strict';
+
+const sharp = require('sharp');
 const { cmd } = require("../command");
 
 cmd({
   pattern: "remini",
   alias: ["enhance", "hd", "upscale"],
   react: '✨',
-  desc: "Enhance photo quality using AI",
+  desc: "Enhance photo quality to HD using Sharp Engine",
   category: "utility",
   use: ".remini [reply to image]",
   filename: __filename
 }, async (client, message, { reply, quoted }) => {
   try {
-    // Check if quoted message exists and has media
     const quotedMsg = quoted || message;
     const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
     
-    if (!mimeType || !mimeType.startsWith('image/')) {
-      return reply("Please reply to an image file (JPEG/PNG)");
+    if (!mimeType || (!mimeType.startsWith('image/') && !mimeType.includes('webp'))) {
+      return reply("Please reply to an image or sticker (JPEG/PNG/WebP)");
     }
 
-    // Download the media
     const mediaBuffer = await quotedMsg.download();
-    
-    // Get file extension based on mime type
-    let extension = '';
-    if (mimeType.includes('image/jpeg')) extension = '.jpg';
-    else if (mimeType.includes('image/png')) extension = '.png';
-    else {
-      return reply("Unsupported image format. Please use JPEG or PNG");
+    if (!mediaBuffer || mediaBuffer.length === 0) {
+      return reply("❌ Failed to download media.");
     }
 
-    // Create temp file
-    const tempFilePath = path.join(os.tmpdir(), `remini_input_${Date.now()}${extension}`);
-    fs.writeFileSync(tempFilePath, mediaBuffer);
+    const enhancedBuffer = await sharp(mediaBuffer, { pages: 1 })
+      .sharpen({ sigma: 1.5, m1: 1.3, m2: 0.7 })
+      .normalize()
+      .modulate({ brightness: 1.04, saturation: 1.08 })
+      .jpeg({ quality: 95 })
+      .toBuffer();
 
-    // Upload to Catbox
-    const form = new FormData();
-    form.append('fileToUpload', fs.createReadStream(tempFilePath), `image${extension}`);
-    form.append('reqtype', 'fileupload');
-
-    const uploadResponse = await axios.post("https://catbox.moe/user/api.php", form, {
-      headers: form.getHeaders()
-    });
-
-    const imageUrl = uploadResponse.data;
-    fs.unlinkSync(tempFilePath); // Clean up temp file
-
-    if (!imageUrl) {
-      throw "Failed to upload image to Catbox";
-    }
-
-    // Enhance image using Remini API
-    const apiUrl = `https://api.hanggts.xyz/imagecreator/remini?url=${encodeURIComponent(imageUrl)}`;
-    const response = await axios.get(apiUrl, { 
-      timeout: 60000 // 1 minute timeout
-    });
-
-    if (!response.data.status || !response.data.result) {
-      throw "Failed to enhance image";
-    }
-
-    // Download the enhanced image
-    const resultResponse = await axios.get(response.data.result, { 
-      responseType: 'arraybuffer',
-      timeout: 60000
-    });
-
-    // Check if response is valid image
-    if (!resultResponse.data || resultResponse.data.length < 100) {
-      throw "API returned invalid image data";
-    }
-
-    // Save enhanced image
-    const outputPath = path.join(os.tmpdir(), `remini_output_${Date.now()}.png`);
-    fs.writeFileSync(outputPath, resultResponse.data);
-
-    // Send the enhanced image
-    await reply("🔄 Enhancing image quality...");
     await client.sendMessage(message.chat, {
-      image: fs.readFileSync(outputPath),
-      caption: "- *✅ Image enhanced successfully*",
+      image: enhancedBuffer,
+      caption: "- *✅ Image enhanced successfully (HD Quality)*\n\n🚀 _MR SAQIB MD_",
     }, { quoted: message });
-
-    // Clean up
-    fs.unlinkSync(outputPath);
 
   } catch (error) {
     console.error('Image Enhancement Error:', error);
-    await reply(`❌ Error: ${error.message || "Failed to enhance image. The image might be too large or the API is unavailable."}`);
+    await reply(`❌ Error: ${error.message || "Failed to enhance image."}`);
   }
 });

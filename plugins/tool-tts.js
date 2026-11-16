@@ -1,25 +1,20 @@
-const axios = require('axios');
-const config = require('../config')
-const {cmd , commands} = require('../command')
-const googleTTS = require('google-tts-api')
+// plugins/tool-tts.js - WhatsApp Voice Note (PTT) Generator
+'use strict';
+
+const { cmd } = require('../command');
+const { ttsCommand } = require('../commands/tts');
 
 cmd({
     pattern: "tts",
-    desc: "download songs",
-    category: "download",
-    react: "💀",
+    alias: ["say", "speak", "voicenote"],
+    desc: "Convert text to real WhatsApp Opus voice note (PTT)",
+    category: "audio",
+    react: "🎙️",
     filename: __filename
-},
-async(conn, mek, m,{from, quoted, body, isCmd, command, args, q, isGroup, sender, senderNumber, botNumber2, botNumber, pushname, isMe, isOwner, groupMetadata, groupName, participants, groupAdmins, isBotAdmins, isAdmins, reply}) => {
-try{
-if(!q) return reply("Need some text.")
-    const url = googleTTS.getAudioUrl(q, {
-  lang: 'hi-IN',
-  slow: false,
-  host: 'https://translate.google.com',
-})
-await conn.sendMessage(from, { audio: { url: url }, mimetype: 'audio/mpeg', ptt: false }, { quoted: mek })
-    }catch(a){
-reply(`${a}`)
-}
-})
+}, async (conn, mek, m, { from, args, reply }) => {
+    try {
+        await ttsCommand(conn, from, mek, args);
+    } catch (e) {
+        reply(`❌ Error: ${e.message || e}`);
+    }
+});

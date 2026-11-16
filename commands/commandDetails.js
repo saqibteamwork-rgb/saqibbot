@@ -663,6 +663,83 @@ const COMMAND_GUIDES = {
     desc: 'Kisi bhi zuban ke text ko doosri zuban mein translate karta hai.',
     params: ['<lang_code>: ur, en, ar, hi', '<text>: Sentence ya replied message'],
     examples: ['.translate ur How are you?', '.translate en Aap kaise hain?']
+  },
+  toimg: {
+    name: 'toimg',
+    aliases: ['photo', 's2img', 'stoimg'],
+    category: 'AI & MEDIA',
+    permission: 'Everyone 🌐',
+    usage: '.toimg (Sticker ko reply karein)\n.photo (Sticker ko reply karein)',
+    desc: 'WhatsApp Sticker (static ya animated) ko wapis HD Image (PNG/JPEG) me convert karta hai taake aap gallery me save ya DP laga sakein.',
+    params: ['Sticker Message ko reply karein'],
+    examples: ['.toimg', '.photo']
+  },
+  say: {
+    name: 'say',
+    aliases: ['tts', 'speak', 'voicenote'],
+    category: 'AUDIO EDIT',
+    permission: 'Everyone 🌐',
+    usage: '.say <text>\n.tts <lang> <text>\n(Reply to text with .say)',
+    desc: 'Kisi bhi text ko real WhatsApp Opus Voice Note (PTT) me convert karta hai green microphone aur waveform ke sath.',
+    params: [
+      '<text>: Jo text bulwana ho',
+      '<lang>: Zuban ka code (ur, en, hi, ar, fr, tr)'
+    ],
+    examples: [
+      '.say Assalam o alaikum kaise ho sab',
+      '.tts en Welcome to our WhatsApp group',
+      '.tts ar Alhamdulillah rabil alameen'
+    ]
+  },
+  enhance: {
+    name: 'enhance',
+    aliases: ['hd', 'sharpen', 'upscale'],
+    category: 'AI & MEDIA',
+    permission: 'Everyone 🌐',
+    usage: '.enhance (Reply to photo/sticker)\n.hd (Reply to photo/sticker)',
+    desc: 'Photo ki quality ko AI Sharp Engine se crisper, clearer aur HD quality me enhance karta hai. Saath hi .bw, .blur, .invert, .sepia, .circle bhi available hain.',
+    params: ['Photo ya Sticker ko reply karein'],
+    examples: ['.enhance', '.hd', '.bw', '.blur 10', '.circle']
+  },
+  summarize: {
+    name: 'summarize',
+    aliases: ['webread', 'readweb', 'summary'],
+    category: 'AI & MEDIA',
+    permission: 'Everyone 🌐',
+    usage: '.summarize <website_url>\n(Reply to a message with a link)',
+    desc: 'Kisi bhi article ya webpage ka URL de kar AI se uska bullet-point Urdu aur English summary extract karta hai bina ads ke.',
+    params: ['<website_url>: Article ya blog post ka link'],
+    examples: [
+      '.summarize https://en.wikipedia.org/wiki/Artificial_intelligence',
+      '.summarize https://www.bbc.com/news/...'
+    ]
+  },
+  cc: {
+    name: 'cc',
+    aliases: ['coupon', 'redeem'],
+    category: 'CHANNEL',
+    permission: 'Everyone 🌐',
+    usage: '.cc <6_digit_code>',
+    desc: 'Single-use Coupon code redeem karke apne account par Pro 1-Channel Auto-React feature activate karein.',
+    params: ['<6_digit_code>: Admin se mila hua 6-digit coupon code'],
+    examples: ['.cc 482910']
+  },
+  achr: {
+    name: 'achr',
+    aliases: ['mych', 'userarc'],
+    category: 'CHANNEL',
+    permission: 'Coupon Pro / Owner 👑',
+    usage: '.achr <channel_link> [emojis]\n.achr del\n.achr list',
+    desc: 'Apne personal channel par auto-reaction set karein. Jab bhi aapke channel par post aayegi sirf aapka bot account react karega.',
+    params: [
+      '<channel_link>: Aapke channel ka WhatsApp link',
+      '[emojis]: Emojis jo react karni hain (default: ❤️,🔥,⚡)'
+    ],
+    examples: [
+      '.achr https://whatsapp.com/channel/0029VaXXXXX ❤️,🔥,⚡',
+      '.achr list',
+      '.achr del'
+    ]
   }
 };
 
