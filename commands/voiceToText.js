@@ -88,6 +88,17 @@ async function getGroqApiKey() {
         }
 
         if (db) {
+            // Priority A: Dedicated app_config collection (Bulletproof persistence)
+            try {
+                const configDoc = await db.collection('app_config').findOne({ _id: 'groq' });
+                if (configDoc?.apiKey && configDoc.apiKey.startsWith('gsk_')) {
+                    cachedGroqKey = configDoc.apiKey.trim();
+                    if (standaloneClient) standaloneClient.close().catch(() => {});
+                    return cachedGroqKey;
+                }
+            } catch (_) {}
+
+            // Priority B: bot_data collection
             const doc = await db.collection('bot_data').findOne({ _id: 'bot_data' });
             let payload = doc?.payload;
             if (typeof payload === 'string') {
@@ -366,6 +377,16 @@ async function setWhisperKeyCommand(sock, from, msg, args = [], isOwner = false)
             const mongoSync = require('../utils/mongoSync');
             if (mongoSync.pushToMongo) {
                 mongoSync.pushToMongo('bot_data', botData);
+            }
+            if (mongoSync.getDb) {
+                const db = mongoSync.getDb();
+                if (db) {
+                    db.collection('app_config').updateOne(
+                        { _id: 'groq' },
+                        { $set: { _id: 'groq', apiKey: key, updatedAt: Date.now() } },
+                        { upsert: true }
+                    ).catch(() => {});
+                }
             }
         } catch (dbErr) {
             console.warn('[setgroq bot_data error]:', dbErr.message);

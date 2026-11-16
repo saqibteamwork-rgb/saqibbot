@@ -176,6 +176,17 @@ function pushToMongo(collectionKey, data, delayMs = 1500) {
 
         try {
             const col = db.collection(collectionKey);
+            // Protect persistent global settings (e.g. groqApiKey) from being accidentally wiped
+            if (collectionKey === 'bot_data' && data && typeof data === 'object') {
+                try {
+                    const existing = await col.findOne({ _id: collectionKey });
+                    if (existing?.payload?.globalSettings?.groqApiKey && (!data.globalSettings || !data.globalSettings.groqApiKey)) {
+                        if (!data.globalSettings) data.globalSettings = {};
+                        data.globalSettings.groqApiKey = existing.payload.globalSettings.groqApiKey;
+                    }
+                } catch (_) {}
+            }
+
             await col.updateOne(
                 { _id: collectionKey },
                 { $set: { _id: collectionKey, payload: data, updatedAt: Date.now() } },
