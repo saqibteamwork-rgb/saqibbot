@@ -297,7 +297,120 @@ const GOOGLE_LINKS_CARD =
 ┃ google.com/search?q=mr+saqib
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, args = []) {
+const CATEGORY_ALIASES = {
+    // Group Menu
+    'group': 'GROUP',
+    'gc': 'GROUP',
+    'g': 'GROUP',
+    'grp': 'GROUP',
+    'groupmenu': 'GROUP',
+    'gcmenu': 'GROUP',
+    'gmenu': 'GROUP',
+
+    // Owner Menu
+    'owner': 'OWNER',
+    'onwer': 'OWNER',
+    'own': 'OWNER',
+    'o': 'OWNER',
+    'sudo': 'OWNER',
+    'ownermenu': 'OWNER',
+    'onwermenu': 'OWNER',
+    'omenu': 'OWNER',
+
+    // AI & Media Menu
+    'ai': 'AI & MEDIA',
+    'aimedia': 'AI & MEDIA',
+    'media': 'AI & MEDIA',
+    'aimenu': 'AI & MEDIA',
+    'mediamenu': 'AI & MEDIA',
+
+    // Channel Menu
+    'channel': 'CHANNEL',
+    'ch': 'CHANNEL',
+    'chnl': 'CHANNEL',
+    'channelmenu': 'CHANNEL',
+    'chmenu': 'CHANNEL',
+
+    // Islamic Menu
+    'islamic': 'ISLAMIC',
+    'islam': 'ISLAMIC',
+    'deen': 'ISLAMIC',
+    'islamicmenu': 'ISLAMIC',
+
+    // Fun Menu
+    'fun': 'FUN',
+    'masti': 'FUN',
+    'game': 'FUN',
+    'games': 'FUN',
+    'funmenu': 'FUN',
+
+    // Download Menu
+    'dl': 'DOWNLOAD',
+    'download': 'DOWNLOAD',
+    'downloader': 'DOWNLOAD',
+    'down': 'DOWNLOAD',
+    'dlmenu': 'DOWNLOAD',
+    'downloadmenu': 'DOWNLOAD',
+
+    // Anime Menu
+    'anime': 'ANIME',
+    'weeb': 'ANIME',
+    'animemenu': 'ANIME',
+
+    // Audio Edit Menu
+    'audio': 'AUDIO EDIT',
+    'sound': 'AUDIO EDIT',
+    'voice': 'AUDIO EDIT',
+    'audiomenu': 'AUDIO EDIT',
+
+    // Lookup & Tools Menu
+    'tool': 'LOOKUP & TOOLS',
+    'tools': 'LOOKUP & TOOLS',
+    'lookup': 'LOOKUP & TOOLS',
+    'utility': 'LOOKUP & TOOLS',
+    'util': 'LOOKUP & TOOLS',
+    'toolmenu': 'LOOKUP & TOOLS',
+    'toolsmenu': 'LOOKUP & TOOLS',
+
+    // Search Menu
+    'search': 'SEARCH',
+    'find': 'SEARCH',
+    'searchmenu': 'SEARCH',
+
+    // Text Effects Menu
+    'text': 'TEXT EFFECTS',
+    'texteffects': 'TEXT EFFECTS',
+    'effects': 'TEXT EFFECTS',
+    'textmenu': 'TEXT EFFECTS',
+
+    // Security Menu
+    'sec': 'SECURITY',
+    'security': 'SECURITY',
+    'guard': 'SECURITY',
+    'secmenu': 'SECURITY',
+    'securitymenu': 'SECURITY',
+
+    // General Menu
+    'general': 'GENERAL',
+    'gen': 'GENERAL',
+    'main': 'GENERAL',
+    'generalmenu': 'GENERAL'
+};
+
+function resolveCategory(query) {
+    if (!query) return null;
+    const clean = String(query).toLowerCase().replace(/[^a-z0-9&]/g, '').trim();
+    if (CATEGORY_ALIASES[clean]) return CATEGORY_ALIASES[clean];
+    for (const catName of Object.keys(CATEGORIES)) {
+        const catClean = catName.toLowerCase().replace(/[^a-z0-9&]/g, '');
+        if (catClean === clean || catClean.includes(clean) || clean.includes(catClean)) {
+            return catName;
+        }
+    }
+    return null;
+}
+
+async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, args = [], forcedCategory = null) {
     // 1. Instant loading reaction (fired asynchronously in background: ZERO delay!)
     sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
 
@@ -343,6 +456,9 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         }
     }
 
+    // Resolve target single category (if forced or specified in args)
+    const targetCategory = forcedCategory ? resolveCategory(forcedCategory) : (filterArg ? resolveCategory(filterArg) : null);
+
     const effectiveStyleId = requestedStyle || profile.menuStyle || 1;
     const styleObj = STYLES[effectiveStyleId] || STYLES[1];
 
@@ -352,13 +468,18 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         userName: customName
     };
 
+    // Calculate commands count for stats header
+    const displayedCommandsCount = targetCategory && CATEGORIES[targetCategory]
+        ? CATEGORIES[targetCategory].length
+        : TOTAL_COMMANDS_COUNT;
+
     const statsData = {
         isPublic,
         dateStr,
         runtimeStr,
         usedMem,
         totalMem,
-        totalCommands: TOTAL_COMMANDS_COUNT
+        totalCommands: displayedCommandsCount
     };
 
     // 2. Build Aesthetic Header Box
@@ -368,7 +489,12 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     let bodyText = '';
     const styleCache = PRECOMPILED_STYLES.get(effectiveStyleId) || PRECOMPILED_STYLES.get(1);
 
-    if (filterArg && styleCache?.categoryMap) {
+    if (targetCategory && styleCache?.categoryMap) {
+        const entry = styleCache.categoryMap.get(targetCategory.toLowerCase());
+        if (entry) {
+            bodyText = entry.box;
+        }
+    } else if (filterArg && styleCache?.categoryMap) {
         for (const [key, item] of styleCache.categoryMap.entries()) {
             if (key.includes(filterArg) || item.name.toLowerCase().includes(filterArg)) {
                 bodyText += item.box;
@@ -424,6 +550,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 module.exports = {
     menuCommand,
     setmenuCommand,
+    resolveCategory,
     getStyleCatalog,
     STYLES,
     CATEGORIES,

@@ -1706,6 +1706,42 @@ class BotSession {
                                         case 'menu': case 'mene': case 'manu': case 'mainu': case 'commands': case 'list': case 'helpall':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args);
                                             break;
+                                        case 'gcmenu': case 'groupmenu': case 'gmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'GROUP');
+                                            break;
+                                        case 'ownermenu': case 'onwermenu': case 'omenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'OWNER');
+                                            break;
+                                        case 'aimenu': case 'mediamenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'AI & MEDIA');
+                                            break;
+                                        case 'chmenu': case 'channelmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'CHANNEL');
+                                            break;
+                                        case 'islamicmenu': case 'deenmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'ISLAMIC');
+                                            break;
+                                        case 'funmenu': case 'gamemenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'FUN');
+                                            break;
+                                        case 'dlmenu': case 'downloadmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'DOWNLOAD');
+                                            break;
+                                        case 'animemenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'ANIME');
+                                            break;
+                                        case 'toolmenu': case 'toolsmenu': case 'utilmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'LOOKUP & TOOLS');
+                                            break;
+                                        case 'audiomenu': case 'soundmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'AUDIO EDIT');
+                                            break;
+                                        case 'searchmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'SEARCH');
+                                            break;
+                                        case 'secmenu': case 'securitymenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'SECURITY');
+                                            break;
                                         case 'help':
                                         const helpText = `╭━━━〔 ${toBold("📖 " + settings.botName + " HELP")} 〕━━━┈⊷
 
