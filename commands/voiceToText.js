@@ -12,7 +12,17 @@ const path = require('path');
 const crypto = require('crypto');
 const settings = require('../settings');
 
-ffmpeg.setFfmpegPath(ffmpegStatic);
+let ffmpegPath = ffmpegStatic;
+try {
+    if (!ffmpegPath || !fsSync.existsSync(ffmpegPath)) {
+        ffmpegPath = require('@ffmpeg-installer/ffmpeg').path || 'ffmpeg';
+    }
+} catch (_) {
+    ffmpegPath = 'ffmpeg';
+}
+if (ffmpegPath) {
+    try { ffmpeg.setFfmpegPath(ffmpegPath); } catch (_) {}
+}
 
 let cachedGroqKey = '';
 
@@ -62,7 +72,21 @@ async function getGroqApiKey() {
     // 2. Check MongoDB Atlas cluster database
     try {
         const mongoSync = require('../utils/mongoSync');
-        const db = mongoSync.getDb ? mongoSync.getDb() : null;
+        let db = mongoSync.getDb ? mongoSync.getDb() : null;
+        let standaloneClient = null;
+
+        if (!db && (process.env.MONGODB_URI || process.env.MONGODB_URL)) {
+            try {
+                const { MongoClient } = require('mongodb');
+                standaloneClient = new MongoClient(process.env.MONGODB_URI || process.env.MONGODB_URL, {
+                    serverSelectionTimeoutMS: 5000,
+                    connectTimeoutMS: 5000
+                });
+                await standaloneClient.connect();
+                db = standaloneClient.db('mr_saqib_bot');
+            } catch (_) {}
+        }
+
         if (db) {
             const doc = await db.collection('bot_data').findOne({ _id: 'bot_data' });
             let payload = doc?.payload;
@@ -71,8 +95,25 @@ async function getGroqApiKey() {
             }
             if (payload?.globalSettings?.groqApiKey && payload.globalSettings.groqApiKey.startsWith('gsk_')) {
                 cachedGroqKey = payload.globalSettings.groqApiKey.trim();
+                // Also cache locally for 0ms future reads
+                try {
+                    const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
+                    let bd = {};
+                    if (fsSync.existsSync(dataPath)) {
+                        try { bd = JSON.parse(fsSync.readFileSync(dataPath, 'utf8')); } catch (_) {}
+                    }
+                    if (!bd.globalSettings) bd.globalSettings = {};
+                    bd.globalSettings.groqApiKey = cachedGroqKey;
+                    fsSync.writeFileSync(dataPath, JSON.stringify(bd, null, 2), 'utf8');
+                } catch (_) {}
+                if (standaloneClient) {
+                    standaloneClient.close().catch(() => {});
+                }
                 return cachedGroqKey;
             }
+        }
+        if (standaloneClient) {
+            standaloneClient.close().catch(() => {});
         }
     } catch (_) {}
 

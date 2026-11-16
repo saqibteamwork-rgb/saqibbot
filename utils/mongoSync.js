@@ -126,8 +126,18 @@ async function initialSync() {
                 const localStats = localExists ? fs.statSync(target.file) : null;
                 const localTime = localStats ? localStats.mtimeMs : 0;
 
+                let payloadToSave = cloudDoc.payload;
+                if (target.key === 'bot_data' && localData && typeof localData === 'object') {
+                    payloadToSave = { ...localData, ...cloudDoc.payload };
+                    if (localData.globalSettings && (!cloudDoc.payload.globalSettings || Object.keys(cloudDoc.payload.globalSettings).length === 0)) {
+                        payloadToSave.globalSettings = localData.globalSettings;
+                    } else if (localData.globalSettings && cloudDoc.payload.globalSettings) {
+                        payloadToSave.globalSettings = { ...localData.globalSettings, ...cloudDoc.payload.globalSettings };
+                    }
+                }
+
                 if (!localExists || cloudTime >= localTime || !localData || Object.keys(localData).length === 0) {
-                    fs.writeJsonSync(target.file, cloudDoc.payload, { spaces: 2 });
+                    fs.writeJsonSync(target.file, payloadToSave, { spaces: 2 });
                     console.log(`📥 [MongoDB Sync] Restored "${target.key}" from MongoDB Atlas cloud!`);
                 }
             } else if (localData && Object.keys(localData).length > 0) {
