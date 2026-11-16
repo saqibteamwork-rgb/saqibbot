@@ -12,6 +12,7 @@
     "dev": "nodemon index.js"
   },
   "dependencies": {
+    "@distube/ytdl-core": "^5.2.1",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@jerrycoder/instagram-api": "^2.5.9",
     "@mrnima/instagram-downloader": "^1.0.0",

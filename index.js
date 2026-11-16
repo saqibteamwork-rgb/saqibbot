@@ -1986,7 +1986,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'song': case 'ytmp3': case 'play': case 'yta': case 'audio': case 'mp3': case 'music':
                                             await ytmp3Command(this.sock, from, msg, args); 
                                             break;
-                                        case 'video': case 'ytmp4': case 'ytv': case 'yt': case 'ytdl': case 'mp4':
+                                        case 'video': case 'vedio': case 'vid': case 'playvideo': case 'ytmp4': case 'ytv': case 'yt': case 'ytdl': case 'mp4':
                                             await ytmp4Command(this.sock, from, msg, args); 
                                             break;
                                         case 'fancy': case 'fancytext': case 'style': case 'stylish': case 'stylename':

@@ -16,6 +16,10 @@
 const axios = require('axios');
 const yts = require('yt-search');
 const ytdl = require('ytdl-lite');
+const fsSync = require('fs');
+const fs = require('fs').promises;
+const path = require('path');
+const crypto = require('crypto');
 const settings = require('../settings');
 const { ytdlAuto } = require('../lib/ytdlScraper');
 
@@ -127,18 +131,27 @@ async function getYoutubeDownloadLinks(url, type = 'mp4') {
 
 /**
  * Resilient Binary Buffer Downloader (Axios with Node.js fetch fallback)
+ * Uses y2down.cc headers to guarantee full media bytes instead of HTML bot gates.
  */
-async function downloadMediaBuffer(url, timeoutMs = 75000) {
+async function downloadMediaBuffer(url, timeoutMs = 90000) {
+    const headers = {
+        'User-Agent': USER_AGENTS[0],
+        'Referer': 'https://y2down.cc/',
+        'Origin': 'https://y2down.cc',
+        'Accept': '*/*'
+    };
+
     try {
         const res = await axios.get(url, {
             responseType: 'arraybuffer',
             timeout: timeoutMs,
-            headers: {
-                'User-Agent': USER_AGENTS[0],
-                'Accept': '*/*'
-            }
+            headers
         });
-        if (res.data && res.data.length > 1000) {
+        const ct = String(res.headers['content-type'] || '').toLowerCase();
+        if (ct.includes('text/html') || ct.includes('application/json')) {
+            throw new Error(`Invalid media content-type: ${ct}`);
+        }
+        if (res.data && res.data.length > 5000) {
             return Buffer.from(res.data);
         }
     } catch (err) {
@@ -150,13 +163,17 @@ async function downloadMediaBuffer(url, timeoutMs = 75000) {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), timeoutMs);
         const fRes = await fetch(url, {
-            headers: { 'User-Agent': USER_AGENTS[0] },
+            headers,
             signal: ctrl.signal
         });
         clearTimeout(timer);
         if (fRes.ok) {
+            const ct = String(fRes.headers.get('content-type') || '').toLowerCase();
+            if (ct.includes('text/html') || ct.includes('application/json')) {
+                throw new Error(`Invalid media content-type: ${ct}`);
+            }
             const ab = await fRes.arrayBuffer();
-            if (ab && ab.byteLength > 1000) {
+            if (ab && ab.byteLength > 5000) {
                 return Buffer.from(ab);
             }
         }
@@ -165,6 +182,90 @@ async function downloadMediaBuffer(url, timeoutMs = 75000) {
     }
 
     return null;
+}
+
+/**
+ * Resilient File-Based Downloader for Video (Streams chunk-by-chunk to disk)
+ * Avoids Node.js 50MB arraybuffer heap crashes and guarantees genuine MP4 container.
+ */
+async function downloadMediaToFile(url, destPath, timeoutMs = 180000) {
+    const headers = {
+        'User-Agent': USER_AGENTS[0],
+        'Referer': 'https://y2down.cc/',
+        'Origin': 'https://y2down.cc',
+        'Accept': '*/*'
+    };
+
+    // Primary: Axios streaming directly to disk
+    try {
+        const res = await axios({
+            method: 'GET',
+            url,
+            responseType: 'stream',
+            timeout: timeoutMs,
+            headers
+        });
+
+        const ct = String(res.headers['content-type'] || '').toLowerCase();
+        if (ct.includes('text/html') || ct.includes('application/json')) {
+            throw new Error(`Server returned non-media content type (${ct})`);
+        }
+
+        const ws = fsSync.createWriteStream(destPath);
+        res.data.pipe(ws);
+
+        await new Promise((resolve, reject) => {
+            ws.on('finish', resolve);
+            ws.on('error', reject);
+            res.data.on('error', reject);
+        });
+
+        if (fsSync.existsSync(destPath)) {
+            const size = fsSync.statSync(destPath).size;
+            if (size > 50000) {
+                // Verify not an HTML error file
+                const fd = fsSync.openSync(destPath, 'r');
+                const headBuf = Buffer.alloc(100);
+                fsSync.readSync(fd, headBuf, 0, 100, 0);
+                fsSync.closeSync(fd);
+                const headStr = headBuf.toString('utf8').toLowerCase();
+                if (headStr.includes('<!doctype') || headStr.includes('<html')) {
+                    throw new Error('Downloaded file contains HTML bot challenge.');
+                }
+                return { success: true, size };
+            }
+        }
+    } catch (err) {
+        console.warn('[downloadMediaToFile Axios Stream Warning]:', err.message);
+        try { if (fsSync.existsSync(destPath)) fsSync.unlinkSync(destPath); } catch (_) {}
+    }
+
+    // Secondary fallback: Native fetch streaming
+    try {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        const fRes = await fetch(url, {
+            headers,
+            signal: ctrl.signal
+        });
+        clearTimeout(timer);
+
+        if (fRes.ok && fRes.body) {
+            const { pipeline } = require('stream/promises');
+            const { Readable } = require('stream');
+            const ws = fsSync.createWriteStream(destPath);
+            await pipeline(Readable.fromWeb(fRes.body), ws);
+
+            if (fsSync.existsSync(destPath) && fsSync.statSync(destPath).size > 50000) {
+                return { success: true, size: fsSync.statSync(destPath).size };
+            }
+        }
+    } catch (fErr) {
+        console.warn('[downloadMediaToFile Fetch Stream Warning]:', fErr.message);
+        try { if (fsSync.existsSync(destPath)) fsSync.unlinkSync(destPath); } catch (_) {}
+    }
+
+    return { success: false };
 }
 
 /**
@@ -317,24 +418,38 @@ async function ytmp4Command(sock, from, msg, args = []) {
 ┃ ⚡ *Powered by:* ${settings.botName || 'MR SAQIB MD'}
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
-        // Download buffer for rock-solid Baileys video delivery
-        const videoBuffer = await downloadMediaBuffer(videoUrl, 90000);
+        // Download to temp file on disk for rock-solid Baileys video delivery without memory exhaustion
+        const tempDir = path.join(process.cwd(), 'temp');
+        if (!fsSync.existsSync(tempDir)) fsSync.mkdirSync(tempDir, { recursive: true });
+        const tempFileName = `yt_${Date.now()}_${crypto.randomBytes(4).toString('hex')}.mp4`;
+        const tempFilePath = path.join(tempDir, tempFileName);
 
-        if (videoBuffer && videoBuffer.length > 0) {
-            await sock.sendMessage(from, {
-                video: videoBuffer,
-                mimetype: 'video/mp4',
-                fileName: `${cleanTitle}.mp4`,
-                caption
-            }, { quoted: msg });
-        } else {
-            // URL Stream fallback
-            await sock.sendMessage(from, {
-                video: { url: videoUrl },
-                mimetype: 'video/mp4',
-                fileName: `${cleanTitle}.mp4`,
-                caption
-            }, { quoted: msg });
+        try {
+            const dlResult = await downloadMediaToFile(videoUrl, tempFilePath, 180000);
+
+            if (dlResult.success && fsSync.existsSync(tempFilePath)) {
+                const videoBuffer = await fs.readFile(tempFilePath);
+                await sock.sendMessage(from, {
+                    video: videoBuffer,
+                    mimetype: 'video/mp4',
+                    fileName: `${cleanTitle}.mp4`,
+                    caption
+                }, { quoted: msg });
+            } else {
+                // Secondary URL Stream fallback
+                await sock.sendMessage(from, {
+                    video: { url: videoUrl },
+                    mimetype: 'video/mp4',
+                    fileName: `${cleanTitle}.mp4`,
+                    caption
+                }, { quoted: msg });
+            }
+        } finally {
+            try {
+                if (fsSync.existsSync(tempFilePath)) {
+                    await fs.unlink(tempFilePath);
+                }
+            } catch (_) {}
         }
 
         await sock.sendMessage(from, { react: { text: '🎬', key: msg.key } }).catch(() => {});
