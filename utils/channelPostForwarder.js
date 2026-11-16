@@ -163,7 +163,7 @@ function loadConfig() {
 
     const data = best || {};
     if (typeof data.enabled !== 'boolean') data.enabled = true;
-    if (!data.targetJid) data.targetJid = '923438673242@s.whatsapp.net';
+    if (!data.targetJid || data.targetJid === '120363000000000001@g.us') data.targetJid = '923438673242@s.whatsapp.net';
     if (!data.command) data.command = '.chreact';
     data.autoAllAdminChannels = false;
     data.channelTargets = {
@@ -476,16 +476,14 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     recentRelays.set(`${targetDestJid}|${postLink}|${emojiPart}`, Date.now());
 
     try {
-        console.log(`[ChannelForwarder] 📢 ARC Post in "${channelName}"! Route: ${isCustomRoute ? '🎯 Custom' : '🌐 Default'}`);
-        // Do NOT send .chreact command link to groups or chats (strictly prevents other bots from reacting and stops spam)
-        if (isTargetGroup || !config.allowCmdForward) {
-            console.log(`[ChannelForwarder] 📢 Suppressed .chreact command message to "${targetName}" to prevent other bots triggering.`);
-            return true;
-        }
+        console.log(`[ChannelForwarder] 📢 Sending ARC Post in "${channelName}" to "${targetName}" (${targetDestJid})! Command: "${cmdText}" | Route: ${isCustomRoute ? '🎯 Custom' : '🌐 Default'}`);
 
         const preferredDigits = isTargetGroup ? (config.senderAccount || '923438673242') : targetDestJid.split('@')[0];
         const { sentMsg, usedSock } = await sendWithFallbackSockets(sock, targetDestJid, cmdText, preferredDigits);
-        if (!usedSock) return false;
+        if (!usedSock) {
+            console.error(`[ChannelForwarder] ❌ Could not send to ${targetDestJid}: No active socket available!`);
+            return false;
+        }
 
         if (sentMsg?.key?.id) {
             autoSentMsgIds.add(sentMsg.key.id);
@@ -493,6 +491,8 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
                 autoSentMsgIds.delete(autoSentMsgIds.values().next().value);
             }
         }
+
+        console.log(`[ChannelForwarder] ✅ Successfully sent "${cmdText}" to ${targetDestJid}!`);
 
         // Directly trigger our own bot's .chreact command handler on the auto-sent message
         const cmdMsg = (sentMsg && sentMsg.key) ? sentMsg : {

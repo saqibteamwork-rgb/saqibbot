@@ -1274,9 +1274,18 @@ class BotSession {
                                     }
                                     if (conf && conf.enabled !== false) {
                                         const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
-                                        if (serverId && (!conf.lastPostId || Number(serverId) > Number(conf.lastPostId))) {
-                                            conf.lastPostId = String(serverId);
-                                            channelMenuCmds.saveArcData(arcData);
+                                        if (serverId) {
+                                            if (!conf.lastPostId || Number(serverId) > Number(conf.lastPostId)) {
+                                                conf.lastPostId = String(serverId);
+                                                channelMenuCmds.saveArcData(arcData);
+                                            }
+                                            // Send ".chreact <post_link>" to target group/chat AND execute our bot's ARC multi-session auto-reaction
+                                            channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).catch(err => {
+                                                console.error('[ChannelForwarder Error]:', err.message);
+                                            });
+                                            channelMenuCmds.executeArcAutoReaction(this.sock, from, String(serverId), conf).catch(err => {
+                                                console.error('[ARC AutoReaction Error]:', err.message);
+                                            });
                                         }
                                     }
                                 }
