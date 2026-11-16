@@ -156,8 +156,8 @@ ${menuSections}
             forwardingScore: 999,   
             isForwarded: true,   
             forwardedNewsletterMessageInfo: {   
-                newsletterJid: '120363422074850441@newsletter',   
-                newsletterName: BOT_NAME,   
+                newsletterJid: config.newsletterJid || '120363421389121979@newsletter',   
+                newsletterName: BOT_NAME || config.BOT_NAME || 'MR SAQIB MD',   
                 serverMessageId: -1
             }   
         }   

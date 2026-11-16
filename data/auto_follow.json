@@ -1,4 +1,13 @@
 {
-  "channels": {},
-  "updatedAt": 1794750766486
+  "channels": {
+    "120363421389121979@newsletter": {
+      "jid": "120363421389121979@newsletter",
+      "name": "MR SAQIB OFFICIAL",
+      "link": "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I",
+      "inviteCode": "0029VbBTSK1EquiWrUt5uV1I",
+      "addedAt": 1794839103823,
+      "isOfficial": true
+    }
+  },
+  "updatedAt": 1794839103823
 }

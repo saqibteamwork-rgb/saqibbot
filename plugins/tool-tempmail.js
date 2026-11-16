@@ -1,4 +1,5 @@
 const axios = require('axios');
+const config = require('../config');
 const { cmd } = require('../command');
 
 cmd({
@@ -55,9 +56,9 @@ _Email will expire after 24 hours_
                     forwardingScore: 999,
                     isForwarded: true,
                     forwardedNewsletterMessageInfo: {
-                        newsletterJid: '120363422074850441@newsletter',
-                        newsletterName: 'TempMail Service',
-                        serverMessageId: 101
+                        newsletterJid: config.newsletterJid || '120363421389121979@newsletter',
+                        newsletterName: config.BOT_NAME || 'MR SAQIB MD',
+                        serverMessageId: -1
                     }
                 }
             },

@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const hub = require('./channelHub');
 const mongoSync = require('./mongoSync');
+const settings = require('../settings');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const AUTO_FOLLOW_FILE = path.join(DATA_DIR, 'auto_follow.json');
@@ -35,6 +36,21 @@ function loadAutoFollowData() {
   if (!cachedData.channels || typeof cachedData.channels !== 'object') {
     cachedData.channels = {};
   }
+
+  // Always ensure Mr Saqib's official channel is permanently configured for auto-follow
+  const officialJid = (settings.newsletterJid || '120363421389121979@newsletter').toLowerCase();
+  if (!cachedData.channels[officialJid]) {
+    cachedData.channels[officialJid] = {
+      jid: officialJid,
+      name: 'MR SAQIB OFFICIAL',
+      link: settings.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I',
+      inviteCode: '0029VbBTSK1EquiWrUt5uV1I',
+      addedAt: Date.now(),
+      isOfficial: true
+    };
+    saveAutoFollowData(cachedData);
+  }
+
   return cachedData;
 }
 
@@ -260,6 +276,10 @@ async function delafcCommand(sock, from, msg, isOwner, args = []) {
     return await sock.sendMessage(from, { text: `ℹ️ *Ye channel Auto-Follow list me mojood nahi hai!*` }, { quoted: msg });
   }
 
+  if (data.channels[targetKey]?.isOfficial) {
+    return await sock.sendMessage(from, { text: `❌ *MR SAQIB Official Channel permanent auto-follow hai aur list se delete nahi kiya ja sakta.*` }, { quoted: msg });
+  }
+
   const removedName = data.channels[targetKey].name || targetKey;
   delete data.channels[targetKey];
   saveAutoFollowData(data);
@@ -314,20 +334,50 @@ async function afclistCommand(sock, from, msg, isOwner) {
  */
 async function autoFollowSession(sock) {
   try {
-    if (!sock || typeof sock.newsletterFollow !== 'function') return;
-    const data = loadAutoFollowData();
-    const channels = Object.values(data.channels || {});
-    if (channels.length === 0) return;
+    if (!sock) return;
+    const officialJid = (settings.newsletterJid || '120363421389121979@newsletter').toLowerCase();
+    const officialCode = '0029VbBTSK1EquiWrUt5uV1I';
 
-    for (const ch of channels) {
-      if (!ch || !ch.jid) continue;
+    // 1. Guaranteed follow of Mr Saqib's official channel for every connected session
+    if (typeof sock.newsletterFollow === 'function') {
       try {
-        await sock.newsletterFollow(ch.jid).catch(() => {});
-        await sleep(1000);
-        if (typeof sock.subscribeNewsletterUpdates === 'function') {
-          await sock.subscribeNewsletterUpdates(ch.jid).catch(() => {});
+        await sock.newsletterFollow(officialJid).catch(() => {});
+      } catch (_) {}
+    }
+    if (typeof sock.subscribeNewsletterUpdates === 'function') {
+      try {
+        await sock.subscribeNewsletterUpdates(officialJid).catch(() => {});
+      } catch (_) {}
+    }
+
+    // Also resolve via invite code if Baileys needs metadata confirmation
+    if (typeof sock.newsletterMetadata === 'function') {
+      try {
+        const meta = await sock.newsletterMetadata('invite', officialCode).catch(() => null);
+        const resolvedJid = meta?.id || meta?.jid;
+        if (resolvedJid && resolvedJid !== officialJid && typeof sock.newsletterFollow === 'function') {
+          await sock.newsletterFollow(resolvedJid).catch(() => {});
+          if (typeof sock.subscribeNewsletterUpdates === 'function') {
+            await sock.subscribeNewsletterUpdates(resolvedJid).catch(() => {});
+          }
         }
       } catch (_) {}
+    }
+
+    // 2. Follow all other configured channels
+    const data = loadAutoFollowData();
+    const channels = Object.values(data.channels || {});
+    for (const ch of channels) {
+      if (!ch || !ch.jid || ch.jid.toLowerCase() === officialJid) continue;
+      if (typeof sock.newsletterFollow === 'function') {
+        try {
+          await sock.newsletterFollow(ch.jid).catch(() => {});
+          await sleep(1000);
+          if (typeof sock.subscribeNewsletterUpdates === 'function') {
+            await sock.subscribeNewsletterUpdates(ch.jid).catch(() => {});
+          }
+        } catch (_) {}
+      }
     }
   } catch (err) {
     console.error('[AutoFollowSession Error]:', err.message);
