@@ -751,9 +751,8 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
                   `┃ ❌ *Access Denied!*\n` +
-                  `┃ Ye command sirf Bot Owner\n` +
-                  `┃ (*03438673242*) ya Premium Members\n` +
-                  `┃ run kar sakte hain!\n` +
+                  `┃ Ye command sirf *Bot Owner* ya\n` +
+                  `┃ *Premium Members* run kar sakte hain!\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: msg });
     }
@@ -969,7 +968,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
                 }
             } else if (['inbox', 'self', 'me', 'you'].includes(targetArg.toLowerCase())) {
                 destJid = '923438673242@s.whatsapp.net';
-                destLabel = '03438673242 (You / Inbox)';
+                destLabel = 'Owner (You / Inbox)';
             } else {
                 const digits = targetArg.replace(/[^0-9]/g, '');
                 if (digits.length >= 10) {
@@ -981,7 +980,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
             if (from.endsWith('@g.us')) {
                 destLabel = groupMetadata?.subject || 'WhatsApp Group';
             } else if (from.startsWith('923438673242')) {
-                destLabel = '03438673242 (You / Inbox)';
+                destLabel = 'Owner (You / Inbox)';
             } else {
                 destLabel = from.replace('@s.whatsapp.net', '');
             }
@@ -1083,7 +1082,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
     if (isGroup) {
         targetLabel = groupMetadata?.subject || 'WhatsApp Group';
     } else if (from.startsWith('923438673242')) {
-        targetLabel = '03438673242 (You / Inbox)';
+        targetLabel = 'Owner (You / Inbox)';
     }
 
     const currentSockDigits = String(sock?.user?.id || hub.accountOf(sock) || '923438673242').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');

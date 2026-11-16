@@ -99,7 +99,7 @@ async function vcontactCommand(sock, from, msg, isOwner, isMasterOwner, args) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
       text: `╭━━━〔 ⛔ *ACCESS DENIED* 〕━━━┈⊷\n` +
-            `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+            `┃ Sirf *Bot Owner* hi\n` +
             `┃ .vcontact command use kar sakta hai!\n` +
             `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
             `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
@@ -166,7 +166,7 @@ async function vcontactCommand(sock, from, msg, isOwner, isMasterOwner, args) {
 async function addvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) target number add kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi target number add kar sakta hai.`
     }, { quoted: msg });
   }
 
@@ -175,7 +175,7 @@ async function addvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args)
     return await sock.sendMessage(from, {
       text: `❌ *Please provide a phone number!*\n\n` +
             `*Usage:*\n` +
-            `• \`.setvcontact 03438673242\`\n` +
+            `• \`.setvcontact 923xxxxxxxxx\`\n` +
             `• \`.setvcontact 923001234567, 923011122334\`\n\n` +
             `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
@@ -220,7 +220,7 @@ async function addvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args)
 async function delvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) target number remove kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi target number remove kar sakta hai.`
     }, { quoted: msg });
   }
 
@@ -229,7 +229,7 @@ async function delvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args)
     return await sock.sendMessage(from, {
       text: `❌ *Please provide number to remove or "all"!*\n\n` +
             `*Usage:*\n` +
-            `• \`.delvcontact 03438673242\`\n` +
+            `• \`.delvcontact 923xxxxxxxxx\`\n` +
             `• \`.delvcontact all\`\n\n` +
             `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });
@@ -274,7 +274,7 @@ async function delvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args)
 async function setvmsgCommand(sock, from, msg, isOwner, isMasterOwner, args) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) intro message set kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi intro message set kar sakta hai.`
     }, { quoted: msg });
   }
 
@@ -312,7 +312,7 @@ async function setvmsgCommand(sock, from, msg, isOwner, isMasterOwner, args) {
 async function toggleStatusBoosterCommand(sock, from, msg, isOwner, isMasterOwner, enable) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) status booster on/off kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi status booster on/off kar sakta hai.`
     }, { quoted: msg });
   }
 

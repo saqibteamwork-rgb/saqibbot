@@ -972,8 +972,8 @@ async function ownaddCommand(sock, from, msg, isMasterOwner, args = [], groupMet
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🔒 *MASTER OWNER ONLY* 〕━━━┈⊷\n` +
                   `┃ ❌ *Access Denied!*\n` +
-                  `┃ Ye command sirf Master Owner\n` +
-                  `┃ (*03438673242*) run kar sakta hai!\n` +
+                  `┃ Ye command sirf *Master Owner*\n` +
+                  `┃ run kar sakta hai!\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: msg });
     }
@@ -1030,7 +1030,7 @@ async function ownaddCommand(sock, from, msg, isMasterOwner, args = [], groupMet
               `┃ 👤 *User:* ${tagDisplay}\n` +
               `┃ 🆔 *ID:* \`${target.digits || target.lid}\`\n` +
               `┃ 🛡️ *Role:* Co-Owner (Full Command Access)\n` +
-              `┃ 👑 *Added By:* Master Owner (03438673242)\n` +
+              `┃ 👑 *Added By:* Master Owner (MR SAQIB)\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
         mentions: mentionList
@@ -1047,7 +1047,7 @@ async function owndelCommand(sock, from, msg, isMasterOwner, args = [], groupMet
     if (!isMasterOwner) {
         await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
         return await sock.sendMessage(from, {
-            text: `❌ *Access Denied!* Sirf Master Owner (*03438673242*) owner remove kar sakta hai.`
+            text: `❌ *Access Denied!* Sirf *Master Owner* hi owner remove kar sakta hai.`
         }, { quoted: msg });
     }
 
@@ -1095,7 +1095,7 @@ async function ownlistCommand(sock, from, msg, isOwner) {
     }
 
     const data = loadOwnersData();
-    let listText = `┃ 👑 *1. +923438673242* (Master Owner)\n`;
+    let listText = `┃ 👑 *1. MR SAQIB* (Master Owner)\n`;
     data.owners.forEach((o, i) => {
         const label = o.digits ? `+${o.digits}` : `LID:${o.lid}`;
         listText += `┃ 🛡️ *${i + 2}. ${label}* (Co-Owner)\n`;
@@ -1251,8 +1251,8 @@ async function addpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
                   `┃ ❌ *Access Denied!*\n` +
-                  `┃ Ye command sirf Bot Owner\n` +
-                  `┃ (*03438673242*) run kar sakta hai!\n` +
+                  `┃ Ye command sirf *Bot Owner*\n` +
+                  `┃ run kar sakta hai!\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: msg });
     }
@@ -1423,7 +1423,7 @@ async function delpmCommand(sock, from, msg, isOwner, args = [], groupMetadata =
     if (!isOwner) {
         await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
         return await sock.sendMessage(from, {
-            text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) premium member remove kar sakta hai.`
+            text: `❌ *Access Denied!* Sirf *Bot Owner* hi premium member remove kar sakta hai.`
         }, { quoted: msg });
     }
 
@@ -1720,8 +1720,8 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
                       `┃ 🔴 *Status:* ${rem.text}\n` +
                       `┃ 📅 *Expired On:* ${expStr}${formatArcChannelsList(`${userArcChannels.length} Channels (Paused/Expired)`)}\n` +
                       `┃\n` +
-                      `┃ 🔄 *Renew karane ke liye rabta karein:*\n` +
-                      `┃ 👉 *03438673242 (MR SAQIB)*\n` +
+                      `┃ 🔄 *Renew karane ke liye Channel visit karein:*\n` +
+                      `┃ 👉 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
                       `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                       `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
                 mentions: target.jid ? [target.jid] : []
@@ -1756,7 +1756,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
               `┃\n` +
               `┃ 👑 *50+ Multi-Bot Boost & Auto-Reaction ke liye*\n` +
               `┃ *Premium Access hasil karein:*\n` +
-              `┃ 👉 *03438673242 (MR SAQIB)*\n` +
+              `┃ 👉 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
         mentions: target.jid ? [target.jid] : []
@@ -1765,7 +1765,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
 
 /**
  * Command: .cs / .checksession / .checksessions / .sessions / .paired
- * Strictly executable ONLY by Bot Owner (03438673242 / isOwner / isMasterOwner)
+ * Strictly executable ONLY by Bot Owner (isOwner / isMasterOwner)
  * Inspects all paired numbers connected to this bot instance and displays detailed status.
  */
 async function checkSessionsCommand(sock, from, msg, isOwner, args = [], sessionsMap = {}, authDir = null) {
@@ -1776,8 +1776,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
         return await sock.sendMessage(from, {
             text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
                   `┃ ❌ *Access Denied!*\n` +
-                  `┃ Sirf Bot Owner (*03438673242*) hi\n` +
-                  `┃ paired sessions check kar sakta hai!\n` +
+                  `┃ Sirf *Bot Owner* hi paired sessions check kar sakta hai!\n` +
                   `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
         }, { quoted: msg });
     }
@@ -1964,7 +1963,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
 
     const message =
 `╭━━━〔 🖥️ *11-NODE MEGA CLUSTER (.cs)* 〕━━━┈⊷\n` +
-`┃ 👑 *Master Owner:* MR SAQIB (03438673242)\n` +
+`┃ 👑 *Master Owner:* MR SAQIB\n` +
 `┃ 🌐 *Current Host:* ${serverNode}\n` +
 `┃ ⚡ *RAM Usage:* ${ramMb} MB | *Uptime:* ${uptimeHrs}h ${uptimeMins}m\n` +
 `┃\n` +

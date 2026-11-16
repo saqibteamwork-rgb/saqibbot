@@ -551,7 +551,8 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
               `┃ *Premium Members* use kar sakte hain!\n` +
               `┃\n` +
               `┃ 👑 *Premium Access ke liye:*\n` +
-              `┃ 👉 *03438673242 (MR SAQIB)* se rabta karein.\n` +
+              `┃ 👉 Official Channel visit karein:\n` +
+              `┃ 📢 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       }, { quoted: msg });
     }
@@ -1524,7 +1525,7 @@ async function chstatusCommand(sock, from, msg, isOwner) {
     return await sock.sendMessage(from, {
       text: `╭━━━〔 🔒 *BOT OWNER ONLY* 〕━━━┈⊷\n` +
             `┃ ❌ *Access Denied!*\n` +
-            `┃ Sirf Bot Owner (*03438673242*) ye\n` +
+            `┃ Sirf *Bot Owner* hi ye\n` +
             `┃ status dashboard check kar sakta hai!\n` +
             `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
     }, { quoted: msg });
@@ -1635,7 +1636,7 @@ async function chstatusCommand(sock, from, msg, isOwner) {
 
   const fullText =
 `╭━━━〔 👑 *CHANNELS & AUTOMATION DASHBOARD* 〕━━━┈⊷
-┃ 👑 *Master Controller:* +923438673242
+┃ 👑 *Master Controller:* MR SAQIB
 ┃ 🖥️ *Active Bot Sessions:* ${activeSessions} Cloud Servers
 ┃ 📊 *Auto-React (ARC):* 🟢 ${activeArc} Active • ⏸️ ${pausedArc} Paused
 ┃ ⏩ *Auto-Forward:* ${fwdState}
@@ -1926,7 +1927,7 @@ async function achrCommand(sock, from, msg, isOwner, isMasterOwner, args = [], g
 ┃ Owner ke channel me free coupon drop hota hai!
 ┃
 ┃ 👑 *All-Bots Swarm (.arc) ke liye:*
-┃ Contact: *03438673242 (MR SAQIB)*
+┃ 👉 Channel: ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
 `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });

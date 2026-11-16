@@ -69,7 +69,7 @@ module.exports = {
       return reply(
         `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
         `┃ ❌ *Access Denied!*\n` +
-        `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+        `┃ Sirf *Bot Owner* hi\n` +
         `┃ Channel Follow/Boost kar sakta hai!\n` +
         `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       );
@@ -200,7 +200,7 @@ module.exports = {
       return reply(
         `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
         `┃ ❌ *Access Denied!*\n` +
-        `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+        `┃ Sirf *Bot Owner* hi\n` +
         `┃ Channel Unfollow kar sakta hai!\n` +
         `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       );

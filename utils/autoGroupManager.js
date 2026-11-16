@@ -98,7 +98,7 @@ async function ajgCommand(sock, from, msg, isOwner, isMasterOwner, args) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
       text: `╭━━━〔 ⛔ *ACCESS DENIED* 〕━━━┈⊷\n` +
-            `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+            `┃ Sirf *Bot Owner* hi\n` +
             `┃ .ajg command use kar sakta hai!\n` +
             `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
             `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
@@ -181,7 +181,7 @@ async function ajgCommand(sock, from, msg, isOwner, isMasterOwner, args) {
 async function delajgCommand(sock, from, msg, isOwner, isMasterOwner) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) auto-join group remove kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi auto-join group remove kar sakta hai.`
     }, { quoted: msg });
   }
 
@@ -212,7 +212,7 @@ async function delajgCommand(sock, from, msg, isOwner, isMasterOwner) {
 async function ajginfoCommand(sock, from, msg, isOwner, isMasterOwner) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf Bot Owner (*03438673242*) yeh status check kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi yeh status check kar sakta hai.`
     }, { quoted: msg });
   }
 

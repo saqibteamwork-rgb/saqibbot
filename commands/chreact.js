@@ -978,8 +978,8 @@ async function executeSingleSessionReaction(sock, from, msg, target) {
     `┃ 🤖 *sᴇʀᴠᴇʀ:* 1 ʙᴏᴛ (ғʀᴇᴇ ᴜsᴇʀ)\n` +
     `┃\n` +
     `┃ 👑 *50+ ᴍᴜʟᴛɪ-ʙᴏᴛ ʙᴏᴏsᴛ ᴄʜᴀʜɪʏᴇ?*\n` +
-    `┃ 👉 *ᴘʀᴇᴍɪᴜᴍ ᴀᴄᴄᴇss ᴋᴇ ʟɪʏᴇ ʀᴀʙᴛᴀ ᴋᴀʀᴇɪɴ:*\n` +
-    `┃ 📞 *03438673242 (ᴍʀ sᴀǫɪʙ)*\n` +
+    `┃ 👉 *ᴏғғɪᴄɪᴀʟ ᴄʜᴀɴɴᴇʟ ᴊᴏɪɴ ᴋᴀʀᴇɪɴ:*\n` +
+    `┃ 📢 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
     `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 

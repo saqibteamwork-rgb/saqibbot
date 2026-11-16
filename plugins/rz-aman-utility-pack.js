@@ -37,7 +37,6 @@ cmd({ pattern:'owner', alias:['creator','dev'], desc:'Owner card with tappable l
   const cm = require('./carousel-menu');
   const ok = await cm.sendOwnerCard(conn, from, mek);
   if (!ok) await conn.sendMessage(from, { text: cm.ownerCardText() }, { quoted: mek });
-  await cm.sendOwnerContact(conn, from, mek);   // WhatsApp contact card (+923468616487) — "Message" button ke saath
 });
 cmd({ pattern:'groupinfo', alias:['ginfo'], desc:'Current group details', category:'group', react:'👥', filename:__filename }, async (conn, mek, m, ctx) => {
   if (!ctx.isGroup) return ctx.reply('❌ Yeh command group mein use karo.');

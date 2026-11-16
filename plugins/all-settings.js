@@ -253,7 +253,7 @@ cmd({
     desc: "Set the displayed owner contact number",
     category: "settings",
     react: "📱",
-    use: ".ownernumber 923468616487"
+    use: ".ownernumber 923xxxxxxxxx"
 }, async (conn, mek, m, { args, isOwner, reply, botNumber, config }) => {
     if (!isOwner) return reply("⛔ Yeh command sirf bot owner ke liye hai.");
     const raw = args.join(" ").trim();
@@ -261,10 +261,10 @@ cmd({
         let savedOwnerConfig = {};
         try { savedOwnerConfig = await getUserConfigFromMongoDB(String(botNumber || '')); } catch (_) {}
         const currentNumber = savedOwnerConfig.OWNER_DISPLAY_NUMBER || config.OWNER_DISPLAY_NUMBER || 'Private';
-        return reply(`📱 Current owner display number: *${currentNumber}*\nUse: *.ownernumber 923468616487*\n\n⚠️ Yeh sirf displayed contact update karta hai; bot access/authorized owners change nahi karta.`);
+        return reply(`📱 Current owner display number: *${currentNumber}*\nUse: *.ownernumber 923xxxxxxxxx*\n\n⚠️ Yeh sirf displayed contact update karta hai; bot access/authorized owners change nahi karta.`);
     }
     const number = raw.replace(/[^0-9]/g, '');
-    if (number.length < 8 || number.length > 15) return reply("❌ Valid country-code ke saath number likho, jaise 923468616487.");
+    if (number.length < 8 || number.length > 15) return reply("❌ Valid country-code ke saath number likho, jaise 923xxxxxxxxx.");
     try {
         const nextConfig = { ...config, OWNER_DISPLAY_NUMBER: number };
         const saved = await updateUserConfigInMongoDB(String(botNumber || ''), nextConfig);

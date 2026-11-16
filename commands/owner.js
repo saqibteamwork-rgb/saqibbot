@@ -30,14 +30,11 @@ async function ownerCommand(sock, from, msg) {
 🌐 *Official Website:*
 ${websiteUrl}
 
+📢 *Official Channel:*
+${settings.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}
+
 🔍 *Search on Google:*
 ${googleSearchUrl}
-
-💬 *Direct WhatsApp Chat:*
-https://wa.me/${rawNumber}
-
-📱 *Contact Number:*
-${formattedNumber}
 
 ↩ *Main Commands Menu:*
 .menu

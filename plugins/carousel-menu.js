@@ -356,9 +356,7 @@ const OWNER_LINKS = [
 
 // Body text mein links bhi hain (WhatsApp unhe khud tappable bana deta hai), buttons alag se
 function ownerCardText() {
-    const link = ownerLink();
-    let t = `👑 *OWNER — ${config.OWNER_NAME || 'Owner'}*\n━━━━━━━━━━━━━━━━━━\n`;
-    if (link) t += `💬 *WHATSAPP*\n+${ownerNumberIntl()}\n${link}\n\n`;
+    let t = `👑 *OWNER — ${config.OWNER_NAME || 'MR SAQIB'}*\n━━━━━━━━━━━━━━━━━━\n`;
     t += OWNER_LINKS.map(l => `*${l.name}*\n${l.url}`).join('\n\n');
     t += `\n━━━━━━━━━━━━━━━━━━\n${footerText()}`;
     return t;
@@ -371,8 +369,6 @@ async function sendOwnerCard(conn, jid, quoted, opts) {
         const { proto, prepareWAMessageMedia, generateWAMessageFromContent } = baileys;
         const IM = proto.Message.InteractiveMessage;
         const buttons = [];
-        const link = ownerLink(true);
-        if (link) buttons.push(urlButton('💬 Chat Owner', link));
         for (const l of OWNER_LINKS) buttons.push(urlButton(l.button, l.url));
 
         // Connect message par image zaroor chahiye: fresh login par upload slow hota hai,

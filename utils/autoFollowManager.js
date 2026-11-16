@@ -159,7 +159,7 @@ async function afcCommand(sock, from, msg, isOwner, args = [], sessionsMap = {})
     return await sock.sendMessage(from, {
       text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
             `┃ ❌ *Access Denied!*\n` +
-            `┃ Sirf Bot Owner (*03438673242*) hi\n` +
+            `┃ Sirf *Bot Owner* hi\n` +
             `┃ Auto-Follow channel add kar sakta hai!\n` +
             `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
     }, { quoted: msg });
