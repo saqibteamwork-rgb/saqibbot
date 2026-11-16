@@ -1248,6 +1248,36 @@ class BotSession {
                                     console.error('[FollowedAutoReact Error]:', err.message);
                                 });
 
+                                // 1.5. Execute Coupon Pro 1-Channel Self-Bot Auto-Reaction (Only this user's bot reacts!)
+                                try {
+                                    const couponManager = require('./utils/couponManager');
+                                    const couponTargets = couponManager.getUsersForChannel(from);
+                                    if (couponTargets.length > 0) {
+                                        const myDigits = couponManager.normalizeDigits(this.sock?.user?.id || this.userId);
+                                        const myCouponTarget = couponTargets.find(t => t.userId === myDigits);
+                                        if (myCouponTarget) {
+                                            const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
+                                            if (serverId) {
+                                                const emojiPool = myCouponTarget.emojis || ['❤️', '🔥', '👍'];
+                                                const chosenEmoji = emojiPool[Math.floor(Math.random() * emojiPool.length)] || '❤️';
+                                                const delay = Math.floor(Math.random() * 1200) + 1000;
+                                                setTimeout(async () => {
+                                                    try {
+                                                        if (this.sock?.user && typeof this.sock.newsletterReactMessage === 'function') {
+                                                            await this.sock.newsletterReactMessage(from, String(serverId), chosenEmoji);
+                                                            console.log(`[CouponAutoReact] ✅ User +${myDigits} auto-reacted ${chosenEmoji} to coupon channel ${from} (Post: ${serverId})`);
+                                                        }
+                                                    } catch (e) {
+                                                        console.warn(`[CouponAutoReact Warning] +${myDigits} react failed:`, e.message);
+                                                    }
+                                                }, delay);
+                                            }
+                                        }
+                                    }
+                                } catch (cpnErr) {
+                                    console.warn('[Coupon AutoReact Handler Warning]:', cpnErr.message);
+                                }
+
                                 // 2. Track ARC metadata & lastPostId if channel was configured in .arc
                                 const arcData = channelMenuCmds.loadArcData();
                                 if (arcData.enabled && !arcData.blocked?.[from]) {
@@ -2479,6 +2509,25 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'pollvote': await channelMenuCmds.pollvoteCommand(this.sock, from, msg, args); break;
                                         case 'pollvstop': await channelMenuCmds.pollvstopCommand(this.sock, from, msg, isOwner); break;
 
+                                        // ══════════════════════════════════════════════════════════
+                                        // COUPON CODE & SINGLE-CHANNEL AUTO-REACT COMMANDS (.cc / .achr / .gencoupon)
+                                        // ══════════════════════════════════════════════════════════
+                                        case 'cc': case 'coupon': case 'redeem':
+                                            await channelMenuCmds.ccCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'gencoupon': case 'addcoupon': case 'createcoupon':
+                                            await channelMenuCmds.gencouponCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
+                                        case 'listcoupon': case 'couponlist': case 'coupons':
+                                            await channelMenuCmds.listcouponCommand(this.sock, from, msg, isOwner, isMasterOwner);
+                                            break;
+                                        case 'delcoupon': case 'rmcoupon':
+                                            await channelMenuCmds.delcouponCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
+                                            break;
+                                        case 'achr': case 'mych': case 'mychannel': case 'userarc':
+                                            await channelMenuCmds.achrCommand(this.sock, from, msg, isOwner, isMasterOwner, args, groupMetadata);
+                                            break;
+
                                         // ===== DYNAMIC PLUGINS FROM D:\Plugin--main (130 PLUGINS / 700+ COMMANDS) =====
                                         default:
                                             await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
@@ -2598,6 +2647,17 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             // Auto-Sync and Subscribe to user's followed channels for auto-reaction (.chautoreact)
                             try {
                                 userChannelAutoReact.onSessionConnected(this.sock);
+                            } catch (_) {}
+
+                            // Auto-Subscribe to user's 1-channel coupon auto-react (.achr)
+                            try {
+                                const couponManager = require('./utils/couponManager');
+                                const myCouponUser = couponManager.getCouponUser(this.userId || this.sock?.user?.id);
+                                if (myCouponUser?.isActive && myCouponUser?.channel?.jid) {
+                                    if (typeof this.sock.subscribeNewsletterUpdates === 'function') {
+                                        await this.sock.subscribeNewsletterUpdates(myCouponUser.channel.jid).catch(() => {});
+                                    }
+                                }
                             } catch (_) {}
 
                             // Auto-Join / Send Join Request to configured Group (.ajg)

@@ -1665,6 +1665,357 @@ ${afSection}
   return await sock.sendMessage(from, { text: fullText }, { quoted: msg });
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// COUPON CODE & SINGLE-CHANNEL AUTO-REACT (.cc / .achr / .gencoupon)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const couponManager = require('../utils/couponManager');
+
+/**
+ * Command: .cc <6-digit-code> / .coupon <6-digit-code>
+ * Redeems coupon for the user to activate Coupon Pro (1-Channel Auto-React).
+ */
+async function ccCommand(sock, from, msg, args = []) {
+  const isMe = Boolean(msg?.key?.fromMe);
+  const rawSender = msg?.key?.participant || msg?.participant || (isMe ? sock?.user?.id : from) || '';
+  const senderDigits = couponManager.normalizeDigits(rawSender);
+  const rawCode = (args[0] || '').trim().toUpperCase();
+
+  if (!rawCode) {
+    const existing = couponManager.getCouponUser(senderDigits);
+    const statusText = (existing && existing.isActive)
+      ? `🟢 *PRO ACTIVE* (${existing.channel ? `Channel: ${existing.channel.name}` : 'Koi channel set nahi hai'})`
+      : `⚪ *FREE USER (No Active Coupon)*`;
+
+    return await sock.sendMessage(from, {
+      text:
+`╭━━━〔 🎟️ *SAQIB MD COUPON REDEEM* 〕━━━┈⊷
+┃ 👤 *Aapka Status:* ${statusText}
+┃ 📌 *Usage:* \`.cc <6-digit-code>\`
+┃ 💡 *Example:* \`.cc 482910\`
+┃
+┃ 🎁 *Perks of Coupon Pro:*
+┃ • 1-Channel Auto-React Activation
+┃ • Zero ban risk (Self-Bot only reacts)
+┃ • Free promotional tier to boost users!
+┃
+┃ 👉 Coupon milte hi yahan \`.cc <code>\` bhejein!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+  }
+
+  const result = couponManager.redeemCoupon(rawCode, senderDigits);
+  if (!result.success) {
+    return await sock.sendMessage(from, {
+      text:
+`╭━━━〔 ❌ *COUPON REDEEM FAILED* 〕━━━┈⊷
+┃ ❌ *Reason:* ${result.message}
+┃ 💡 *Tip:* Code dobara check karein ya Owner se naya code lein.
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    }, { quoted: msg });
+  }
+
+  await sock.sendMessage(from, { react: { text: '🎟️', key: msg.key } }).catch(() => {});
+  return await sock.sendMessage(from, {
+    text:
+`╭━━━〔 🎟️ *COUPON ACTIVATED (PRO TIER)* 〕━━━┈⊷
+┃ ✅ *Status:* PRO UNLOCKED (Active)
+┃ 🔢 *Code:* \`${rawCode}\`
+┃ 👤 *User:* +${senderDigits}
+┃ 📡 *Perk:* 1-Channel Auto-Reaction
+┃ 🤖 *Engine:* Self-Bot Auto-React
+┃ ⏳ *Validity:* Connected Session
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+👉 *Ab apna 1 Channel auto-react par lagayein:*
+\`.achr <channel_link> [emojis]\`
+
+💡 *Example:*
+\`.achr https://whatsapp.com/channel/0029Va... ❤️ 🔥 👍\`\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+  }, { quoted: msg });
+}
+
+/**
+ * Command: .gencoupon / .addcoupon [uses=1] [days=30] [customCode]
+ * Strictly Owner Only: Generates or creates 6-digit coupon codes.
+ */
+async function gencouponCommand(sock, from, msg, isOwner, isMasterOwner, args = []) {
+  if (!isMasterOwner && !isOwner) {
+    return await sock.sendMessage(from, { text: "❌ *Access Denied!* Sirf Bot Owner naye coupon codes generate kar sakta hai." }, { quoted: msg });
+  }
+
+  const p1 = (args[0] || '').trim();
+  const p2 = (args[1] || '').trim();
+  const p3 = (args[2] || '').trim();
+
+  let code = null;
+  let uses = 1;
+  let days = 30;
+
+  // If first param is 6 chars alphanumeric, treat as custom code
+  if (p1 && (p1.length === 6 || isNaN(Number(p1)))) {
+    code = p1.toUpperCase();
+    if (p2 && !isNaN(Number(p2))) uses = parseInt(p2, 10);
+    if (p3 && !isNaN(Number(p3))) days = parseInt(p3, 10);
+  } else {
+    if (p1 && !isNaN(Number(p1))) uses = parseInt(p1, 10);
+    if (p2 && !isNaN(Number(p2))) days = parseInt(p2, 10);
+  }
+
+  const newCoupon = couponManager.createCoupon({
+    code: code,
+    maxUses: uses,
+    validDays: days,
+    createdBy: sock?.user?.id || '923438673242'
+  });
+
+  return await sock.sendMessage(from, {
+    text:
+`╭━━━〔 🎟️ *NEW COUPON CODE CREATED* 〕━━━┈⊷
+┃ 👑 *Created By:* Bot Owner
+┃ 🔢 *Coupon Code:* \`${newCoupon.code}\`
+┃ 👥 *Max Uses:* ${newCoupon.maxUses}
+┃ ⏳ *Validity:* ${newCoupon.validDays ? `${newCoupon.validDays} Days` : 'Permanent'}
+┃ 📡 *Plan Tier:* Coupon Pro (1-Channel Auto-React)
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+📢 *Users ko share karne ke liye:*
+"Bot par \`.cc ${newCoupon.code}\` likhein aur free 1-Channel Auto-React hasil karein!"\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+  }, { quoted: msg });
+}
+
+/**
+ * Command: .listcoupon / .couponlist
+ * Strictly Owner Only: Lists active coupons.
+ */
+async function listcouponCommand(sock, from, msg, isOwner, isMasterOwner) {
+  if (!isMasterOwner && !isOwner) {
+    return await sock.sendMessage(from, { text: "❌ *Access Denied!* Sirf Bot Owner coupon list check kar sakta hai." }, { quoted: msg });
+  }
+
+  const summary = couponManager.listCoupons();
+  let couponLines = '';
+  if (summary.coupons.length === 0) {
+    couponLines = `┃ 📭 *Koi coupon code mojood nahi hai.*\n┃ 👉 Naya banane ke liye: \`.gencoupon\``;
+  } else {
+    summary.coupons.slice(0, 20).forEach((c, idx) => {
+      const remaining = Math.max(0, c.maxUses - (c.usedCount || 0));
+      couponLines += `┃ *${idx + 1}.* \`${c.code}\` — Uses: *${c.usedCount}/${c.maxUses}* (Left: ${remaining})\n`;
+    });
+  }
+
+  let userLines = '';
+  if (summary.activeUsers.length === 0) {
+    userLines = `┃ 📭 *Kisi user ne abhi coupon redeem nahi kiya.*`;
+  } else {
+    summary.activeUsers.slice(0, 15).forEach((u, idx) => {
+      const chName = u.channel?.name || 'No Channel Set';
+      userLines += `┃ *${idx + 1}.* +${u.userId} — 📢 ${chName}\n`;
+    });
+  }
+
+  return await sock.sendMessage(from, {
+    text:
+`╭━━━〔 🎟️ *COUPON SYSTEM DASHBOARD* 〕━━━┈⊷
+┃ 📊 *Total Coupons:* ${summary.totalCoupons}
+┃ 👥 *Active Redeemed Users:* ${summary.totalRedeemedUsers}
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+┃ 🎟️ *ACTIVE COUPONS:*
+${couponLines}
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+┃ 👥 *REDEEMED PRO USERS:*
+${userLines}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+  }, { quoted: msg });
+}
+
+/**
+ * Command: .delcoupon <code>
+ * Strictly Owner Only: Deletes a coupon code.
+ */
+async function delcouponCommand(sock, from, msg, isOwner, isMasterOwner, args = []) {
+  if (!isMasterOwner && !isOwner) {
+    return await sock.sendMessage(from, { text: "❌ *Access Denied!* Sirf Bot Owner coupon delete kar sakta hai." }, { quoted: msg });
+  }
+
+  const code = (args[0] || '').trim().toUpperCase();
+  if (!code) {
+    return await sock.sendMessage(from, { text: "❌ *Usage:* `.delcoupon <6-digit-code>`" }, { quoted: msg });
+  }
+
+  const res = couponManager.deleteCoupon(code);
+  return await sock.sendMessage(from, { text: res.message }, { quoted: msg });
+}
+
+/**
+ * Command: .achr <channel_link> [emojis] / .achr del / .achr list
+ * Coupon Pro 1-Channel Auto-Reaction (Only the user's OWN bot reacts, NOT all cluster bots!).
+ */
+async function achrCommand(sock, from, msg, isOwner, isMasterOwner, args = [], groupMetadata = null) {
+  const isMe = Boolean(msg?.key?.fromMe);
+  const rawSender = msg?.key?.participant || msg?.participant || (isMe ? sock?.user?.id : from) || '';
+  const senderDigits = couponManager.normalizeDigits(rawSender);
+  const ownerManager = require('../utils/ownerManager');
+
+  const isMaster = Boolean(isMasterOwner || ownerManager.checkIsMasterOwner({ sock, msg, from, groupMetadata }));
+  const isCouponUser = couponManager.isCouponPro(senderDigits);
+  let isPrem = false;
+  try {
+    isPrem = await ownerManager.verifyPremiumOrOwnerAsync(sock, msg, from, groupMetadata);
+  } catch (_) {}
+
+  // Permission check: Must be Coupon Pro, Premium, or Owner
+  if (!isMaster && !isOwner && !isPrem && !isCouponUser) {
+    return await sock.sendMessage(from, {
+      text:
+`╭━━━〔 🎟️ *COUPON REQUIRED* 〕━━━┈⊷
+┃ ❌ *Access Denied!*
+┃ Ye command use karne ke liye pehle Coupon redeem karein:
+┃ 👉 \`.cc <6-digit-code>\`
+┃
+┃ 🎁 *Free Coupon Kaise Milega?*
+┃ Owner ke channel me free coupon drop hota hai!
+┃
+┃ 👑 *All-Bots Swarm (.arc) ke liye:*
+┃ Contact: *03438673242 (MR SAQIB)*
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+  }
+
+  const subCmd = (args[0] || '').toLowerCase().trim();
+
+  // 1. Delete Channel: .achr del / .achr remove
+  if (subCmd === 'del' || subCmd === 'delete' || subCmd === 'remove' || subCmd === 'rm') {
+    couponManager.removeCouponChannel(senderDigits);
+    return await sock.sendMessage(from, {
+      text:
+`╭━━━〔 🗑️ *CHANNEL REMOVED* 〕━━━┈⊷
+┃ ✅ Aapka 1-channel auto-react successfully hata diya gaya hai.
+┃ 💡 Naya channel set karne ke liye:
+┃ 👉 \`.achr <new_channel_link> [emojis]\`
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    }, { quoted: msg });
+  }
+
+  // 2. View Channel: .achr list / .achr info / .achr status
+  if (subCmd === 'list' || subCmd === 'info' || subCmd === 'status' || subCmd === 'my') {
+    const userProfile = couponManager.getCouponUser(senderDigits);
+    if (!userProfile?.channel) {
+      return await sock.sendMessage(from, {
+        text:
+`╭━━━〔 📢 *YOUR AUTO-REACT CHANNEL* 〕━━━┈⊷
+┃ 👤 *User:* +${senderDigits}
+┃ 📊 *Quota:* 0 / 1 Channel Set
+┃ 📭 Abhi koi channel set nahi hai!
+┃
+┃ 👉 Set karne ke liye:
+┃ \`.achr <channel_link> [emojis]\`
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+      }, { quoted: msg });
+    }
+
+    const ch = userProfile.channel;
+    const emojis = Array.isArray(ch.emojis) ? ch.emojis.join(' ') : '❤️ 🔥';
+    return await sock.sendMessage(from, {
+      text:
+`╭━━━〔 📢 *YOUR AUTO-REACT CHANNEL* 〕━━━┈⊷
+┃ 👤 *User:* +${senderDigits}
+┃ 📢 *Channel:* ${ch.name}
+┃ 🆔 *JID:* \`${ch.jid}\`
+┃ ✨ *Emojis:* ${emojis}
+┃ 🤖 *Reaction Mode:* Self-Bot (Only YOUR bot reacts)
+┃ 📊 *Quota:* 1 / 1 Channel Active
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+`> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    }, { quoted: msg });
+  }
+
+  // 3. Set Channel: .achr <channel_link> [emojis]
+  const rawLink = args[0];
+  if (!rawLink) {
+    return await sock.sendMessage(from, {
+      text:
+`╭━━━〔 📌 *ACHR USAGE GUIDE* 〕━━━┈⊷
+┃ 👉 *.achr <channel_link> [emojis]*
+┃ 👉 *.achr del* (Delete channel)
+┃ 👉 *.achr list* (View channel)
+┃
+┃ 📋 *Example:*
+┃ \`.achr https://whatsapp.com/channel/0029Va... ❤️ 🔥 👍\`
+┃
+┃ 🤖 *Note:* Is command se ONLY aapka apna bot react karega!
+┃ (All bots reaction ke liye .arc premium command hai)
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    }, { quoted: msg });
+  }
+
+  const norm = normalizeChannelInput(rawLink);
+  if (!norm) {
+    return await sock.sendMessage(from, { text: "❌ *Invalid channel link ya JID!*" }, { quoted: msg });
+  }
+
+  await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+
+  let targetJid = norm.jid;
+  let channelName = 'WhatsApp Channel';
+
+  if (!targetJid && norm.code && typeof sock.newsletterMetadata === 'function') {
+    try {
+      const meta = await withTimeout(sock.newsletterMetadata('invite', norm.code), 6000);
+      if (meta?.id) {
+        targetJid = meta.id;
+        if (meta.name) channelName = meta.name;
+      }
+    } catch (_) {}
+  }
+
+  if (!targetJid) {
+    return await sock.sendMessage(from, {
+      text: "❌ *Channel JID resolve nahi ho saki!* Baraye meharbani direct channel link provide karein."
+    }, { quoted: msg });
+  }
+
+  // Parse custom emojis from remaining args
+  const rawEmojiTokens = args.slice(1).join(' ').trim();
+  const parsedEmojis = normalizeEmojiList(rawEmojiTokens);
+  const finalEmojis = parsedEmojis.length > 0 ? parsedEmojis : ['❤️', '🔥', '👍', '✨'];
+
+  // Subscribe socket to live updates
+  try {
+    if (typeof sock.subscribeNewsletterUpdates === 'function') {
+      sock.subscribeNewsletterUpdates(targetJid).catch(() => {});
+    }
+  } catch (_) {}
+
+  // Save to coupon manager
+  couponManager.setCouponChannel(senderDigits, {
+    jid: targetJid,
+    link: rawLink,
+    name: channelName,
+    emojis: finalEmojis
+  });
+
+  await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+  return await sock.sendMessage(from, {
+    text:
+`╭━━━〔 📢 *COUPON AUTO-REACT SET* 〕━━━┈⊷
+┃ ✅ *Channel:* ${channelName}
+┃ 🆔 *JID:* \`${targetJid}\`
+┃ ✨ *Emojis:* ${finalEmojis.join(' ')}
+┃ 🤖 *Reaction Mode:* Self-Bot (Only YOUR bot reacts)
+┃ 📊 *Channels Quota:* 1 / 1 (Coupon Tier)
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+💡 *Channel par nayi post aate hi sirf aapka apna bot foran react karega!*
+🚀 *Powered by MR SAQIB MD*`
+  }, { quoted: msg });
+}
+
 module.exports = {
   loadArcData,
   saveArcData,
@@ -1693,5 +2044,10 @@ module.exports = {
   pollvoteCommand,
   pollvstopCommand,
   executeArcAutoReaction,
-  ensureArcKeepAlive
+  ensureArcKeepAlive,
+  ccCommand,
+  gencouponCommand,
+  listcouponCommand,
+  delcouponCommand,
+  achrCommand
 };

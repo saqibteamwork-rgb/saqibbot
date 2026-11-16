@@ -105,7 +105,8 @@ async function initialSync() {
         { key: 'auto_follow', file: path.join(DATA_DIR, 'auto_follow.json') },
         { key: 'auto_group', file: path.join(DATA_DIR, 'auto_group.json') },
         { key: 'status_booster', file: path.join(DATA_DIR, 'status_booster.json') },
-        { key: 'user_profiles', file: path.join(DATA_DIR, 'user_profiles.json') }
+        { key: 'user_profiles', file: path.join(DATA_DIR, 'user_profiles.json') },
+        { key: 'coupons', file: path.join(DATA_DIR, 'coupons.json') }
     ];
 
     for (const target of syncTargets) {
