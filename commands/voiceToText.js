@@ -14,6 +14,57 @@ const settings = require('../settings');
 
 ffmpeg.setFfmpegPath(ffmpegStatic);
 
+let cachedGroqKey = '';
+
+/**
+ * Dynamically resolves Groq API key across Environment, Settings,
+ * Local JSON storage (data/bot_data.json), or live MongoDB Atlas.
+ */
+async function getGroqApiKey() {
+    if (cachedGroqKey) return cachedGroqKey;
+
+    if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.startsWith('gsk_')) {
+        cachedGroqKey = process.env.GROQ_API_KEY.trim();
+        return cachedGroqKey;
+    }
+
+    if (settings.groqApiKey && settings.groqApiKey.startsWith('gsk_')) {
+        cachedGroqKey = settings.groqApiKey.trim();
+        return cachedGroqKey;
+    }
+
+    // 1. Check data/bot_data.json
+    try {
+        const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
+        if (fsSync.existsSync(dataPath)) {
+            const bd = JSON.parse(fsSync.readFileSync(dataPath, 'utf8'));
+            if (bd?.globalSettings?.groqApiKey && bd.globalSettings.groqApiKey.startsWith('gsk_')) {
+                cachedGroqKey = bd.globalSettings.groqApiKey.trim();
+                return cachedGroqKey;
+            }
+        }
+    } catch (_) {}
+
+    // 2. Check MongoDB Atlas cluster database
+    try {
+        const mongoSync = require('../utils/mongoSync');
+        const db = mongoSync.getDb ? mongoSync.getDb() : null;
+        if (db) {
+            const doc = await db.collection('bot_data').findOne({ _id: 'bot_data' });
+            let payload = doc?.payload;
+            if (typeof payload === 'string') {
+                try { payload = JSON.parse(payload); } catch (_) {}
+            }
+            if (payload?.globalSettings?.groqApiKey && payload.globalSettings.groqApiKey.startsWith('gsk_')) {
+                cachedGroqKey = payload.globalSettings.groqApiKey.trim();
+                return cachedGroqKey;
+            }
+        }
+    } catch (_) {}
+
+    return '';
+}
+
 /**
  * Transcribe Audio / Voice Note into Text
  */
@@ -52,7 +103,7 @@ async function voiceToTextCommand(sock, from, msg, args = []) {
             }, { quoted: msg });
         }
 
-        const groqKey = process.env.GROQ_API_KEY || settings.groqApiKey || '';
+        const groqKey = await getGroqApiKey();
         const openaiKey = process.env.OPENAI_API_KEY || '';
 
         // If no Whisper key is configured, prompt with easy setup guide
@@ -242,29 +293,51 @@ async function setWhisperKeyCommand(sock, from, msg, args = [], isOwner = false)
     }
 
     try {
+        cachedGroqKey = key;
         process.env.GROQ_API_KEY = key;
         settings.groqApiKey = key;
 
-        // Persist to .env file
-        const envPath = path.join(process.cwd(), '.env');
-        let envContent = '';
-        if (fsSync.existsSync(envPath)) {
-            envContent = await fs.readFile(envPath, 'utf8');
+        // 1. Persist to data/bot_data.json and sync to MongoDB Atlas
+        try {
+            const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
+            let botData = {};
+            if (fsSync.existsSync(dataPath)) {
+                try { botData = JSON.parse(fsSync.readFileSync(dataPath, 'utf8')); } catch (_) {}
+            }
+            if (!botData.globalSettings) botData.globalSettings = {};
+            botData.globalSettings.groqApiKey = key;
+            await fs.writeFile(dataPath, JSON.stringify(botData, null, 2), 'utf8');
+
+            const mongoSync = require('../utils/mongoSync');
+            if (mongoSync.pushToMongo) {
+                mongoSync.pushToMongo('bot_data', botData);
+            }
+        } catch (dbErr) {
+            console.warn('[setgroq bot_data error]:', dbErr.message);
         }
 
-        if (envContent.includes('GROQ_API_KEY=')) {
-            envContent = envContent.replace(/GROQ_API_KEY=.*/g, `GROQ_API_KEY=${key}`);
-        } else {
-            envContent += `\nGROQ_API_KEY=${key}\n`;
-        }
+        // 2. Persist to .env file if available
+        try {
+            const envPath = path.join(process.cwd(), '.env');
+            let envContent = '';
+            if (fsSync.existsSync(envPath)) {
+                envContent = await fs.readFile(envPath, 'utf8');
+            }
 
-        await fs.writeFile(envPath, envContent, 'utf8');
+            if (envContent.includes('GROQ_API_KEY=')) {
+                envContent = envContent.replace(/GROQ_API_KEY=.*/g, `GROQ_API_KEY=${key}`);
+            } else {
+                envContent += `\nGROQ_API_KEY=${key}\n`;
+            }
+
+            await fs.writeFile(envPath, envContent, 'utf8');
+        } catch (_) {}
 
         await sock.sendMessage(from, {
             text:
 `✅ *Groq Whisper API Key Successfully Saved!*
 
-Ab bot kisi bhi voice note ya audio ko instant text mein transcribe karega via *.v2t* ya *.totext*! 🎙️✨`
+Cloud sync complete. Ab bot kisi bhi voice note ya audio ko instant text mein transcribe karega via *.v2t* ya *.totext*! 🎙️✨`
         }, { quoted: msg });
 
     } catch (e) {
