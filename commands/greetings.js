@@ -55,6 +55,25 @@ const EVENING_WISHES = [
     "🌇 *As the sun sets,* may all your worries fade away and peace fill your soul. Have a lovely evening!"
 ];
 
+const LOVE_QUOTES = [
+    "❤️ *'Tum meri zindagi ka wo haseen khwab ho jo haqeeqat ban chuka hai.'* I love you to the moon and back!",
+    "🌹 *'Pyar lafzon ka mohtaj nahi hota, dil ki dhadkan hi kafi hoti hai.'* Sending infinite love your way! 💖",
+    "✨ *'You are my today and all of my tomorrows.'* Dil se hamesha aapke sath! ❤️",
+    "💖 *'Aapki muskurahat hamari jaan hai!'* Stay happy, stay blessed! Love you always! 🥰",
+    "💐 *'Sachha pyar wo hai jo har haal mein sath nibhaye.'* Pure love & endless respect! 💫",
+    "💍 *'Duniya ki sabse khoobsurat cheez tumhari muskurahat hai.'* Forever in my heart! 💕"
+];
+
+const SAD_QUOTES = [
+    "💔 *'Kabhi kabhi khamoshi hi sabse bada shor hoti hai jo koi sun nahi pata.'*",
+    "🥀 *'Log kehte hain waqt sab theek kar deta hai, par sach ye hai ke waqt sirf aadat daal deta hai.'*",
+    "🌧️ *'Dil dukhane wale aksar wahi hote hain jinke liye humne sab kuch chhod diya hota hai.'*",
+    "🥺 *'Aankhon mein aansu tabhi aate hain jab lafz dard bayan nahi kar paate.'*",
+    "🖤 *'It hurts when you realize you aren't as important to someone as you thought you were.'*",
+    "🕯️ *'Kuch baatein dil mein hi achi lagti hain, labon par aa kar tamasha ban jaati hain.'*",
+    "💔 *'Muskurahat ke peeche ka dard har koi nahi samajh sakta.'*"
+];
+
 function getRandom(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
 }
@@ -271,10 +290,142 @@ async function eveningCommand(sock, from, msg, args = []) {
     }
 }
 
+async function iloveyouCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '❤️', key: msg.key } }).catch(() => {});
+        const loveQuote = getRandom(LOVE_QUOTES);
+        const { targetJid, senderName } = getTargetInfo(sock, from, msg);
+
+        let text = '';
+        let mentions = [];
+
+        if (targetJid) {
+            const userTag = targetJid.split('@')[0];
+            mentions.push(targetJid);
+            text =
+`╭━━━〔 ❤️ *I LOVE YOU* ❤️ 〕━━━┈⊷
+┃ 👤 *To:* @${userTag}
+┃ 💌 *From:* ${senderName}
+┃
+┃ ${loveQuote.replace(/\n/g, '\n┃ ')}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+🚀 *MR SAQIB MD*`;
+        } else {
+            text =
+`╭━━━〔 ❤️ *I LOVE YOU* ❤️ 〕━━━┈⊷
+┃ 👤 *Dear:* ${senderName}
+┃
+┃ ${loveQuote.replace(/\n/g, '\n┃ ')}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+🚀 *MR SAQIB MD*`;
+        }
+
+        await sock.sendMessage(from, { text, mentions }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ Love error: ${e.message}` }, { quoted: msg }).catch(() => {});
+    }
+}
+
+async function hiCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '👋', key: msg.key } }).catch(() => {});
+        const senderName = msg.pushName || 'Friend';
+        const senderJid = msg.key.participant || msg.key.remoteJid;
+        const userTag = (senderJid || '').split('@')[0];
+
+        const text =
+`╭━━━〔 👋 *HELLO & WELCOME* 〕━━━┈⊷
+┃ 👤 *Hello:* @${userTag} (${senderName})
+┃ 🤖 *Bot:* MR SAQIB MD
+┃ ⚡ *Status:* Online & Operational 🟢
+┃ 🚀 *Cluster:* 11-Node Mega Cluster
+┃ 💡 *Tip:* Type *.menu* to see all commands!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+✨ *How can I help you today?*`;
+
+        await sock.sendMessage(from, { text, mentions: [senderJid] }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ Hi error: ${e.message}` }, { quoted: msg }).catch(() => {});
+    }
+}
+
+async function sadgirlCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '💔', key: msg.key } }).catch(() => {});
+        const sadQuote = getRandom(SAD_QUOTES);
+        const senderName = msg.pushName || 'Soul';
+
+        const text =
+`╭━━━〔 🥀 *SAD DIARIES / DUKH* 〕━━━┈⊷
+┃ 👤 *For:* ${senderName}
+┃
+┃ ${sadQuote.replace(/\n/g, '\n┃ ')}
+┃
+┃ 🌧️ *Be strong! Bad days don't last forever.*
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+🖤 *MR SAQIB MD*`;
+
+        await sock.sendMessage(from, { text }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ Sad quote error: ${e.message}` }, { quoted: msg }).catch(() => {});
+    }
+}
+
+async function mdCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '🚀', key: msg.key } }).catch(() => {});
+        const text =
+`╭━━━〔 ⚡ *MR SAQIB MD CORE* ⚡ 〕━━━┈⊷
+┃ 👑 *Developer:* Muhammad Saqib
+┃ 🤖 *Bot System:* MR SAQIB MD Ultra v3.5
+┃ 🌐 *Infrastructure:* 11-Node Mega Cluster
+┃ ⚡ *Nodes:* 10 Heroku Nodes + 1 Railway Scale
+┃ 📱 *Engine:* Baileys Multi-Device Sonic Core
+┃ 🎯 *Auto-React:* Channel & Post Auto Reactor
+┃ 📂 *Plugins:* 130+ Modules | 450+ Commands
+┃ 🛡️ *Protection:* Anti-Edit, Anti-Delete, Anti-Once
+┃ 📊 *Status:* 100% Active & Ultra Fast
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+🌟 *Type .menu to explore the full dashboard!*`;
+
+        await sock.sendMessage(from, { text }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ MD info error: ${e.message}` }, { quoted: msg }).catch(() => {});
+    }
+}
+
+async function autoreplyCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '💬', key: msg.key } }).catch(() => {});
+        const text =
+`╭━━━〔 💬 *SMART AUTO-REPLY* 〕━━━┈⊷
+┃ ⚙️ *Auto-Reply Engine:* Active 🟢
+┃ 🤖 *AI Logic:* Gemini + GPT Fallback
+┃ ⚡ *Channel Auto-React:* Enabled
+┃ 🛡️ *Filter:* Safe Chat & Clean Mode
+┃
+┃ 💡 *Features:*
+┃ • Instant polite replies on greetings
+┃ • Channel updates auto-reactions (.chautoreact)
+┃ • Auto status like & status read
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+✨ *MR SAQIB MD Auto-Engine*`;
+
+        await sock.sendMessage(from, { text }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ Auto-reply error: ${e.message}` }, { quoted: msg }).catch(() => {});
+    }
+}
+
 module.exports = {
     morningCommand,
     nightCommand,
     thanksCommand,
     afternoonCommand,
-    eveningCommand
+    eveningCommand,
+    iloveyouCommand,
+    hiCommand,
+    sadgirlCommand,
+    mdCommand,
+    autoreplyCommand
 };

@@ -175,6 +175,76 @@ async function coinCommand(sock, from, msg) {
     await sock.sendMessage(from, { text: `🪙 *COIN FLIP:*\n\nNateeja: *${result}*` }, { quoted: msg });
 }
 
+async function slotsCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '🎰', key: msg.key } }).catch(() => {});
+        const symbols = ["🍒", "🍋", "🍉", "⭐", "💎", "7️⃣", "🔔"];
+        const s1 = symbols[Math.floor(Math.random() * symbols.length)];
+        const s2 = symbols[Math.floor(Math.random() * symbols.length)];
+        const s3 = symbols[Math.floor(Math.random() * symbols.length)];
+
+        let resultTitle = '';
+        if (s1 === s2 && s2 === s3) {
+            resultTitle = '🎉 *JACKPOT WINNER!* 🏆\n🔥 SubhanAllah! Teenon symbols match ho gaye! Super Win!';
+        } else if (s1 === s2 || s2 === s3 || s1 === s3) {
+            resultTitle = '✨ *NICE PAIR WIN!* 🥈\nDo symbols match ho gaye! Zabardast!';
+        } else {
+            resultTitle = '😢 *BETTER LUCK NEXT TIME!*\nKoi match nahi hua, dobara koshish karein!';
+        }
+
+        const text =
+`╭━━━〔 🎰 *CASINO SLOTS* 🎰 〕━━━┈⊷
+┃
+┃   [  ${s1}  |  ${s2}  |  ${s3}  ]
+┃
+┃ ${resultTitle.replace(/\n/g, '\n┃ ')}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+🎲 *MR SAQIB MD Mini-Games*`;
+
+        await sock.sendMessage(from, { text }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ Slots error: ${e.message}` }, { quoted: msg });
+    }
+}
+
+async function eightBallCommand(sock, from, msg, args = []) {
+    try {
+        await sock.sendMessage(from, { react: { text: '🎱', key: msg.key } }).catch(() => {});
+        const question = (args || []).join(' ').trim();
+        if (!question) {
+            return await sock.sendMessage(from, {
+                text: "🎱 *Magic 8-Ball:*\n\nKripya apna sawal likhein!\n*Example:* `.8ball Kya kal chhutti hogi?`"
+            }, { quoted: msg });
+        }
+
+        const answers = [
+            "✅ Haan, bilkul 100%!",
+            "❌ Nahi, bilkul nahi!",
+            "🤔 Shayad, chances 50-50 hain...",
+            "✨ Yaqeenan aisa hi hoga!",
+            "😐 Abhi kehna mushkil hai.",
+            "🔮 Thodi der baad dobara poochhein.",
+            "💯 Absolutely yes!",
+            "🚫 Ummeed kam hai.",
+            "🌟 Kismat aapke sath hai!",
+            "⚠️ Mujhe aisa nahi lagta.",
+            "😊 Most likely yes!"
+        ];
+        const answer = answers[Math.floor(Math.random() * answers.length)];
+
+        const text =
+`╭━━━〔 🎱 *MAGIC 8-BALL* 〕━━━┈⊷
+┃ ❓ *Sawal:* ${question}
+┃ 🔮 *Peshangoi:* ${answer}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+✨ *MR SAQIB MD Oracle*`;
+
+        await sock.sendMessage(from, { text }, { quoted: msg });
+    } catch (e) {
+        await sock.sendMessage(from, { text: `❌ 8Ball error: ${e.message}` }, { quoted: msg });
+    }
+}
+
 module.exports = {
     shayariCommand,
     flirtCommand,
@@ -187,5 +257,7 @@ module.exports = {
     adviceCommand,
     gayrateCommand,
     diceCommand,
-    coinCommand
+    coinCommand,
+    slotsCommand,
+    eightBallCommand
 };

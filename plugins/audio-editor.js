@@ -72,40 +72,6 @@ cmd({
 });
 
 cmd({
-    pattern: 'deep',
-    desc: 'Make audio sound deeper',
-    category: 'audio',
-    react: '🗣️',
-    filename: __filename
-}, async (client, match, message, { from }) => {
-    if (!message.quoted || !['audioMessage', 'videoMessage'].includes(message.quoted.mtype)) {
-        return await client.sendMessage(from, {
-            text: "*🔊 Reply to an audio/video message*"
-        }, { quoted: message });
-    }
-
-    await client.sendMessage(from, { react: { text: '⏳', key: message.key } });
-    
-    try {
-        const buffer = await message.quoted.download();
-        const ext = message.quoted.mtype === 'videoMessage' ? 'mp4' : 'mp3';
-        const audio = await audioEditor.deep(buffer, ext);
-
-        await client.sendMessage(from, {
-            audio: audio,
-            mimetype: 'audio/mpeg'
-        }, { quoted: message });
-        await client.sendMessage(from, { react: { text: '✅', key: message.key } });
-    } catch (e) {
-        console.error('Error:', e);
-        await client.sendMessage(from, {
-            text: "❌ Failed to process audio"
-        }, { quoted: message });
-        await client.sendMessage(from, { react: { text: '❌', key: message.key } });
-    }
-});
-
-cmd({
     pattern: 'fat',
     desc: 'Make audio sound fat/bassy',
     category: 'audio',

@@ -97,6 +97,11 @@ const CATEGORIES = {
         'chunreact', 'chvote', 'pollrand', 'pollunvote', 'pollvfix',
         'pollvinfo', 'pollvote', 'pollvstop', 'vote1', 'vote2', 'vote3', 'vote4'
     ],
+    'AUDIO EDIT': [
+        'baby', 'bass', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
+        'fat', 'nightcore', 'radio', 'reverse', 'robot', 'slow', 'smooth',
+        'tomp3', 'toptt', 'tupai'
+    ],
     'DOWNLOAD': [
         'apk', 'audio', 'capcut', 'dl', 'facebook', 'fbdl', 'gdrive',
         'igdl', 'insta', 'mediafire', 'mp3', 'play', 'save', 'song',
@@ -123,10 +128,11 @@ const CATEGORIES = {
         'trackip', 'truecaller', 'vcf', 'was', 'wiki'
     ],
     'GENERAL': [
-        'alive', 'botstatus', 'calc', 'checkprem', 'dp', 'help', 'myprem', 'myprofile', 'owner',
-        'pair', 'ping', 'profileinfo', 'resetmenu', 'runtime', 'setbotname',
-        'setmenupic', 'setownername', 'speed', 'tmp', 'tmpib',
-        'tmprst', 'translate', 'vv', 'wame', 'weather'
+        'alive', 'autoreply', 'botstatus', 'calc', 'checkprem', 'dp', 'getpp',
+        'goodmorning', 'goodnight', 'hello', 'help', 'hi', 'iloveyou', 'md',
+        'myprem', 'myprofile', 'owner', 'pair', 'ping', 'profileinfo', 'resetmenu',
+        'runtime', 'sadgirl', 'setbotname', 'setmenupic', 'setownername', 'speed',
+        'tmp', 'tmpib', 'tmprst', 'translate', 'vv', 'wame', 'weather'
     ],
     'GROUP': [
         'accept', 'acceptall', 'add', 'antilink', 'antispam', 'creategroup',
@@ -146,11 +152,11 @@ const CATEGORIES = {
         'private', 'public', 'statusreact', 'statusseen', 'unblock'
     ],
     'FUN': [
-        'advice', 'afternoon', 'cat', 'character', 'coin', 'compliment', 'confess',
-        'couple', 'dare', 'dice', 'dog', 'evening', 'fact', 'flirt', 'gayrate',
+        '8ball', 'advice', 'afternoon', 'cat', 'character', 'coin', 'compliment', 'confess',
+        'couple', 'dare', 'dice', 'dog', 'emojimix', 'evening', 'fact', 'flirt', 'gayrate',
         'gift', 'goodnight', 'hack', 'insult', 'joke', 'love', 'lovequote',
         'meme', 'morning', 'motivation', 'poll', 'quiz', 'rank', 'roast',
-        'rpg', 'shayari', 'ship', 'thanks', 'truth'
+        'rpg', 'shayari', 'ship', 'slots', 'thanks', 'truth'
     ],
     'ISLAMIC': [
         'azkar', 'dua', 'hadith', 'prayertime', 'quran', 'tasbeeh'

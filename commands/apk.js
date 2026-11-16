@@ -1,114 +1,138 @@
-
-
+// commands/apk.js
+'use strict';
 
 const axios = require('axios');
 const settings = require('../settings');
 
-
 /**
- * APK Downloader Command
- * Fetches APK details & downloads the file using NexOracle API.
+ * High-Speed APK Downloader with multi-source fallback
  */
-async function apkCommand(sock, chatId, message) {
-  try {
-    // Extract the user message
-    const userMessage =
-      message.message.conversation ||
-      message.message.extendedTextMessage?.text ||
-      '';
-    const appName = userMessage.split(' ').slice(1).join(' ');
+async function apkCommand(sock, chatId, message, args = []) {
+    try {
+        let appName = (args || []).join(' ').trim();
+        if (!appName) {
+            const userMessage =
+                message.message?.conversation ||
+                message.message?.extendedTextMessage?.text ||
+                '';
+            appName = userMessage.split(' ').slice(1).join(' ').trim();
+        }
 
-    if (!appName) {
-      await sock.sendMessage(
-        chatId,
-        { text: '⚠️ Please provide an app name. Example: `.apk whatsapp`' },
-        { quoted: message }
-      );
-      return;
+        if (!appName) {
+            return await sock.sendMessage(
+                chatId,
+                { text: '⚠️ *Please provide an app name!*\nExample: `.apk WhatsApp` or `.apk Free Fire`' },
+                { quoted: message }
+            );
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } }).catch(() => {});
+
+        let apkData = null;
+
+        // Source 1: PrinceTech APK API (from D:\mybot)
+        try {
+            const res = await axios.get(`https://api.princetechn.com/api/download/apkdl?apikey=prince&appName=${encodeURIComponent(appName)}`, { timeout: 15000 });
+            if (res.data?.result?.dllink) {
+                apkData = {
+                    name: res.data.result.name || appName,
+                    size: res.data.result.size || 'Unknown',
+                    package: res.data.result.package || 'com.app',
+                    lastup: res.data.result.lastup || 'Recent',
+                    icon: res.data.result.icon,
+                    dllink: res.data.result.dllink
+                };
+            }
+        } catch (_) {}
+
+        // Source 2: BK9 APK API Fallback
+        if (!apkData) {
+            try {
+                const res = await axios.get(`https://bk9.fun/download/apk?q=${encodeURIComponent(appName)}`, { timeout: 15000 });
+                if (res.data?.BK9?.dllink) {
+                    const r = res.data.BK9;
+                    apkData = {
+                        name: r.name || appName,
+                        size: r.size || 'Unknown',
+                        package: r.package || 'com.app',
+                        lastup: r.lastup || 'Recent',
+                        icon: r.icon,
+                        dllink: r.dllink
+                    };
+                }
+            } catch (_) {}
+        }
+
+        // Source 3: NexOracle Fallback
+        if (!apkData) {
+            try {
+                const res = await axios.get(`https://api.nexoracle.com/downloader/apk?apikey=free_key@maher_apis&q=${encodeURIComponent(appName)}`, { timeout: 15000 });
+                if (res.data?.result?.dllink) {
+                    const r = res.data.result;
+                    apkData = {
+                        name: r.name || appName,
+                        size: r.size || 'Unknown',
+                        package: r.package || 'com.app',
+                        lastup: r.lastup || 'Recent',
+                        icon: r.icon,
+                        dllink: r.dllink
+                    };
+                }
+            } catch (_) {}
+        }
+
+        if (!apkData || !apkData.dllink) {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
+            return await sock.sendMessage(
+                chatId,
+                { text: `❌ *APK not found for "${appName}".* Please check the name or try another app.` },
+                { quoted: message }
+            );
+        }
+
+        const caption =
+`╭━━━〔 📱 *APK DOWNLOADER* 〕━━━┈⊷
+┃ 🏷️ *App:* ${apkData.name}
+┃ 📦 *Package:* ${apkData.package}
+┃ 📏 *Size:* ${apkData.size}
+┃ 📅 *Updated:* ${apkData.lastup}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+🚀 *Powered by MR SAQIB MD*`;
+
+        // Send thumbnail preview if available
+        if (apkData.icon) {
+            await sock.sendMessage(
+                chatId,
+                {
+                    image: { url: apkData.icon },
+                    caption: `📦 *Preparing download for ${apkData.name} (${apkData.size})...*`
+                },
+                { quoted: message }
+            ).catch(() => {});
+        }
+
+        // Send direct document URL streaming to avoid RAM overload
+        await sock.sendMessage(
+            chatId,
+            {
+                document: { url: apkData.dllink },
+                mimetype: 'application/vnd.android.package-archive',
+                fileName: `${apkData.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.apk`,
+                caption
+            },
+            { quoted: message }
+        );
+
+        await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } }).catch(() => {});
+    } catch (err) {
+        console.error('❌ Error in apkCommand:', err);
+        await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } }).catch(() => {});
+        await sock.sendMessage(
+            chatId,
+            { text: `❌ Download error: ${err.message}` },
+            { quoted: message }
+        ).catch(() => {});
     }
-
-    // React with hourglass while processing
-    await sock.sendMessage(chatId, { react: { text: '⏳', key: message.key } });
-
-    // API call to NexOracle
-    const apiUrl = 'https://api.nexoracle.com/downloader/apk';
-    const params = {
-      apikey: 'free_key@maher_apis', // Replace with your API key if needed
-      q: appName,
-    };
-
-    const response = await axios.get(apiUrl, { params });
-
-    if (!response.data || response.data.status !== 200 || !response.data.result) {
-      await sock.sendMessage(
-        chatId,
-        { text: '❌ Unable to find the APK. Please try again later.' },
-        { quoted: message }
-      );
-      return;
-    }
-
-    const { name, lastup, package, size, icon, dllink } = response.data.result;
-
-    // Send thumbnail preview
-    await sock.sendMessage(
-      chatId,
-      {
-        image: { url: icon },
-        caption: `📦 *Downloading ${name}... Please wait.*`,
-      },
-      { quoted: message }
-    );
-
-    // Download APK file
-    const apkResponse = await axios.get(dllink, { responseType: 'arraybuffer' });
-    if (!apkResponse.data) {
-      await sock.sendMessage(
-        chatId,
-        { text: '❌ Failed to download the APK. Please try again later.' },
-        { quoted: message }
-      );
-      return;
-    }
-
-    const apkBuffer = Buffer.from(apkResponse.data, 'binary');
-
-    // Format message with details
-    const details = `📦 *APK Details* 📦\n\n` +
-      `🔖 *Name*: ${name}\n` +
-      `📅 *Last Update*: ${lastup}\n` +
-      `📦 *Package*: ${package}\n` +
-      `📏 *Size*: ${size}\n\n` +
-      `> © POWERED BY ${settings.botName}`;
-
-    // Send APK as document
-    await sock.sendMessage(
-      chatId,
-      {
-        document: apkBuffer,
-        mimetype: 'application/vnd.android.package-archive',
-        fileName: `${name}.apk`,
-        caption: details
-        
-      },
-      { quoted: message }
-    );
-
-    // Success reaction
-    await sock.sendMessage(chatId, { react: { text: '✅', key: message.key } });
-
-  } catch (error) {
-    console.error('❌ Error in apkCommand:', error);
-
-    await sock.sendMessage(
-      chatId,
-      { text: '❌ Unable to fetch APK details. Please try again later.' },
-      { quoted: message }
-    );
-
-    // Failure reaction
-    await sock.sendMessage(chatId, { react: { text: '❌', key: message.key } });
-  }
 }
 
 module.exports = apkCommand;

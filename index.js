@@ -163,8 +163,8 @@ const silentMediaSaver = require('./utils/silentMediaSaver');
 // Newly added command suites: Anime, Search, Extra Fun, Utility, Textmaker
 const { waifuCommand, nekoCommand, animeQuoteCommand, animeSearchCommand } = require('./commands/anime');
 const { googleCommand, lyricsCommand, ringtoneCommand, playstoreCommand, githubCommand } = require('./commands/search');
-const { flirtCommand, lovequoteCommand, motivationCommand, catCommand, dogCommand, insultCommand, adviceCommand, gayrateCommand, diceCommand, coinCommand } = require('./commands/extra-fun');
-const { morningCommand, nightCommand, thanksCommand, afternoonCommand, eveningCommand } = require('./commands/greetings');
+const { flirtCommand, lovequoteCommand, motivationCommand, catCommand, dogCommand, insultCommand, adviceCommand, gayrateCommand, diceCommand, coinCommand, slotsCommand, eightBallCommand } = require('./commands/extra-fun');
+const { morningCommand, nightCommand, thanksCommand, afternoonCommand, eveningCommand, iloveyouCommand, hiCommand, sadgirlCommand, mdCommand, autoreplyCommand } = require('./commands/greetings');
 const { readmoreCommand, base64Command, binaryCommand, pastebinCommand, fetchCommand, getcidCommand } = require('./commands/utility-extra');
 const { textmakerCommand } = require('./commands/textmaker');
 const { executePlugin } = require('./lib/pluginRunner');
@@ -2275,6 +2275,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'gayrate': case 'gay': await gayrateCommand(this.sock, from, msg); break;
                                         case 'dice': case 'roll': await diceCommand(this.sock, from, msg); break;
                                         case 'coin': case 'flip': await coinCommand(this.sock, from, msg); break;
+                                        case 'slots': case 'slot': await slotsCommand(this.sock, from, msg, args); break;
+                                        case '8ball': case 'eightball': case 'oracle': await eightBallCommand(this.sock, from, msg, args); break;
 
                                         // ===== NEW UPGRADE: Greetings & Polite Wishes =====
                                         case 'morning': case 'moring': case 'gm': case 'goodmorning': case 'subah': case 'subahbakhair':
@@ -2287,6 +2289,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await afternoonCommand(this.sock, from, msg, args); break;
                                         case 'evening': case 'ge': case 'goodevening':
                                             await eveningCommand(this.sock, from, msg, args); break;
+                                        case 'iloveyou': case 'ily': case 'loveu': case 'loveyou':
+                                            await iloveyouCommand(this.sock, from, msg, args); break;
+                                        case 'hi': case 'hello': case 'hey': case 'salam': case 'assalamoalaikum':
+                                            await hiCommand(this.sock, from, msg, args); break;
+                                        case 'sadgirl': case 'sad': case 'sadboy': case 'dukhi': case 'dard':
+                                            await sadgirlCommand(this.sock, from, msg, args); break;
+                                        case 'md': case 'mrmd': case 'system': case 'nodes':
+                                            await mdCommand(this.sock, from, msg, args); break;
+                                        case 'autoreply': case 'autoreplies':
+                                            await autoreplyCommand(this.sock, from, msg, args); break;
 
                                         // ===== NEW UPGRADE: Extended Utility =====
                                         case 'readmore': case 'spoiler': await readmoreCommand(this.sock, from, msg, args); break;

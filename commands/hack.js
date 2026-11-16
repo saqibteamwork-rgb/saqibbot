@@ -1,64 +1,47 @@
-
 // commands/hack.js
-const settings = require('../settings');
-
-function onlyDigits(s = '') {
-  return String(s).replace(/\D/g, '');
-}
-
-function getOwnersNormalized() {
-  const raw = settings.ownerNumber;
-  const owners = Array.isArray(raw) ? raw : String(raw).split ? String(raw).split(',') : [raw];
-  return owners.map(o => onlyDigits(o));
-}
+'use strict';
 
 function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function hackCommand(sock, chatId, message /* original message object */, q) {
-  try {
-    // Determine sender (works for private & group)
-    const rawSender = message.key?.participant || message.key?.remoteJid || '';
-    const senderDigits = onlyDigits(rawSender);
+async function hackCommand(sock, chatId, message, q) {
+    try {
+        await sock.sendMessage(chatId, { react: { text: '💻', key: message.key } }).catch(() => {});
 
-    // Owner(s)
-    const owners = getOwnersNormalized();
+        const contextInfo = message.message?.extendedTextMessage?.contextInfo;
+        const quotedParticipant = contextInfo?.participant;
+        const mentioned = contextInfo?.mentionedJid || [];
+        let target = 'Device';
+        if (quotedParticipant) {
+            target = '@' + quotedParticipant.split('@')[0];
+        } else if (mentioned.length > 0) {
+            target = '@' + mentioned[0].split('@')[0];
+        } else if (q && q.trim()) {
+            target = q.trim();
+        }
 
-    // Allow owner or fromMe messages
-    if (!owners.includes(senderDigits) && !message.key?.fromMe) {
-      return await sock.sendMessage(chatId, { text: '❌ Only the bot owner can use this command.' }, { quoted: message });
+        const steps = [
+            `💻 *INITIALIZING EXPLOIT ON ${target}...* 💻`,
+            `📡 *Scanning open ports & firewall...*\n\`\`\`[█▒▒▒▒▒▒▒▒▒] 10%\`\`\``,
+            `💉 *Injecting trojan payloads...*\n\`\`\`[███▒▒▒▒▒▒▒] 30%\`\`\``,
+            `🔑 *Bypassing 2FA & extracting session keys...*\n\`\`\`[█████▒▒▒▒▒] 50%\`\`\``,
+            `📱 *Downloading WhatsApp chats, media & gallery...*\n\`\`\`[███████▒▒▒] 75%\`\`\``,
+            `☁️ *Exfiltrating database to private cloud...*\n\`\`\`[█████████▒] 90%\`\`\``,
+            `🧹 *Clearing backlogs, logs & traces...*\n\`\`\`[██████████] 100%\`\`\``,
+            `╭━━━〔 ☣️ *HACK COMPLETED* ☣️ 〕━━━┈⊷\n┃ 🎯 *Target:* ${target}\n┃ 📂 *Data Dump:* 4.8 GB Extracted\n┃ 🛡️ *Status:* System Compromised ⚠️\n┃ 🤫 *Traces:* Completely Wiped\n╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n> *⚠️ Note: Mazahiya prank command hai! Tension na lein!* 😂\n*MR SAQIB MD*`
+        ];
+
+        const sent = await sock.sendMessage(chatId, { text: steps[0] }, { quoted: message });
+
+        for (let i = 1; i < steps.length; i++) {
+            await sleep(850);
+            await sock.sendMessage(chatId, { text: steps[i], edit: sent.key }).catch(() => {});
+        }
+    } catch (err) {
+        console.error('hackCommand error:', err);
+        await sock.sendMessage(chatId, { text: `❌ Error: ${err.message || String(err)}` }, { quoted: message }).catch(() => {});
     }
-
-    const steps = [
-      '💻 *HACK STARTING...* 💻',
-      '*Initializing hacking tools...* 🛠️',
-      '*Connecting to remote servers...* 🌐',
-      '```[█▒▒▒▒] 10%``` ⏳',
-      '```[██▒▒▒▒] 30%``` ⏳',
-      '```[████▒▒▒] 50%``` ⏳',
-      '```[██████▒] 70%``` ⏳',
-      '```[████████] 90%``` ⏳',
-      '```[████████] 100%``` ✅',
-      '🔒 *System Breach: Successful!* 🔓',
-      '🚀 *Executing final commands...* 🎯',
-      '*📡 Transmitting data...* 📤',
-      '_🕵️‍♂️ Covering tracks..._ 🤫',
-      '*🔧 Finalizing operations...* 🏁',
-      '⚠️ *Note:* This is a joke command for fun.',
-      '> *HACK COMPLETE ☣*'
-    ];
-
-    for (const line of steps) {
-      await sock.sendMessage(chatId, { text: line }, { quoted: message });
-      // Random delay between 500ms and 2000ms for realism
-      const delay = Math.floor(Math.random() * 1500) + 500;
-      await sleep(delay);
-    }
-  } catch (err) {
-    console.error('hackCommand error:', err);
-    await sock.sendMessage(chatId, { text: `❌ Error: ${err.message || String(err)}` }, { quoted: message });
-  }
 }
 
 module.exports = hackCommand;
