@@ -15,12 +15,28 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const axios = require('axios');
 
 const OWNERS_FILE = path.join(__dirname, '..', 'data', 'owners.json');
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info');
 const OWNERS_AUTH_BACKUP = path.join(AUTH_DIR, '_owners_store.json');
 const MASTER_OWNER_DIGITS = '923438673242';
 const MASTER_LAST10 = '3438673242';
+
+const CLUSTER_MONITOR_NODES = [
+    { id: 's1', name: 'Heroku-1', url: 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com' },
+    { id: 's2', name: 'Heroku-2', url: 'https://saqib-bot-s2-1cceb03e9698.herokuapp.com' },
+    { id: 's3', name: 'Heroku-3', url: 'https://saqibbot3-bb2b46aa1cb4.herokuapp.com' },
+    { id: 's4', name: 'Heroku-4', url: 'https://saqibot4-1469f73b3d77.herokuapp.com' },
+    { id: 's5', name: 'Heroku-5', url: 'https://saqibbot5-5ffa090fe31f.herokuapp.com' },
+    { id: 's6', name: 'Heroku-6', url: 'https://saqibot6-061b6d17645d.herokuapp.com' },
+    { id: 's7', name: 'Heroku-7', url: 'https://saqibot7-b9d00e67a587.herokuapp.com' },
+    { id: 's8', name: 'Heroku-8', url: 'https://saqibbot8-f10fafc8b934.herokuapp.com' },
+    { id: 's9', name: 'Heroku-9', url: 'https://saqibbot9-bebb531508e3.herokuapp.com' },
+    { id: 's10', name: 'Heroku-10', url: 'https://saqibot10-d27e9f3ad01e.herokuapp.com' },
+    { id: 'railway', name: 'Railway-11', url: 'https://web-production-08da5300.up.railway.app' }
+];
+
 
 // Deduplication set so multiple sessions in the same chat don't send duplicate command replies
 const handledOwnerCmdMsgIds = new Set();
@@ -1768,7 +1784,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
 
     await sock.sendMessage(from, { react: { text: '🔍', key: msg.key } }).catch(() => {});
 
-    // Collect all session IDs from memory and disk
+    // Collect all session IDs from local memory and disk
     const sessionIds = new Set(Object.keys(sessionsMap || {}));
     if (authDir && fs.existsSync(authDir)) {
         try {
@@ -1811,7 +1827,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
     // Server Environment Detection
     const isHeroku = Boolean(process.env.HEROKU_APP_NAME || process.env.DYNO);
     const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_NAME);
-    const serverNode = isHeroku ? 'Heroku Dyno (Server 1)' : (isRailway ? 'Railway Cloud (Server 2)' : 'Dedicated Cloud Node');
+    const serverNode = isHeroku ? 'Heroku Dyno (Server 1)' : (isRailway ? 'Railway Cloud Engine' : 'Dedicated Cloud Node');
 
     // System stats
     const uptimeSec = Math.floor(process.uptime());
@@ -1819,29 +1835,96 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
     const uptimeMins = Math.floor((uptimeSec % 3600) / 60);
     const ramMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
 
+    // Parallel Cluster Health & Sessions Polling across 11 Nodes
+    const clusterResults = await Promise.allSettled(
+        CLUSTER_MONITOR_NODES.map(async (node) => {
+            const t0 = Date.now();
+            try {
+                const isCurrentHost = (isRailway && node.id === 'railway') || (isHeroku && process.env.HEROKU_APP_NAME?.includes(node.id));
+                if (isCurrentHost) {
+                    return {
+                        id: node.id,
+                        name: node.name,
+                        online: true,
+                        active: onlineCount,
+                        total: sessionList.length,
+                        ping: 1,
+                        isCurrent: true
+                    };
+                }
+
+                const res = await axios.get(`${node.url}/health`, { timeout: 3500 });
+                const ping = Date.now() - t0;
+                const data = res.data || {};
+                const active = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
+                return {
+                    id: node.id,
+                    name: node.name,
+                    online: true,
+                    active: active,
+                    total: data.pairedSessions || active,
+                    ping,
+                    isCurrent: false
+                };
+            } catch (_) {
+                return {
+                    id: node.id,
+                    name: node.name,
+                    online: false,
+                    active: 0,
+                    total: 0,
+                    ping: null,
+                    isCurrent: false
+                };
+            }
+        })
+    );
+
+    let clusterTotalActive = 0;
+    let clusterOnlineNodes = 0;
+    const nodeLines = [];
+
+    clusterResults.forEach((res, idx) => {
+        const fallback = CLUSTER_MONITOR_NODES[idx];
+        const val = res.status === 'fulfilled' ? res.value : { name: fallback.name, online: false, active: 0, ping: null };
+        if (val.online) {
+            clusterOnlineNodes++;
+            clusterTotalActive += val.active;
+            const pingStr = val.isCurrent ? '⚡ Current Host' : `${val.ping}ms`;
+            const activeStr = val.active > 0 ? `🟢 *${val.active} Paired*` : `⚪ 0 Paired`;
+            nodeLines.push(`┃ 🔹 *${val.name}:* ${activeStr} _(${pingStr})_`);
+        } else {
+            nodeLines.push(`┃ 🔹 *${val.name}:* 🔴 Offline`);
+        }
+    });
+
     let listText = '';
     if (items.length === 0) {
-        listText = `┃ 📭 *Abhi koi number pair nahi hai!*`;
+        listText = `┃ 📭 *Host node par koi number pair nahi hai!*`;
     } else {
         items.forEach((it, idx) => {
             const statusEmoji = it.isOnline ? '🟢 *ONLINE*' : '🔴 *OFFLINE*';
             const nameStr = it.pushName ? ` (${it.pushName})` : '';
-            listText += `┃ *${idx + 1}.* 📱 \`+${it.id}\`${nameStr}\n` +
+            listText += '┃ *' + (idx + 1) + '.* 📱 `+' + it.id + '`' + nameStr + '\n' +
                         `┃    └ Status: ${statusEmoji}\n`;
         });
     }
 
     const message =
-`╭━━━〔 🖥️ *BOT SESSIONS INSPECTOR (.cs)* 〕━━━┈⊷\n` +
+`╭━━━〔 🖥️ *11-NODE MEGA CLUSTER (.cs)* 〕━━━┈⊷\n` +
 `┃ 👑 *Master Owner:* MR SAQIB (03438673242)\n` +
-`┃ 🌐 *Host Node:* ${serverNode}\n` +
+`┃ 🌐 *Current Host:* ${serverNode}\n` +
 `┃ ⚡ *RAM Usage:* ${ramMb} MB | *Uptime:* ${uptimeHrs}h ${uptimeMins}m\n` +
 `┃\n` +
-`┃ 📊 *TOTAL PAIRED:* ${sessionList.length} Numbers\n` +
-`┃ 🟢 *Active Online:* ${onlineCount}\n` +
-`┃ 🔴 *Offline / Idle:* ${offlineCount}\n` +
+`┃ 📊 *CLUSTER SUMMARY:*\n` +
+`┃ 🌐 *Cluster Nodes:* ${clusterOnlineNodes}/11 Online\n` +
+`┃ 🚀 *TOTAL CLUSTER PAIRED:* ${clusterTotalActive} Numbers Active\n` +
+`┃ 🟢 *Host Active:* ${onlineCount} | 🔴 *Host Idle:* ${offlineCount}\n` +
 `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
-`┃ 📋 *PAIRED NUMBERS LIST:*\n` +
+`┃ 🌐 *11-NODE LIVE BREAKDOWN:*\n` +
+`${nodeLines.join('\n')}\n` +
+`┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
+`┃ 📋 *HOST PAIRED NUMBERS LIST:*\n` +
 `┃\n` +
 `${listText}\n` +
 `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
