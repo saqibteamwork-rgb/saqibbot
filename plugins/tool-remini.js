@@ -12,7 +12,7 @@ cmd({
   category: "utility",
   use: ".remini [reply to image]",
   filename: __filename
-}, async (client, message, { reply, quoted }) => {
+}, async (client, message, m, { reply, quoted }) => {
   try {
     const quotedMsg = quoted || message;
     const mimeType = (quotedMsg.msg || quotedMsg).mimetype || '';
