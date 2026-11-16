@@ -133,6 +133,27 @@ Iske baad bot har voice note ko instantly text me transcribe karega!`
                 }
             } catch (err) {
                 console.error('[Groq Whisper Error]:', err.response?.data || err.message);
+                // Fallback to whisper-large-v3-turbo
+                try {
+                    const formTurbo = new FormData();
+                    formTurbo.append('file', fsSync.createReadStream(outPath));
+                    formTurbo.append('model', 'whisper-large-v3-turbo');
+                    formTurbo.append('response_format', 'json');
+
+                    const responseTurbo = await axios.post('https://api.groq.com/openai/v1/audio/transcriptions', formTurbo, {
+                        headers: {
+                            ...formTurbo.getHeaders(),
+                            'Authorization': `Bearer ${groqKey}`
+                        },
+                        timeout: 30000
+                    });
+
+                    if (responseTurbo.data && responseTurbo.data.text) {
+                        transcribedText = responseTurbo.data.text.trim();
+                    }
+                } catch (turboErr) {
+                    console.error('[Groq Whisper Turbo Error]:', turboErr.response?.data || turboErr.message);
+                }
             }
         }
 
