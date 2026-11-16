@@ -2515,7 +2515,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'cc': case 'coupon': case 'redeem':
                                             await channelMenuCmds.ccCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'gencoupon': case 'addcoupon': case 'createcoupon':
+                                        case 'gencoupon': case 'addcoupon': case 'createcoupon': case 'makecoupon': case 'ccgen': case 'newcoupon':
                                             await channelMenuCmds.gencouponCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
                                             break;
                                         case 'listcoupon': case 'couponlist': case 'coupons':
