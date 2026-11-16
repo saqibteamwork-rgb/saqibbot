@@ -132,6 +132,7 @@ const { toimgCommand } = require('./commands/toimg');
 const { ttsCommand } = require('./commands/tts');
 const { photoFilterCommand } = require('./commands/photoFilter');
 const { summarizeCommand } = require('./commands/webSummarizer');
+const { voiceToTextCommand, setWhisperKeyCommand } = require('./commands/voiceToText');
 const tourlCommand = require('./commands/tourl');
 const pinterestCommand = require('./commands/pinterest');
 const aiImageCommand = require('./commands/ai-image');
@@ -2117,6 +2118,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'say': case 'tts': case 'speak': case 'voicenote':
                                             await ttsCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'v2t': case 'totext': case 'transcribe': case 'listen': case 'audiototext':
+                                            await voiceToTextCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'setgroq': case 'setwhisper':
+                                            await setWhisperKeyCommand(this.sock, from, msg, args, isOwner);
                                             break;
                                         case 'enhance': case 'sharpen': case 'hd': case 'upscale':
                                             await photoFilterCommand(this.sock, from, msg, 'enhance', args);

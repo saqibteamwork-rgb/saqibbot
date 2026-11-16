@@ -740,6 +740,26 @@ const COMMAND_GUIDES = {
       '.achr list',
       '.achr del'
     ]
+  },
+  v2t: {
+    name: 'v2t',
+    aliases: ['totext', 'transcribe', 'listen', 'audiototext'],
+    category: 'AUDIO EDIT',
+    permission: 'Everyone 🌐',
+    usage: '.v2t (Voice note ya audio ko reply karein)\n.totext (Reply to audio)',
+    desc: 'Kisi bhi WhatsApp Voice Note ya Audio message ko AI Whisper engine se sun kar text mein transcribe karta hai.',
+    params: ['Audio ya Voice Note message ko reply karein'],
+    examples: ['.v2t', '.totext']
+  },
+  setgroq: {
+    name: 'setgroq',
+    aliases: ['setwhisper'],
+    category: 'OWNER',
+    permission: 'Owner Only 👑',
+    usage: '.setgroq <gsk_api_key>',
+    desc: 'Groq Whisper API key save karta hai taake .v2t se voice notes ko 0.2s mein text mein transcribe kiya ja sake.',
+    params: ['<gsk_api_key>: console.groq.com se mili hui free key'],
+    examples: ['.setgroq gsk_...']
   }
 };
 

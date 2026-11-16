@@ -103,7 +103,7 @@ const CATEGORIES = {
     'AUDIO EDIT': [
         'baby', 'bass', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
         'fat', 'nightcore', 'radio', 'reverse', 'robot', 'say', 'slow', 'smooth',
-        'tomp3', 'toptt', 'tts', 'tupai'
+        'tomp3', 'toptt', 'tts', 'tupai', 'v2t'
     ],
     'DOWNLOAD': [
         'apk', 'audio', 'capcut', 'dl', 'facebook', 'fbdl', 'gdrive',
@@ -168,7 +168,7 @@ const CATEGORIES = {
         'addcoupon', 'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'backup', 'blank', 'broadcast', 'chstatus', 'crashgrup',
         'cs', 'delafc', 'delajg', 'delcoupon', 'delcs', 'delpm', 'delprem', 'delvcontact', 'fullpp', 'gencoupon',
         'iosbug', 'leaveall', 'leftall', 'listcoupon', 'mode', 'ownadd', 'owndel', 'ownlist', 'pmlist', 'prem', 'premlist',
-        'resetmenu', 'restart', 'richhtml', 'setbotname', 'setmenupic',
+        'resetmenu', 'restart', 'richhtml', 'setbotname', 'setgroq', 'setmenupic',
         'setownername', 'setpp', 'setvcontact', 'setvmsg', 'stats', 'vcontact'
     ]
 };

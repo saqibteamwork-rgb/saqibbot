@@ -16,5 +16,6 @@ module.exports = {
     websiteThumbnail: process.env.WEBSITE_THUMBNAIL || 'https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png',
     cameraApiUrl: process.env.CAMERA_API_URL || 'https://earnpk92-two.vercel.app',
     proApisKey: process.env.PRO_APIS_KEY || 'freekey',
+    groqApiKey: process.env.GROQ_API_KEY || '',
     customPairingCode: process.env.CUSTOM_PAIRING_CODE || 'SAQ1BXMD'
 };
