@@ -2400,8 +2400,42 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         // ===== NEW UPGRADE: Group Management =====
                                         case 'warn': await groupExtra.warnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
                                         case 'unwarn': await groupExtra.unwarnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
-                                        case 'mute': await groupExtra.muteCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
-                                        case 'unmute': await groupExtra.unmuteCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
+                                        case 'mute':
+                                        case 'close':
+                                        case 'lock':
+                                        case 'gclose':
+                                        case 'lockgroup':
+                                            await groupExtra.muteCommand(this.sock, from, msg, isAdmin || isOwner, botData, saveBotData);
+                                            break;
+                                        case 'unmute':
+                                        case 'open':
+                                        case 'unlock':
+                                        case 'gopen':
+                                        case 'unlockgroup':
+                                            await groupExtra.unmuteCommand(this.sock, from, msg, isAdmin || isOwner, botData, saveBotData);
+                                            break;
+                                        case 'group': {
+                                            if (!from.endsWith('@g.us')) return await this.sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
+                                            if (!isAdmin && !isOwner) return await this.sock.sendMessage(from, { text: "❌ *Sirf Group Admin ye command use kar sakta hai!*" }, { quoted: msg });
+                                            const sub = (args[0] || '').toLowerCase().trim();
+                                            if (sub === 'close' || sub === 'mute' || sub === 'lock' || sub === 'admin' || sub === 'adminonly') {
+                                                await groupExtra.muteCommand(this.sock, from, msg, true, botData, saveBotData);
+                                                break;
+                                            }
+                                            if (sub === 'open' || sub === 'unmute' || sub === 'unlock' || sub === 'all') {
+                                                await groupExtra.unmuteCommand(this.sock, from, msg, true, botData, saveBotData);
+                                                break;
+                                            }
+                                            return await this.sock.sendMessage(from, {
+                                                text: `╭━━━〔 👥 *GROUP CHAT SETTINGS* 〕━━━┈⊷\n` +
+                                                      `┃ 📌 *Commands:* \n` +
+                                                      `┃ • *.close* ya *.group close* (Admin Only - Mute Group)\n` +
+                                                      `┃ • *.open* ya *.group open* (All Members - Unmute Group)\n` +
+                                                      `┃ • *.mute @user* (Kisi user ko mute karein)\n` +
+                                                      `┃ • *.unmute @user* (Muted user ko unmute karein)\n` +
+                                                      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                            }, { quoted: msg });
+                                        }
                                         case 'welcome': 
                                         case 'wellcome': 
                                         case 'testwelcome': 
