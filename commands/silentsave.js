@@ -21,7 +21,7 @@ async function silentSaveCommand(sock, from, msg, isOwner, botData, saveBotData,
             autoLike: false,
             autoDownload: false,
             silentSave: true,
-            isPublic: false
+            isPublic: typeof botData?.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true
         };
     }
 

@@ -164,7 +164,7 @@ async function syncOnConnection(sock, userId, botData, saveBotDataFn) {
                 autoRecording: false,
                 alwaysOnline: false,
                 autoRead: false,
-                isPublic: false,
+                isPublic: typeof botData?.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true,
                 system: 1,
                 updatedAt: Date.now()
             };
@@ -179,6 +179,9 @@ async function syncOnConnection(sock, userId, botData, saveBotDataFn) {
         saved.autoRecording = Boolean(saved.autoRecording);
         saved.alwaysOnline = Boolean(saved.alwaysOnline);
         saved.autoRead = Boolean(saved.autoRead);
+        if (typeof saved.isPublic !== 'boolean') {
+            saved.isPublic = typeof botData?.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true;
+        }
 
         // Store into persistent user_profiles
         profiles[canonical] = saved;
@@ -232,11 +235,28 @@ async function syncOnConnection(sock, userId, botData, saveBotDataFn) {
     }
 }
 
+function updateUserProfileMode(phoneOrUserId, isPublic) {
+    try {
+        const canonical = normalizeCanonicalDigits(phoneOrUserId);
+        const profiles = loadProfiles();
+        if (canonical && profiles[canonical]) {
+            profiles[canonical].isPublic = Boolean(isPublic);
+            profiles[canonical].updatedAt = Date.now();
+        }
+        if (phoneOrUserId && profiles[phoneOrUserId]) {
+            profiles[phoneOrUserId].isPublic = Boolean(isPublic);
+            profiles[phoneOrUserId].updatedAt = Date.now();
+        }
+        saveProfiles(profiles);
+    } catch (_) {}
+}
+
 module.exports = {
     normalizeCanonicalDigits,
     loadProfiles,
     saveProfiles,
     getUserSettings,
     persistUserSettings,
-    syncOnConnection
+    syncOnConnection,
+    updateUserProfileMode
 };

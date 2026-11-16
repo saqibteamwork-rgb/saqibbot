@@ -419,7 +419,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     const effectiveBotName = profile.botName;
     const effectiveOwnerName = profile.ownerName;
     const customName = (botData?.userNames && botData.userNames[userId]) || msg.pushName || 'User';
-    const isPublic = session?.isPublic ?? false;
+    const isPublic = session?.isPublic ?? (typeof botData?.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true);
 
     // Fast Runtime calculation
     const uptimeSec = Math.floor((Date.now() - (BOT_START_TIME || Date.now())) / 1000);

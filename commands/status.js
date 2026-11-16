@@ -98,7 +98,7 @@ function ensureStatusSettings(botData, userId, sock = null) {
             alwaysOnline: false,
             autoRead: false,
             system: 1,
-            isPublic: false
+            isPublic: typeof botData?.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true
         };
     }
 

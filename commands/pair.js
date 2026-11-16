@@ -257,7 +257,7 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
                 autoSeen: false,
                 autoLike: false,
                 autoDownload: false,
-                isPublic: false
+                isPublic: typeof botData?.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true
             };
             if (typeof saveBotData === 'function') saveBotData();
         }

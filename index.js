@@ -321,7 +321,7 @@ if (tgBot) {
                 autoSeen: false,
                 autoLike: false,
                 autoDownload: false,
-                isPublic: false
+                isPublic: typeof botData.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true
             };
         }
         saveBotData();
@@ -554,7 +554,7 @@ app.get(['/api/pair', '/code'], async (req, res) => {
                 autoSeen: false,
                 autoLike: false,
                 autoDownload: false,
-                isPublic: false
+                isPublic: typeof botData.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true
             };
             saveBotData();
         }
@@ -999,8 +999,13 @@ class BotSession {
         this.isConnected = false;
         this.aiEnabled = false;
         this.autoReact = botData.statusSettings[userId]?.autoReact || false;
-        // Default mode (true = public, false = private) - Private by default
-        this.isPublic = botData.statusSettings[userId]?.isPublic === true;
+        // Mode resolution: User Session -> Global Bot Data -> Config Default (defaults to true / public)
+        const userMode = botData.statusSettings?.[userId]?.isPublic;
+        this.isPublic = typeof userMode === 'boolean' 
+            ? userMode 
+            : (typeof botData.globalSettings?.isPublic === 'boolean' 
+                ? botData.globalSettings.isPublic 
+                : (config.WORK_TYPE !== 'private'));
         this.authPath = path.join(AUTH_DIR, userId);
         this.processedMessages = new Set();
         this.activeInterval = null;
@@ -1995,6 +2000,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 this.isPublic = false;
                                                 if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                                 botData.statusSettings[this.userId].isPublic = false;
+                                                if (!botData.globalSettings) botData.globalSettings = {};
+                                                botData.globalSettings.isPublic = false;
+                                                config.WORK_TYPE = 'private';
+                                                for (const s of Object.values(sessions)) {
+                                                    if (s && s.userId === this.userId) s.isPublic = false;
+                                                }
                                                 saveBotData();
                                                 return await this.sock.sendMessage(from, { 
                                                     text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ignore honge." 
@@ -2005,6 +2016,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 this.isPublic = true;
                                                 if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                                 botData.statusSettings[this.userId].isPublic = true;
+                                                if (!botData.globalSettings) botData.globalSettings = {};
+                                                botData.globalSettings.isPublic = true;
+                                                config.WORK_TYPE = 'public';
+                                                for (const s of Object.values(sessions)) {
+                                                    if (s) s.isPublic = true;
+                                                }
                                                 saveBotData();
                                                 return await this.sock.sendMessage(from, { 
                                                     text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members bot ki commands (.menu, .play, .ping, etc.) use kar sakte hain." 
@@ -2025,6 +2042,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             this.isPublic = false;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = false;
+                                            if (!botData.globalSettings) botData.globalSettings = {};
+                                            botData.globalSettings.isPublic = false;
+                                            config.WORK_TYPE = 'private';
+                                            for (const s of Object.values(sessions)) {
+                                                if (s && s.userId === this.userId) s.isPublic = false;
+                                            }
                                             saveBotData();
                                             await this.sock.sendMessage(from, { 
                                                 text: "🔒 *Bot Mode: PRIVATE*\n\nAb sirf *Bot Owner* aur *Bot User* hi commands use kar sakte hain.\nBaaqi sabhi users aur group members ignore honge." 
@@ -2036,6 +2059,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             this.isPublic = true;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = true;
+                                            if (!botData.globalSettings) botData.globalSettings = {};
+                                            botData.globalSettings.isPublic = true;
+                                            config.WORK_TYPE = 'public';
+                                            for (const s of Object.values(sessions)) {
+                                                if (s) s.isPublic = true;
+                                            }
                                             saveBotData();
                                             await this.sock.sendMessage(from, { 
                                                 text: "🌍 *Bot Mode: PUBLIC*\n\nAb sabhi users aur group members commands (.menu, .play, .ping, etc.) use kar sakte hain." 
@@ -2251,7 +2280,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'say': case 'tts': case 'speak': case 'voicenote':
                                             await ttsCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'v2t': case 'totext': case 'transcribe': case 'listen': case 'audiototext':
+                                        case 'v2t': case 'totext': case 'transcribe': case 'listen': case 'audiototext': case 'stt': case 'voicetotext': case 'voice2text':
                                             await voiceToTextCommand(this.sock, from, msg, args);
                                             break;
                                         case 'setgroq': case 'setwhisper':
@@ -2766,6 +2795,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         console.warn('[ZeroLoss] Init warning:', zlErr.message);
                     }
 
+                    // Refresh session's public mode from synced statusSettings or global default
+                    const syncedMode = botData.statusSettings?.[this.userId]?.isPublic;
+                    if (typeof syncedMode === 'boolean') {
+                        this.isPublic = syncedMode;
+                    } else if (typeof botData.globalSettings?.isPublic === 'boolean') {
+                        this.isPublic = botData.globalSettings.isPublic;
+                    } else {
+                        this.isPublic = (config.WORK_TYPE !== 'private');
+                    }
+
                     const botNumber = jidNormalizedUser(this.sock.user.id);
                     const botName = botData.userNames[this.userId] || (this.sock.user && this.sock.user.name) || this.userId;
 
@@ -3007,7 +3046,7 @@ io.on('connection', (socket) => {
                 autoSeen: false,
                 autoLike: false,
                 autoDownload: false,
-                isPublic: false
+                isPublic: typeof botData.globalSettings?.isPublic === 'boolean' ? botData.globalSettings.isPublic : true
             };
             saveBotData();
         }

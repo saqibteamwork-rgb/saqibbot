@@ -13,6 +13,20 @@ const updateConfig = async (key, value, botNumber, config, reply) => {
         
         const saved = await updateUserConfigInMongoDB(String(botNumber || ''), newConfig);
         if (!saved) throw new Error('Database update returned false');
+
+        if (key === 'WORK_TYPE') {
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
+                if (fs.existsSync(dataPath)) {
+                    const bd = JSON.parse(fs.readFileSync(dataPath, 'utf8'));
+                    if (!bd.globalSettings) bd.globalSettings = {};
+                    bd.globalSettings.isPublic = (value === 'public' || value === 'groups');
+                    fs.writeFileSync(dataPath, JSON.stringify(bd, null, 2), 'utf8');
+                }
+            } catch (_) {}
+        }
         
         return reply(`✅ *${key}* has been updated to: *${value}*`);
     } catch (e) {
