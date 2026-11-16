@@ -1619,10 +1619,10 @@
                 }
               });
             } catch (e) {}
-          } else if (data && data.isConnected) {
+          } else if (data && (data.isConnected || data.status === 'already_connected')) {
             onConnectedSuccess(number, usedNode.short);
           } else {
-            throw new Error(data?.error || 'Failed to generate code');
+            throw new Error(data?.message || data?.error || 'Failed to generate code');
           }
         } catch (err) {
           addLog(`❌ Error: ${err.message}`, 'error');

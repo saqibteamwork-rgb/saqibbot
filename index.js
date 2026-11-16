@@ -473,17 +473,76 @@ app.get('/api/clean-disk', (req, res) => {
     return res.json({ success: true, message: `Successfully cleaned ${count} junk items from volume/disk!` });
 });
 
-// REST API for direct pairing code generation
-app.get('/api/pair', async (req, res) => {
-    try {
-        const rawNumber = (req.query.number || '').toString().trim();
-        const number = rawNumber.replace(/[^0-9]/g, '');
+const pairCodeCooldown = new Map();
+const pairLockMap = new Map();
 
-        if (!number || number.length < 10) {
-            return res.status(400).json({ success: false, error: 'Valid phone number with country code is required (e.g. 923001234567)' });
+function normalizePairNumber(raw) {
+    if (!raw) return '';
+    let n = String(raw).replace(/[^0-9]/g, '');
+    if (n.startsWith('00')) n = n.slice(2);
+    else if (n.startsWith('+')) n = n.slice(1);
+    else if (n.startsWith('0')) n = '92' + n.slice(1);
+    else if (n.startsWith('3') && n.length === 10) n = '92' + n;
+    return n;
+}
+
+function buildCustomPairCode(prefix = 'SAQ1') {
+    const RANDOM = '123456789ABCDEFGHJKLMNPQRSTVWXYZ';
+    const p = String(prefix || 'SAQ1').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    let code = p;
+    while (code.length < 8) {
+        code += RANDOM[Math.floor(Math.random() * RANDOM.length)];
+    }
+    return code;
+}
+
+// REST API for direct pairing code generation (Supports both /api/pair and /code)
+app.get(['/api/pair', '/code'], async (req, res) => {
+    try {
+        const rawNumber = (req.query.number || req.query.phone || req.query.num || '').toString().trim();
+        const number = normalizePairNumber(rawNumber);
+
+        if (!number || number.length < 10 || number.length > 15) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Valid phone number with country code is required (e.g. 923001234567)',
+                message: 'Country code ke saath sahi number enter karein (e.g. 923001234567)'
+            });
         }
 
         console.log(`\n[API] Pairing code requested for: ${number}`);
+
+        // Check if already active & connected
+        if (sessions[number]?.isConnected) {
+            return res.json({ 
+                success: true, 
+                status: 'already_connected',
+                message: 'Number is already connected!', 
+                isConnected: true 
+            });
+        }
+
+        // Debounce / Cooldown protection (20s)
+        const lastAsk = pairCodeCooldown.get(number) || 0;
+        if (Date.now() - lastAsk < 20000 && sessions[number]?.pairingCode) {
+            return res.json({
+                success: true,
+                code: sessions[number].pairingCode,
+                status: 'new_pairing',
+                message: 'Existing pairing code returned'
+            });
+        }
+
+        // Connection lock to prevent concurrent double-clicks wiping credentials
+        if (pairLockMap.get(number)) {
+            return res.json({ 
+                success: true, 
+                status: 'connection_in_progress', 
+                message: 'Pairing already in progress. Please wait a moment...' 
+            });
+        }
+        pairLockMap.set(number, true);
+        pairCodeCooldown.set(number, Date.now());
 
         if (!sessions[number]) {
             sessions[number] = new BotSession(number);
@@ -501,9 +560,6 @@ app.get('/api/pair', async (req, res) => {
         }
 
         const session = sessions[number];
-        if (session.isConnected) {
-            return res.json({ success: true, message: 'Already connected!', isConnected: true });
-        }
 
         if (session.sock) {
             try { session.sock.end(); } catch (e) {}
@@ -513,11 +569,34 @@ app.get('/api/pair', async (req, res) => {
         try { await fs.remove(session.authPath); } catch (e) {}
 
         const customCode = req.query.code || req.query.custom || null;
-        const code = await session.initialize(number, customCode);
-        return res.json({ success: true, code: code || session.pairingCode });
+        try {
+            const code = await session.initialize(number, customCode);
+            pairLockMap.delete(number);
+            const finalCode = code || session.pairingCode;
+            if (!finalCode) {
+                return res.status(500).json({ 
+                    success: false, 
+                    error: 'Pairing code generation failed',
+                    message: 'WhatsApp ne pairing code nahi bheja. Dobara koshish karein.' 
+                });
+            }
+            return res.json({ 
+                success: true, 
+                code: finalCode,
+                status: 'new_pairing',
+                message: 'Pairing code generated successfully'
+            });
+        } catch (initErr) {
+            pairLockMap.delete(number);
+            throw initErr;
+        }
     } catch (e) {
         console.error('[API Error]', e.message);
-        return res.status(500).json({ success: false, error: e.message });
+        return res.status(500).json({ 
+            success: false, 
+            error: e.message,
+            message: 'Pairing failed: ' + (e.message || 'Unknown error')
+        });
     }
 });
 
@@ -1092,71 +1171,88 @@ class BotSession {
             this.bindSocketEvents(saveCreds);
 
             if (pairingNumber) {
-                await delay(2500);
+                pairingNumber = normalizePairNumber(pairingNumber);
                 try {
-                    const customPairingCode = (
+                    let code = null;
+                    let lastErr = null;
+                    const customPrefix = (
                         customCodeOverride ||
                         botData?.customPairingCode ||
                         process.env.CUSTOM_PAIRING_CODE ||
                         config.customPairingCode ||
-                        'SAQ1BXMD'
-                    ).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+                        'SAQ1'
+                    );
 
-                    let code;
-                    try {
-                        if (customPairingCode && customPairingCode.length === 8) {
-                            code = await this.sock.requestPairingCode(pairingNumber, customPairingCode);
-                        } else {
-                            code = await this.sock.requestPairingCode(pairingNumber);
+                    for (let attempt = 1; attempt <= 3 && !code; attempt++) {
+                        try {
+                            await delay(attempt === 1 ? 2000 : 3000);
+                            let customPairingCode = customPrefix.length === 8 
+                                ? customPrefix.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                                : buildCustomPairCode(customPrefix);
+
+                            try {
+                                code = await this.sock.requestPairingCode(pairingNumber, customPairingCode);
+                            } catch (customErr) {
+                                this.sendLog(`⚠️ Custom pairing code (${customPairingCode}) attempt ${attempt}/3 failed: ${customErr.message}. Retrying with auto code...`, 'warn');
+                                code = await this.sock.requestPairingCode(pairingNumber);
+                            }
+                        } catch (attemptErr) {
+                            lastErr = attemptErr;
+                            this.sendLog(`⚠️ Pairing code attempt ${attempt}/3 failed: ${attemptErr.message}`, 'warn');
                         }
-                    } catch (customErr) {
-                        this.sendLog(`⚠️ Custom pairing code (${customPairingCode}) failed: ${customErr.message}. Retrying with auto code...`, 'warn');
-                        code = await this.sock.requestPairingCode(pairingNumber);
                     }
+
+                    if (!code) {
+                        throw lastErr || new Error('Pairing code not received from WhatsApp servers');
+                    }
+
                     code = code?.match(/.{1,4}/g)?.join("-") || code;
                     this.pairingCode = code;
                     this.isInitializing = false;
                     this.sendLog("🔑 Pairing Code Generated: " + code, 'success');
 
-                        // Send to Telegram if chat ID exists and telegram bot is enabled
-                        if (this.tgChatId && tgBot) {
-                            const pairingMsg = tgBox("PAIRING CODE", [
-                                "  Code    : " + code,
-                                "",
-                                "  Enter this code in WhatsApp",
-                                "  Linked Devices menu.",
-                                "  Expires in 60 seconds."
-                            ]);
-                            await tgBot.sendMessage(this.tgChatId, pairingMsg, { parse_mode: 'Markdown' });
-                        }
-
-                        const socketId = userSockets[this.userId];
-                        if (socketId) io.to(socketId).emit('pairing-code', code);
-                        io.emit('pairing-code-' + this.userId, code);
-                        return code;
-                    } catch (err) {
-                        this.isInitializing = false;
-                        this.sendLog("❌ Pairing error: " + err.message, 'error');
-                        if (this.tgChatId && tgBot) {
-                            await tgBot.sendMessage(this.tgChatId,
-                                tgBox("PAIRING ERROR", [
-                                    "  Error   : " + err.message,
-                                    "",
-                                    "  Please try again with a",
-                                    "  valid WhatsApp number."
-                                ]),
-                                { parse_mode: 'Markdown' }
-                            );
-                        }
-                        throw err;
+                    // Send to Telegram if chat ID exists and telegram bot is enabled
+                    if (this.tgChatId && tgBot) {
+                        const pairingMsg = tgBox("PAIRING CODE", [
+                            "  Code    : " + code,
+                            "",
+                            "  Enter this code in WhatsApp",
+                            "  Linked Devices menu.",
+                            "  Expires in 60 seconds."
+                        ]);
+                        await tgBot.sendMessage(this.tgChatId, pairingMsg, { parse_mode: 'Markdown' });
                     }
+
+                    const socketId = userSockets[this.userId];
+                    if (socketId) io.to(socketId).emit('pairing-code', code);
+                    io.emit('pairing-code-' + this.userId, code);
+                    return code;
+                } catch (err) {
+                    this.isInitializing = false;
+                    this.sendLog("❌ Pairing error: " + err.message, 'error');
+                    if (this.tgChatId && tgBot) {
+                        await tgBot.sendMessage(this.tgChatId,
+                            tgBox("PAIRING ERROR", [
+                                "  Error   : " + err.message,
+                                "",
+                                "  Please try again with a",
+                                "  valid WhatsApp number."
+                            ]),
+                            { parse_mode: 'Markdown' }
+                        );
+                    }
+                    throw err;
                 }
+            }
 
             if (this.pairingCode) return this.pairingCode;
         } catch (err) {
             this.isInitializing = false;
-            this.sendLog("❌ Initialization failed: " + err.message + ". Retrying in 10s...", 'error');
-            setTimeout(() => this.initialize(), 10000);
+            this.sendLog("❌ Initialization failed: " + err.message + (pairingNumber ? '' : '. Retrying in 10s...'), 'error');
+            if (!pairingNumber) {
+                setTimeout(() => this.initialize(), 10000);
+            }
+            throw err;
         }
     }
 

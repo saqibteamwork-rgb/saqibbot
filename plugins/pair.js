@@ -5,23 +5,26 @@
 const { cmd } = require('../arslan');
 const axios = require('axios');
 
-// Pairing code apne hi server (/code route) se aata hai.
-// Alag server use karna ho to env me PAIR_API set karo, e.g. https://mybot.up.railway.app
+// Pairing code apne hi server (/code ya /api/pair route) se aata hai.
 async function fetchPairCode(number) {
     const base = (process.env.PAIR_API || `http://127.0.0.1:${process.env.PORT || 8000}`).replace(/\/+$/, '');
     try {
         return await axios.get(`${base}/code`, { params: { number }, timeout: 45000 });
     } catch (e) {
-        const msg = e.response && e.response.data && (e.response.data.message || e.response.data.error);
-        const err = new Error(msg || e.message);
-        err.userMessage = msg || null;
-        throw err;
+        try {
+            return await axios.get(`${base}/api/pair`, { params: { number }, timeout: 45000 });
+        } catch (e2) {
+            const msg = e2.response?.data?.message || e.response?.data?.message || e.message;
+            const err = new Error(msg);
+            err.userMessage = msg;
+            throw err;
+        }
     }
 }
 
 function pairText(code) {
     return [
-        '*AMAN-MD PAIRING*',
+        '*MR SAQIB MD PAIRING*',
         '',
         `🔐 *CODE:* ${code}`,
         '',
@@ -42,7 +45,7 @@ async function sendPairCard(conn, jid, quoted, code) {
         const interactive = IM.create({
             header: IM.Header.fromObject({ title: '', subtitle: '', hasMediaAttachment: false }),
             body: IM.Body.create({ text: pairText(code) }),
-            footer: IM.Footer.create({ text: 'POWERED BY AMAN-MD' }),
+            footer: IM.Footer.create({ text: 'POWERED BY MR SAQIB MD' }),
             nativeFlowMessage: IM.NativeFlowMessage.fromObject({
                 buttons: [{ name: 'cta_copy', buttonParamsJson: JSON.stringify({ display_text: '📋 Copy Code', id: 'copy_pair_code', copy_code: code }) }]
             })
@@ -60,9 +63,9 @@ async function sendPairCard(conn, jid, quoted, code) {
 
 cmd({
     pattern: 'pair',
-    alias: ['pairing', 'getpair'],
+    alias: ['pairing', 'getpair', 'clonebot'],
     react: '✅',
-    desc: 'Get pairing code for AMAN-MD bot',
+    desc: 'Get pairing code for MR SAQIB MD bot',
     category: 'download',
     use: '.pair 92323***',
     filename: __filename
