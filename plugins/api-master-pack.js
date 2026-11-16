@@ -20,10 +20,11 @@ cmd({
 }, async (conn, mek, m, ctx) => {
     const query = (ctx.q || 'anime').trim();
     try {
-        const r = await axios.get(`https://api.waifu.pics/sfw/waifu`, { timeout: 10000 });
-        if (r.data?.url) {
+        const r = await axios.get(`https://nekos.best/api/v2/waifu`, { timeout: 10000 });
+        const imgUrl = r.data?.results?.[0]?.url || r.data?.url;
+        if (imgUrl) {
             await conn.sendMessage(ctx.from, {
-                image: { url: r.data.url },
+                image: { url: imgUrl },
                 caption: `🎌 *Anime Wallpaper*\n🔍 ${query}`
             }, { quoted: mek });
         }

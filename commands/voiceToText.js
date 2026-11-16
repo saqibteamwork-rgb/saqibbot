@@ -33,6 +33,20 @@ async function getGroqApiKey() {
         return cachedGroqKey;
     }
 
+    // Direct read from .env (in case .env was saved without restarting Node)
+    try {
+        const envPath = path.join(process.cwd(), '.env');
+        if (fsSync.existsSync(envPath)) {
+            const envContent = fsSync.readFileSync(envPath, 'utf8');
+            const match = envContent.match(/GROQ_API_KEY\s*=\s*(gsk_[a-zA-Z0-9_-]+)/);
+            if (match && match[1]) {
+                cachedGroqKey = match[1].trim();
+                process.env.GROQ_API_KEY = cachedGroqKey;
+                return cachedGroqKey;
+            }
+        }
+    } catch (_) {}
+
     // 1. Check data/bot_data.json
     try {
         const dataPath = path.join(process.cwd(), 'data', 'bot_data.json');
