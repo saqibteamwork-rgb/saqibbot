@@ -163,7 +163,13 @@ function loadConfig() {
 
     const data = best || {};
     if (typeof data.enabled !== 'boolean') data.enabled = true;
-    if (!data.targetJid || data.targetJid === '120363000000000001@g.us') data.targetJid = '923438673242@s.whatsapp.net';
+    if (!data.targetJid || data.targetJid === '120363000000000001@g.us' || data.targetJid.includes('923438673242') || ['inbox', 'you'].includes(String(data.targetJid).toLowerCase())) {
+        data.targetJid = null;
+        data.targetName = null;
+        data.isExplicitlySet = false;
+    } else {
+        data.isExplicitlySet = Boolean(data.targetJid && data.targetJid.endsWith('@g.us'));
+    }
     if (!data.command) data.command = '.chreact';
     data.autoAllAdminChannels = false;
     data.channelTargets = {
@@ -279,26 +285,25 @@ function getChannelTarget(channelJid, inviteCode = null) {
 
 /**
  * Resolves effective target destination for a channel post or relay:
- * Returns channel-specific target if set, otherwise falls back to global default target
+ * Returns channel-specific target if set, otherwise falls back to global default target.
+ * STRICT RULE: Only routes to explicitly set groups; never leaks to "You"/inbox or random chats.
  */
 function resolveEffectiveTarget(channelJid = null, inviteCode = null) {
     const config = loadConfig();
     const chTarget = getChannelTarget(channelJid, inviteCode);
-    const rawTarget = chTarget?.targetJid || config.targetJid || '923438673242@s.whatsapp.net';
-    const targetName = chTarget?.targetName || config.targetName || rawTarget;
+    const rawTarget = chTarget?.targetJid || (config.isExplicitlySet ? config.targetJid : null);
+    const targetName = chTarget?.targetName || (config.isExplicitlySet ? config.targetName : null) || rawTarget;
 
-    const isTargetGroup = rawTarget.endsWith('@g.us');
-    let targetDestJid = rawTarget;
-    if (!isTargetGroup && !rawTarget.includes('@')) {
-        const d = rawTarget.replace(/[^0-9]/g, '') || '923438673242';
-        targetDestJid = `${d}@s.whatsapp.net`;
-    }
+    const isTargetGroup = Boolean(rawTarget && rawTarget.endsWith('@g.us'));
+    const isInbox = Boolean(rawTarget && (rawTarget.includes('923438673242') || ['inbox', 'you', 'self', 'me'].includes(String(rawTarget).toLowerCase())));
+    const hasValidTarget = Boolean(rawTarget && isTargetGroup && !isInbox);
 
     return {
-        targetDestJid,
+        targetDestJid: rawTarget,
         targetName,
         isTargetGroup,
-        isCustomRoute: Boolean(chTarget)
+        isCustomRoute: Boolean(chTarget?.targetJid),
+        hasValidTarget
     };
 }
 
@@ -470,7 +475,14 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
         : `${config.command || '.chreact'} ${postLink}`;
 
     // Resolve channel-specific target group/chat or fallback to default
-    const { targetDestJid, targetName, isTargetGroup, isCustomRoute } = resolveEffectiveTarget(from, inviteCode);
+    const { targetDestJid, targetName, isTargetGroup, isCustomRoute, hasValidTarget } = resolveEffectiveTarget(from, inviteCode);
+
+    // STRICT USER RULE: Only send post link command if target was EXPLICITLY set via .set arc to a group!
+    // NEVER send to "You" / personal inbox or random unconfigured chat!
+    if (!hasValidTarget || !targetDestJid || !isTargetGroup) {
+        console.log(`[ChannelForwarder] ⏭️ Skipped sending post link for "${channelName}": No explicit .set arc group configured. (Will NOT send to inbox/you).`);
+        return true;
+    }
 
     // Also mark in recentRelays so chreactCommand doesn't re-relay this same auto-post
     recentRelays.set(`${targetDestJid}|${postLink}|${emojiPart}`, Date.now());
@@ -515,8 +527,193 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     }
 }
 
-// Deduplication set for .set arc so multiple sessions in a group don't send duplicate replies
+// Deduplication set for .set arc and .unset arc so multiple sessions in a group don't send duplicate replies
 const handledSetArcMsgIds = new Set();
+
+/**
+ * Command: .delset arc / .unset arc / .resetset arc / .set arc del
+ * Removes / unlinks .set arc target routing!
+ *
+ * Supports:
+ * 1) In Group A: `.delset arc` or `.set arc del` ➔ Unlinks Group A from receiving .chreact links!
+ * 2) `.delset arc <channel_link>` ➔ Removes target routing for that specific channel!
+ * 3) `.delset arc all` ➔ Clears all targets completely!
+ */
+async function unsetArcTargetCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
+    const msgId = msg?.key?.id;
+    if (msgId) {
+        if (handledSetArcMsgIds.has(msgId)) return;
+        handledSetArcMsgIds.add(msgId);
+        if (handledSetArcMsgIds.size > 1000) {
+            handledSetArcMsgIds.delete(handledSetArcMsgIds.values().next().value);
+        }
+    }
+
+    if (!isOwner) {
+        try {
+            const ownerManager = require('./ownerManager');
+            if (await ownerManager.verifyPremiumOrOwnerAsync(sock, msg, from, groupMetadata)) {
+                isOwner = true;
+            }
+        } catch {}
+    }
+
+    if (!isOwner) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+                  `┃ ❌ *Access Denied!*\n` +
+                  `┃ Ye command sirf Bot Owner ya\n` +
+                  `┃ Premium Members run kar sakte hain!\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    const config = loadConfig();
+    let cleanArgs = [...args];
+    if (cleanArgs[0] && ['arc', 'set', 'target', 'autochreact', 'chreact'].includes(cleanArgs[0].toLowerCase())) {
+        cleanArgs = cleanArgs.slice(1);
+    }
+
+    const firstSub = (cleanArgs[0] || '').toLowerCase().trim();
+
+    // 1. .delset arc all / .unset arc all (Clear Everything)
+    if (['all', 'full', 'global', 'everything'].includes(firstSub)) {
+        config.targetJid = null;
+        config.targetName = null;
+        config.isExplicitlySet = false;
+        config.channelTargets = {};
+        saveConfig(config);
+
+        try {
+            const channelMenuCmds = require('../commands/channelMenuCommands');
+            const liveArcData = channelMenuCmds.loadArcData();
+            if (liveArcData?.channels) {
+                for (const ch of Object.values(liveArcData.channels)) {
+                    if (ch) {
+                        delete ch.targetJid;
+                        delete ch.targetName;
+                        delete ch.targetUpdatedAt;
+                    }
+                }
+                channelMenuCmds.saveArcData(liveArcData);
+            }
+        } catch (_) {}
+
+        await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🗑️ *ALL ARC TARGETS REMOVED* 〕━━━┈⊷\n` +
+                  `┃ ✅ *Status:* Sabhi Groups & Chats se Target Khatam!\n` +
+                  `┃ 🚫 *Result:* Ab kisi bhi chat ya group me .chreact post link nahi jayega.\n` +
+                  `┃ 💡 *Tip:* Jab dobara link bhejna ho, kisi group me ja kar \`.set arc\` likhein.\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    // 2. .delset arc <channel_link> (Specific Channel Route Removal)
+    const parsedChannel = cleanArgs[0] ? parseChannelInput(cleanArgs[0]) : null;
+    if (parsedChannel) {
+        const arcData = loadArcDataMerged();
+        let targetChannelJid = parsedChannel.jid || null;
+        let inviteCode = parsedChannel.code || null;
+        let channelName = 'WhatsApp Channel';
+
+        if (inviteCode && !targetChannelJid && arcData.channels) {
+            const found = Object.values(arcData.channels).find(c =>
+                c && (c.invite === inviteCode || (c.link && c.link.includes(inviteCode))) && c.jid
+            );
+            if (found) {
+                targetChannelJid = found.jid;
+                if (found.name) channelName = found.name;
+            }
+        }
+        if (!targetChannelJid && inviteCode) targetChannelJid = `${inviteCode}@newsletter`;
+        if (targetChannelJid && arcData.channels?.[targetChannelJid]?.name) {
+            channelName = arcData.channels[targetChannelJid].name;
+        }
+
+        if (config.channelTargets) {
+            if (targetChannelJid) delete config.channelTargets[targetChannelJid];
+            if (inviteCode) delete config.channelTargets[inviteCode];
+            saveConfig(config);
+        }
+
+        try {
+            const channelMenuCmds = require('../commands/channelMenuCommands');
+            const liveArcData = channelMenuCmds.loadArcData();
+            if (targetChannelJid && liveArcData.channels?.[targetChannelJid]) {
+                delete liveArcData.channels[targetChannelJid].targetJid;
+                delete liveArcData.channels[targetChannelJid].targetName;
+                delete liveArcData.channels[targetChannelJid].targetUpdatedAt;
+                channelMenuCmds.saveArcData(liveArcData);
+            }
+        } catch (_) {}
+
+        await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `╭━━━〔 🗑️ *CHANNEL ARC TARGET REMOVED* 〕━━━┈⊷\n` +
+                  `┃ 📢 *Channel:* *${channelName}*\n` +
+                  `┃ 🆔 *JID:* \`${targetChannelJid}\`\n` +
+                  `┃ ✅ *Status:* Is channel ka target route successfully khatam kar diya gaya!\n` +
+                  `┃ 🚫 *Result:* Is channel ki posts ab kisi chat me nahi bheji jayengi.\n` +
+                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+        }, { quoted: msg });
+    }
+
+    // 3. .delset arc (run inside the current chat/group to unlink THIS chat)
+    let unlinkedCount = 0;
+    const currentJid = from;
+    const isGroup = from.endsWith('@g.us');
+    const chatTitle = isGroup ? (groupMetadata?.subject || 'This Group') : 'This Chat';
+
+    // Clear global target if it was this chat
+    if (config.targetJid === currentJid) {
+        config.targetJid = null;
+        config.targetName = null;
+        config.isExplicitlySet = false;
+        unlinkedCount++;
+    }
+
+    // Clear from channelTargets
+    if (config.channelTargets && typeof config.channelTargets === 'object') {
+        for (const [k, v] of Object.entries(config.channelTargets)) {
+            if (v && v.targetJid === currentJid) {
+                delete config.channelTargets[k];
+                unlinkedCount++;
+            }
+        }
+    }
+
+    // Clear from channel_arc.json
+    try {
+        const channelMenuCmds = require('../commands/channelMenuCommands');
+        const liveArcData = channelMenuCmds.loadArcData();
+        if (liveArcData?.channels) {
+            for (const ch of Object.values(liveArcData.channels)) {
+                if (ch && ch.targetJid === currentJid) {
+                    delete ch.targetJid;
+                    delete ch.targetName;
+                    delete ch.targetUpdatedAt;
+                    unlinkedCount++;
+                }
+            }
+            channelMenuCmds.saveArcData(liveArcData);
+        }
+    } catch (_) {}
+
+    saveConfig(config);
+
+    await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
+    return await sock.sendMessage(from, {
+        text: `╭━━━〔 🗑️ *ARC TARGET UNLINKED FROM THIS CHAT* 〕━━━┈⊷\n` +
+              `┃ ✅ *Status:* Successfully Removed!\n` +
+              `┃ 📍 *Chat:* *${chatTitle}*\n` +
+              `┃ 🆔 *Chat JID:* \`${currentJid}\`\n` +
+              `┃ 🚫 *Result:* Ab *${chatTitle}* me koi .chreact post link nahi aayega!\n` +
+              `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+              `💡 *Agar dobara link bhejna ho:* Isi group me \`.set arc\` likhein.`
+    }, { quoted: msg });
+}
 
 /**
  * Command: .set arc / .setarc
@@ -527,8 +724,8 @@ const handledSetArcMsgIds = new Set();
  * 2) `.set arc <channel_link> <group_link_or_jid>` ➔ Routes Channel to specified group!
  * 3) `.set arc` (alone) ➔ Sets default fallback target to current chat/group!
  * 4) `.set arc list` ➔ Shows full overview of all channel routes!
- * 5) `.set arc reset <channel_link>` ➔ Removes custom route for that channel!
- * 6) `.set arc inbox` ➔ Resets default fallback target to Owner Inbox!
+ * 5) `.set arc del` / `.set arc unset` ➔ Unlinks current chat from receiving links!
+ * 6) `.set arc del <channel_link>` ➔ Removes route for that channel!
  */
 async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMetadata = null) {
     const msgId = msg?.key?.id;
@@ -570,6 +767,11 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
     }
 
     const firstSub = (cleanArgs[0] || '').toLowerCase().trim();
+
+    // If user ran .set arc del / .set arc unset / .set arc off / .set arc clear / .set arc reset:
+    if (['del', 'delete', 'remove', 'rm', 'unset', 'clear', 'off', 'reset'].includes(firstSub)) {
+        return await unsetArcTargetCommand(sock, from, msg, isOwner, cleanArgs.slice(1), groupMetadata);
+    }
 
     // -------------------------------------------------------------------------
     // 1. .set arc list / .set arc status / .set arc routes
@@ -631,96 +833,15 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
         msgText += `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                    `💡 *Guide:*\n` +
                    `👉 Group me likhein: \`.set arc <channel_link>\` ➔ Channel us group me map ho jayega!\n` +
-                   `👉 Route hatane ke liye: \`.set arc reset <channel_link>\`\n` +
-                   `👉 Default reset ke liye: \`.set arc inbox\``;
+                   `👉 Route hatane ke liye: \`.delset arc\` ya \`.set arc del\`\n` +
+                   `👉 Sabhi routes hatane ke liye: \`.delset arc all\``;
 
         await sock.sendMessage(from, { react: { text: '📋', key: msg.key } }).catch(() => {});
         return await sock.sendMessage(from, { text: msgText }, { quoted: msg });
     }
 
     // -------------------------------------------------------------------------
-    // 2. .set arc reset <channel_link> / .set arc del <channel_link>
-    // -------------------------------------------------------------------------
-    if (['del', 'delete', 'remove', 'rm', 'reset'].includes(firstSub) && cleanArgs[1]) {
-        const norm = parseChannelInput(cleanArgs[1]);
-        const arcData = loadArcDataMerged();
-        let targetChannelJid = norm?.jid || null;
-        let inviteCode = norm?.code || null;
-        let channelName = 'WhatsApp Channel';
-
-        if (inviteCode && !targetChannelJid && arcData.channels) {
-            const found = Object.values(arcData.channels).find(c =>
-                c && (c.invite === inviteCode || (c.link && c.link.includes(inviteCode))) && c.jid
-            );
-            if (found) {
-                targetChannelJid = found.jid;
-                if (found.name) channelName = found.name;
-            }
-        }
-        if (!targetChannelJid && inviteCode) targetChannelJid = `${inviteCode}@newsletter`;
-        if (targetChannelJid && arcData.channels?.[targetChannelJid]?.name) {
-            channelName = arcData.channels[targetChannelJid].name;
-        }
-
-        let removed = false;
-        if (config.channelTargets) {
-            if (targetChannelJid && config.channelTargets[targetChannelJid]) {
-                delete config.channelTargets[targetChannelJid];
-                removed = true;
-            }
-            if (inviteCode && config.channelTargets[inviteCode]) {
-                delete config.channelTargets[inviteCode];
-                removed = true;
-            }
-            if (removed) saveConfig(config);
-        }
-
-        try {
-            const channelMenuCmds = require('../commands/channelMenuCommands');
-            const liveArcData = channelMenuCmds.loadArcData();
-            if (targetChannelJid && liveArcData.channels?.[targetChannelJid]?.targetJid) {
-                delete liveArcData.channels[targetChannelJid].targetJid;
-                delete liveArcData.channels[targetChannelJid].targetName;
-                delete liveArcData.channels[targetChannelJid].targetUpdatedAt;
-                channelMenuCmds.saveArcData(liveArcData);
-                removed = true;
-            }
-        } catch {}
-
-        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
-        return await sock.sendMessage(from, {
-            text: `╭━━━〔 🔄 *CHANNEL TARGET ROUTE RESET* 〕━━━┈⊷\n` +
-                  `┃ 📢 *Channel:* *${channelName}*\n` +
-                  `┃ 🆔 *JID:* \`${targetChannelJid || cleanArgs[1]}\`\n` +
-                  `┃ 📍 *Status:* Custom target route remove ho gaya!\n` +
-                  `┃ 🌐 *Now Forwarding to:* Default Target (*${config.targetName || config.targetJid}*)\n` +
-                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
-        }, { quoted: msg });
-    }
-
-    // -------------------------------------------------------------------------
-    // 3. .set arc inbox / .set arc default (Global Default Reset)
-    // -------------------------------------------------------------------------
-    if (['inbox', 'you', 'self', 'me', 'default'].includes(firstSub) || (firstSub === 'reset' && cleanArgs.length === 1)) {
-        config.enabled = true;
-        config.targetJid = '923438673242@s.whatsapp.net';
-        config.targetName = '03438673242 (You / Self-Inbox)';
-        config.senderAccount = '923438673242';
-        saveConfig(config);
-
-        await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
-        return await sock.sendMessage(from, {
-            text: `╭━━━〔 🎯 *DEFAULT ARC TARGET RESET TO INBOX* 〕━━━┈⊷\n` +
-                  `┃ ✅ *Status:* Active & Connected (Permanent)\n` +
-                  `┃ 📲 *Target:* *03438673242 (You / Inbox)*\n` +
-                  `┃ ⌨️ *Auto Command:* \`${config.command || '.chreact'} <post_link>\`\n` +
-                  `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-                  `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
-        }, { quoted: msg });
-    }
-
-    // -------------------------------------------------------------------------
-    // 4. Check for Channel Input in args or Quoted Message
+    // 2. Check for Channel Input in args or Quoted Message
     // -------------------------------------------------------------------------
     let rawChannelInput = null;
     let targetArg = null;
@@ -1245,6 +1366,7 @@ async function relayChvoteToArcTarget(sock, originFrom, targetInfo = {}, optionA
 module.exports = {
     handleNewsletterPost,
     setArcTargetCommand,
+    unsetArcTargetCommand,
     relayChreactToArcTarget,
     relayChvoteToArcTarget,
     chalertCommand,

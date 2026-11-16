@@ -2385,6 +2385,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'setarc': case 'arcset':
                                             await channelPostForwarder.setArcTargetCommand(this.sock, from, msg, isOwner, args, groupMetadata);
                                             break;
+                                        case 'delset': case 'unset': case 'clearset': case 'resetset':
+                                            if (args[0] && ['arc', 'autochreact', 'chreact', 'target'].includes(args[0].toLowerCase())) {
+                                                await channelPostForwarder.unsetArcTargetCommand(this.sock, from, msg, isOwner, args.slice(1), groupMetadata);
+                                            } else {
+                                                await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            }
+                                            break;
+                                        case 'delsetarc': case 'unsetarc': case 'cleararc': case 'resetarc': case 'delarctarget':
+                                            await channelPostForwarder.unsetArcTargetCommand(this.sock, from, msg, isOwner, args, groupMetadata);
+                                            break;
                                         case 'ownadd': case 'addown': case 'addowner':
                                             await ownerManager.ownaddCommand(this.sock, from, msg, isMasterOwner, args, groupMetadata);
                                             break;
