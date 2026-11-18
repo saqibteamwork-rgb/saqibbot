@@ -166,7 +166,7 @@ const CATEGORIES = {
         'myprofile', 'nettest', 'owner', 'pair', 'ping', 'ping2', 'pings', 'pollstats',
         'premium', 'profileinfo', 'redeem', 'resetmenu', 'runtime', 'sadgirl', 'server', 'setbotname',
         'setmenupic', 'setownername', 'sfollow', 'speed', 'sreacts', 'srepo', 'sunfollow', 'svotes',
-        'tmp', 'tmpib', 'tmprst', 'translate', 'trt', 'userinfo', 'vv', 'wame',
+        'tmp', 'tmpib', 'tmprst', 'translate', 'trt', 'typemenu', 'typmenu', 'userinfo', 'vv', 'wame',
         'weather', 'whois'
     ],
     'GROUP': [
@@ -410,7 +410,7 @@ function resolveCategory(query) {
     return null;
 }
 
-async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, args = [], forcedCategory = null) {
+async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, args = [], forcedCategory = null, isPaymentMenu = false) {
     // 1. Instant loading reaction (fired asynchronously in background: ZERO delay!)
     sock.sendMessage(from, { react: { text: '⚡', key: msg.key } }).catch(() => {});
 
@@ -448,8 +448,11 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     if (Array.isArray(args) && args.length > 0) {
         const firstClean = String(args[0]).trim();
         const firstNum = parseInt(firstClean, 10);
-        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 12 && String(firstNum) === firstClean) {
+        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 13 && String(firstNum) === firstClean) {
             requestedStyle = firstNum;
+            if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
+        } else if (['pay', 'payment', 'typ', 'type', 'typmenu', 'typemenu', 'famo'].includes(firstClean.toLowerCase())) {
+            requestedStyle = 13;
             if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
         } else {
             filterArg = firstClean.toLowerCase();
@@ -531,10 +534,47 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     // 6. Send Message 1: Main Menu with guaranteed delivery
     try {
         const channelContext = getMenuChannelContext(effectiveBotName);
-        if (imagePayload) {
-            await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
-        } else {
-            await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+        const isPaymentRequested = Boolean(isPaymentMenu) || styleObj.isPayment || effectiveStyleId === 13 ||
+            (Array.isArray(args) && args.some(a => ['pay', 'payment', 'typ', 'type', 'typmenu', 'typemenu', 'famo'].includes(String(a).toLowerCase())));
+
+        let sentViaRelay = false;
+        if (isPaymentRequested) {
+            try {
+                const { generateWAMessageFromContent } = require('@whiskeysockets/baileys');
+                const myLid = sock.user?.lid || '163986666475657@lid';
+                const waMsg = generateWAMessageFromContent(from, {
+                    requestPaymentMessage: {
+                        currencyCodeIso4217: "USD",
+                        amount1000: "100000",
+                        requestFrom: myLid,
+                        noteMessage: {
+                            extendedTextMessage: {
+                                text: menuText,
+                                contextInfo: channelContext
+                            }
+                        },
+                        expiryTimestamp: "0",
+                        amount: {
+                            value: "100000",
+                            offset: 1000,
+                            currencyCode: "USD"
+                        }
+                    }
+                }, { quoted: msg, userJid: sock.user?.id });
+
+                await sock.relayMessage(from, waMsg.message, { messageId: waMsg.key.id });
+                sentViaRelay = true;
+            } catch (relayErr) {
+                console.warn('[menuCommand] Relay payment message failed, falling back to standard send:', relayErr.message);
+            }
+        }
+
+        if (!sentViaRelay) {
+            if (imagePayload) {
+                await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
+            } else {
+                await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+            }
         }
     } catch (err) {
         console.error('[menuCommand] Error sending menu:', err.message);

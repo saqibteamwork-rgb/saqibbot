@@ -1840,6 +1840,9 @@ class BotSession {
                                         case 'menu': case 'mene': case 'manu': case 'mainu': case 'commands': case 'list': case 'helpall':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args);
                                             break;
+                                        case 'typmenu': case 'typemenu': case 'paymenu': case 'paymentmenu': case 'famo': case 'famomenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, null, true);
+                                            break;
                                         case 'gcmenu': case 'groupmenu': case 'gmenu':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'GROUP');
                                             break;
@@ -2185,7 +2188,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'tmpib': await commands.tmpib(this.sock, from, msg); break;
                                         case 'rmbg': await commands.rmbg(this.sock, from, msg); break;
                                         case 'tmprst': await commands.tmprst(this.sock, from, msg); break;
-                                        case 'vv': await commands.vv(this.sock, from, msg); break;
+                                        case 'vv': case 'viewonce': case 'vo': case 'open': case 'vv2': case 'vv3': await commands.vv(this.sock, from, msg); break;
                                         case 'dp': case 'getpp': case 'pfp': case 'getpfp': case 'bizdp': case 'businessdp': await commands.dp(this.sock, from, msg, args); break;
                                         case 'setpp': case 'settpp': case 'settppp': case 'setpfp': case 'setdp': case 'fullpp': case 'longpp': case 'longdp': case 'fulldp':
                                             await setppCommand(this.sock, from, msg, isOwner || isSessionOwner, args);
