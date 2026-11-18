@@ -23,7 +23,7 @@ const mediaCache = new Map();
 const MEDIA_TTL_MS = 20 * 60 * 1000;
 
 async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
-    const pic = getBotPic(sock) || { url: settings.menuImage || 'https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png' };
+    const pic = getBotPic(sock) || { url: settings.menuImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png' };
     const key = `${String(sock?.user?.id || '').split(':')[0]}|${pic.url}`;
 
     const hit = mediaCache.get(key);

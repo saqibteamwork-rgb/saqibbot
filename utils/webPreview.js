@@ -39,7 +39,7 @@ function getWebPreviewContext(custom = {}) {
             body: custom.body || settings.websiteBody || "Hire Muhammad Saqib (Mr Saqib): Elite Cyber Security Expert & Full-Stack App",
             mediaType: 1, // IMAGE
             previewType: "PHOTO",
-            thumbnailUrl: custom.thumbnailUrl || settings.websiteThumbnail || "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png",
+            thumbnailUrl: custom.thumbnailUrl || settings.websiteThumbnail || "https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png",
             thumbnail: custom.thumbnail || cachedJpegThumbnail,
             sourceUrl: custom.sourceUrl || settings.websiteUrl || "https://mrsaqib.me",
             renderLargerThumbnail: custom.renderLargerThumbnail !== false,

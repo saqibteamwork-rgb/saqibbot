@@ -42,6 +42,7 @@ const {
 } = require('../utils/buttonHelper');
 const { sendSwipeCarouselMenu } = require('./carouselMenu');
 const { sendMetaAiButtonMenu } = require('./metaAiMenu');
+const { sendCategoryButtonMenu } = require('./categoryButtonMenu');
 
 /**
  * Convert string to Mathematical Sans-Serif Bold Unicode (e.g. 𝗠𝗥 𝗦𝗔𝗤𝗜𝗕 𝗠𝗗)
@@ -450,7 +451,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     if (Array.isArray(args) && args.length > 0) {
         const firstClean = String(args[0]).trim();
         const firstNum = parseInt(firstClean, 10);
-        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 15 && String(firstNum) === firstClean) {
+        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 16 && String(firstNum) === firstClean) {
             requestedStyle = firstNum;
             if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
         } else if (['pay', 'payment', 'typ', 'type', 'typmenu', 'typemenu', 'famo'].includes(firstClean.toLowerCase())) {
@@ -462,12 +463,22 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         } else if (['btn', 'button', 'meta', 'metaai', 'btnmenu', 'buttonmenu', 'sayron', 'wabot'].includes(firstClean.toLowerCase())) {
             requestedStyle = 15;
             if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
+        } else if (['cat', 'cats', 'catmenu', 'category', 'categories', 'aman', 'btnlist', 'buttons', 'allbtn', 'allbuttons'].includes(firstClean.toLowerCase())) {
+            requestedStyle = 16;
+            if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
         } else {
             filterArg = firstClean.toLowerCase();
         }
     }
 
     const effectiveStyleId = requestedStyle || profile.menuStyle || 1;
+
+    // Check if All-Categories Buttons Menu requested (Style 16 - AMAN-MD Style)
+    if (effectiveStyleId === 16 || (Array.isArray(args) && args.some(a => ['cat', 'cats', 'catmenu', 'category', 'categories', 'aman', 'btnlist', 'buttons', 'allbtn', 'allbuttons'].includes(String(a).toLowerCase())))) {
+        if (!filterArg || ['cat', 'cats', 'catmenu', 'category', 'categories', 'aman', 'btnlist', 'buttons', 'allbtn', 'allbuttons', '16'].includes(filterArg)) {
+            return await sendCategoryButtonMenu(sock, from, msg, effectiveBotName, effectiveOwnerName, '.');
+        }
+    }
 
     // Check if Carousel Cards Slider requested (Style 14)
     if (effectiveStyleId === 14 || (Array.isArray(args) && args.some(a => ['carousel', 'cmenu', 'card', 'cards', 'slide', 'slidemenu'].includes(String(a).toLowerCase())))) {

@@ -678,7 +678,7 @@ const CONTACT_FALLBACK = {
     whatsapp: "https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M",
     location: "Gojra, Faisalabad, Pakistan",
     avatar: "/avatar.png",
-    avatar_fallback: "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png",
+    avatar_fallback: "https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png",
     instagram: "https://www.instagram.com/mr_saqib242",
     facebook: "https://www.facebook.com/profile.php?id=100085188689033",
     tiktok: "https://www.tiktok.com/@mr_saqib_242",
@@ -724,7 +724,7 @@ app.get(['/api/contact', '/api/public/contact'], async (req, res) => {
                 data.data.name = 'Muhammad Saqib';
                 data.data.short_name = 'MR SAQIB';
                 data.data.avatar = '/avatar.png';
-                data.data.avatar_fallback = 'https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png';
+                data.data.avatar_fallback = 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png';
                 data.data.portfolio = 'https://mrsaqib.me';
                 contactCache = data.data;
                 contactCacheTime = now;
@@ -1849,6 +1849,9 @@ class BotSession {
                                             break;
                                         case 'btnmenu': case 'buttonmenu': case 'metaaimenu': case 'metamenu': case 'sayronmenu':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, ['15']);
+                                            break;
+                                        case 'catmenu': case 'categorymenu': case 'allbtn': case 'buttonsmenu': case 'amanmenu': case 'catsmenu': case 'allbuttons':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, ['16']);
                                             break;
                                         case 'gcmenu': case 'groupmenu': case 'gmenu':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'GROUP');

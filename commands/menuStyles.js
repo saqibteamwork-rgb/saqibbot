@@ -406,6 +406,25 @@ Code: ${p.botName} WaBot
         makeFooter: (p) =>
 `📚 *Use .allmenu to browse all commands.*
 🔥 *Powered by ${p.ownerName}*`
+    },
+    16: {
+        id: 16,
+        name: 'All-Categories Buttons Menu (AMAN-MD Style)',
+        tag: '📁 All Buttons List',
+        isCategoryButton: true,
+        makeHeader: (p, s) =>
+`*${p.botName}*
+📁 Categories (10) · ${s.totalCommands} commands
+Kisi bhi category par tap karo
+👇\n\n`,
+        makeBox: (title, cmds) => {
+            const head = `┌───📁 ⚡ ${toSansBold(title.toUpperCase())} ⚡───\n`;
+            const body = cmds.map(cmd => `│ ◈ .${cmd}`).join('\n') + '\n';
+            const foot = `└───────────────────📁\n\n`;
+            return head + body + foot;
+        },
+        makeFooter: (p) =>
+`Powered By ${p.botName}`
     }
 };
 
@@ -466,6 +485,10 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
     let choiceNum = null;
     for (const a of args) {
         const clean = String(a).toLowerCase().trim();
+        if (['cat', 'cats', 'catmenu', 'category', 'categories', 'aman', 'btnlist', 'buttons', 'allbtn', 'allbuttons'].includes(clean)) {
+            choiceNum = 16;
+            break;
+        }
         if (['btn', 'button', 'meta', 'metaai', 'btnmenu', 'buttonmenu', 'sayron', 'wabot'].includes(clean)) {
             choiceNum = 15;
             break;
@@ -479,7 +502,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
             break;
         }
         const n = parseInt(a.replace(/[^0-9]/g, ''), 10);
-        if (!isNaN(n) && n >= 1 && n <= 15) {
+        if (!isNaN(n) && n >= 1 && n <= 16) {
             choiceNum = n;
             break;
         }
@@ -492,7 +515,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
 
     const selectedStyle = STYLES[choiceNum];
     if (!selectedStyle) {
-        return await sock.sendMessage(from, { text: `❌ *Invalid Style!* 1 se 15 ke darmiyan number dein (e.g. \`.setmenu 15\` ya \`.setmenu metaai\`).` }, { quoted: msg });
+        return await sock.sendMessage(from, { text: `❌ *Invalid Style!* 1 se 16 ke darmiyan number dein (e.g. \`.setmenu 16\` ya \`.setmenu catmenu\`).` }, { quoted: msg });
     }
 
     if (!botData.customProfiles) botData.customProfiles = {};

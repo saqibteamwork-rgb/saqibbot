@@ -42,7 +42,7 @@ const audioDir = path.join(__dirname, "../data/menu-voice");
 
 // Menu image: .menu par ye photo jayegi (video hata di gayi hai). Badalni ho to sirf ye link badlein.
 // Link na khule to bot ki apni photo (getBotPic) chali jayegi.
-const MENU_IMAGE_URL = process.env.MENU_IMAGE || config.MENU_IMAGE || settings.menuImage || "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png";
+const MENU_IMAGE_URL = process.env.MENU_IMAGE || config.MENU_IMAGE || settings.menuImage || "https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png";
 
 let VERSION = "1.0.0";
 try { VERSION = require("../package.json").version || VERSION; } catch (_) {}
