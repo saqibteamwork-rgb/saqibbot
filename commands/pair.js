@@ -313,11 +313,103 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
             `📋 *Niche diye gaye message par 1-tap karein code copy karne ke liye!* 👇\n\n` +
             `🚀 *Powered by MR SAQIB MD*`;
 
-        // 1. Send the main card directly in the group/chat with user tag
-        await sock.sendMessage(from, {
-            text: resultText,
-            mentions: [targetJid, senderJid]
-        }, { quoted: msg });
+        // 1. Send the interactive card with 1-Tap Copy Code button
+        let sentInteractive = false;
+        try {
+            const baileys = require('@whiskeysockets/baileys');
+            const { proto, generateWAMessageFromContent } = baileys;
+            const IM = proto.Message.InteractiveMessage;
+
+            const buttons = [
+                {
+                    name: 'cta_copy',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '📋 Copy Pairing Code',
+                        copy_code: cleanCode
+                    })
+                },
+                {
+                    name: 'cta_url',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '🟢 WA Channel',
+                        url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i',
+                        merchant_url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i'
+                    })
+                },
+                {
+                    name: 'quick_reply',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '⚡ Bot Menu',
+                        id: '.menu'
+                    })
+                }
+            ];
+
+            const interactive = IM.create({
+                header: IM.Header.create({
+                    title: '🔑 WhatsApp Pairing Code',
+                    subtitle: `Code: ${cleanCode}`,
+                    hasMediaAttachment: false
+                }),
+                body: IM.Body.create({ text: resultText }),
+                footer: IM.Footer.create({ text: '🔥 Powered by MR SAQIB MD' }),
+                nativeFlowMessage: IM.NativeFlowMessage.create({
+                    buttons,
+                    messageVersion: 1
+                })
+            });
+
+            const additionalNodes = [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                        }
+                    ]
+                }
+            ];
+
+            if (!from.endsWith('@g.us')) {
+                additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
+            }
+
+            const sendOpts = { userJid: sock.user?.id };
+            if (msg && msg.key && msg.key.remoteJid && msg.message) {
+                sendOpts.quoted = msg;
+            }
+
+            const waMsg = generateWAMessageFromContent(from, {
+                viewOnceMessage: {
+                    message: {
+                        messageContextInfo: {
+                            deviceListMetadata: {},
+                            deviceListMetadataVersion: 2
+                        },
+                        interactiveMessage: interactive
+                    }
+                }
+            }, sendOpts);
+
+            await sock.relayMessage(from, waMsg.message, {
+                messageId: waMsg.key.id,
+                additionalNodes
+            });
+            sentInteractive = true;
+        } catch (relayErr) {
+            console.warn('[Pair Interactive Button Relay Failed, falling back to text]:', relayErr.message);
+        }
+
+        // If interactive message failed, send standard text card
+        if (!sentInteractive) {
+            await sock.sendMessage(from, {
+                text: resultText,
+                mentions: [targetJid, senderJid]
+            }, { quoted: msg });
+        }
 
         // 2. Send clean 1-tap copy code message directly in the group/chat
         await sock.sendMessage(from, {

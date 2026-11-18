@@ -119,12 +119,13 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
     const uptimeStr = statsData.runtimeStr || 'Online';
     const totalCmds = statsData.totalCommands || '400';
     const cleanPrefix = prefix || '.';
+    const websiteUrl = settings.websiteUrl || 'https://mrsaqib.me';
 
     // Build the exact card body matching Image 2 & Image 3
     let bodyText =
         `🏷️ *${botName}*\n` +
         `${timings.endTomorrowStr}\n` +
-        `Code: ${botName} WaBot\n\n` +
+        `🌐 *Web:* ${websiteUrl}\n\n` +
         `╭───〔 *${botName} WaBot* 〕───╮\n` +
         `│ Assalam-o-Alaikum,\n` +
         `*${userName}* 🌸\n` +
@@ -156,7 +157,7 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
 
         const cardHeader = IM.Header.fromObject({
             title: `${botName} WaBot`,
-            subtitle: `${timings.endTomorrowStr}\nCode: ${botName} WaBot`,
+            subtitle: `${timings.endTomorrowStr}\nOfficial WaBot`,
             hasMediaAttachment: Boolean(imageMessage),
             ...(imageMessage ? { imageMessage } : {})
         });
@@ -178,10 +179,11 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
                 })
             },
             {
-                name: 'cta_copy',
+                name: 'cta_url',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '📋 Copy Bot Code',
-                    copy_code: `${botName} WaBot`
+                    display_text: '🌐 Website',
+                    url: websiteUrl,
+                    merchant_url: websiteUrl
                 })
             }
         ];
