@@ -979,7 +979,7 @@ async function executeSingleSessionReaction(sock, from, msg, target) {
     `┃\n` +
     `┃ 👑 *50+ ᴍᴜʟᴛɪ-ʙᴏᴛ ʙᴏᴏsᴛ ᴄʜᴀʜɪʏᴇ?*\n` +
     `┃ 👉 *ᴏғғɪᴄɪᴀʟ ᴄʜᴀɴɴᴇʟ ᴊᴏɪɴ ᴋᴀʀᴇɪɴ:*\n` +
-    `┃ 📢 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
+    `┃ 📢 ${config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'}\n` +
     `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
     `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 

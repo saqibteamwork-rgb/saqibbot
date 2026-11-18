@@ -332,8 +332,8 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
                     name: 'cta_url',
                     buttonParamsJson: JSON.stringify({
                         display_text: '🟢 WA Channel',
-                        url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i',
-                        merchant_url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i'
+                        url: 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
+                        merchant_url: 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'
                     })
                 },
                 {

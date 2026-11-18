@@ -15,7 +15,7 @@ const TESTS = [
     ['nekos.best', 'https://nekos.best/api/v2/neko'],
     ['Jikan (anime info)', 'https://api.jikan.moe/v4/anime/1'],
     ['jsDelivr (emoji sticker)', 'https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/2764.svg'],
-    ['WhatsApp channel page', 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I']
+    ['WhatsApp channel page', 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M']
 ];
 
 async function ping(url) {

@@ -21,8 +21,8 @@ async (conn, mek, m, { args, reply }) => {
 📌 *Usage:* .chreact <link> <emoji>
 
 📖 *Examples:*
-.chreact https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I/1673 ❤️
-.chreact https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I/1673 🔥
+.chreact https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M/1673 ❤️
+.chreact https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M/1673 🔥
 
 💡 Single emoji only
 🔗 Baileys direct — no API key`

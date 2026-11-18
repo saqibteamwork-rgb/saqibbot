@@ -31,7 +31,7 @@ async function ownerCommand(sock, from, msg) {
 ${websiteUrl}
 
 📢 *Official Channel:*
-${settings.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}
+${settings.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'}
 
 🔍 *Search on Google:*
 ${googleSearchUrl}

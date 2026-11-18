@@ -24,8 +24,8 @@ async (conn, mek, m, { args, reply }) => {
 📌 *Usage:* .chpoll <link> <option>
 
 📖 *Examples:*
-.chpoll https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I/1673 "Yes"
-.chpoll https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I/1673 "Option A"
+.chpoll https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M/1673 "Yes"
+.chpoll https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M/1673 "Option A"
 
 💡 Option name wahi likho jo poll mein hai
 🔗 Baileys direct — no API key`
@@ -93,7 +93,7 @@ async (conn, mek, m, { from, args, reply }) => {
 📌 *Usage:* .masspoll <link> <option>
 
 📖 *Example:*
-.masspoll https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I/1673 "Yes"
+.masspoll https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M/1673 "Yes"
 
 💡 Saare accounts se vote karega
 📈 Max votes = ${stats.total}`

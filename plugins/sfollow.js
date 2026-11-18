@@ -30,7 +30,7 @@ async function run(kind, conn, mek, m, ctx) {
 ${P}${name} <channel-link>
 
 Misal:
-${P}${name} https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I
+${P}${name} https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M
 
 🟢 Connected sessions: *${st}*
 ${follow ? `➖ Unfollow karne ke liye: ${P}sunfollow <link>` : `➕ Follow karne ke liye: ${P}sfollow <link>`}`

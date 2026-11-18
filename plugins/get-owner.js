@@ -11,7 +11,7 @@ cmd({
 }, async (sock, m, msg, { from, userConfig }) => {
   try {
     const OWNER_NAME = userConfig?.OWNER_NAME || config.OWNER_NAME || "Muhammad Saqib";
-    const CHANNEL_LINK = config.channelLink || "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I";
+    const CHANNEL_LINK = config.channelLink || "https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M";
     const WEBSITE = config.websiteUrl || "https://mrsaqib.me";
 
     await sock.sendPresenceUpdate("composing", from);

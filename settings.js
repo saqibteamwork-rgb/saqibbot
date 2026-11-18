@@ -4,7 +4,7 @@ module.exports = {
     ownerNumber: process.env.OWNER_NUMBER || '923468616487',
     botName: process.env.BOT_NAME || 'MR SAQIB MD',
     ownerName: process.env.OWNER_NAME || 'MR SAQIB',
-    channelLink: process.env.CHANNEL_LINK || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I',
+    channelLink: process.env.CHANNEL_LINK || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
     newsletterJid: process.env.NEWSLETTER_JID || process.env.NEWSLETTER_ID || '120363431913895899@newsletter',
     channelName: process.env.CHANNEL_NAME || 'Mr SAQIB',
     openWeatherApiKey: process.env.OPENWEATHER_API_KEY || '',

@@ -552,7 +552,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
               `┃\n` +
               `┃ 👑 *Premium Access ke liye:*\n` +
               `┃ 👉 Official Channel visit karein:\n` +
-              `┃ 📢 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
+              `┃ 📢 ${config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'}\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       }, { quoted: msg });
     }
@@ -1927,7 +1927,7 @@ async function achrCommand(sock, from, msg, isOwner, isMasterOwner, args = [], g
 ┃ Owner ke channel me free coupon drop hota hai!
 ┃
 ┃ 👑 *All-Bots Swarm (.arc) ke liye:*
-┃ 👉 Channel: ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}
+┃ 👉 Channel: ${config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'}
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
 `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
     }, { quoted: msg });

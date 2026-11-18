@@ -171,6 +171,8 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
     const cleanPrefix = prefix || '.';
     const websiteUrl = settings.websiteUrl || 'https://mrsaqib.me';
 
+    const channelUrl = settings.channelLink || config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M';
+
     // Build the exact card body matching Image 2 & Image 3
     let bodyText =
         `🏷️ *${botName}*\n` +
@@ -207,7 +209,7 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
 
         const cardHeaderObj = {
             title: `${botName} WaBot`,
-            subtitle: `${timings.endTomorrowStr}\nCode: ${botName} WaBot`,
+            subtitle: `${timings.endTomorrowStr}\nOfficial WaBot`,
             hasMediaAttachment: Boolean(mediaObj?.videoMessage || mediaObj?.imageMessage)
         };
         if (mediaObj?.videoMessage) {
@@ -230,8 +232,8 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
                 name: 'cta_url',
                 buttonParamsJson: JSON.stringify({
                     display_text: '🟢 WA Channel',
-                    url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i',
-                    merchant_url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i'
+                    url: channelUrl,
+                    merchant_url: channelUrl
                 })
             },
             {
@@ -240,13 +242,6 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
                     display_text: '🌐 Website',
                     url: websiteUrl,
                     merchant_url: websiteUrl
-                })
-            },
-            {
-                name: 'cta_copy',
-                buttonParamsJson: JSON.stringify({
-                    display_text: '📋 Copy Bot Code',
-                    copy_code: `${botName} WaBot`
                 })
             }
         ];

@@ -675,7 +675,7 @@ const CONTACT_FALLBACK = {
     bio: "Available for elite web applications, Next.js SaaS engineering, and AI chatbot integrations.",
     email: "mrsaqib242242@gmail.com",
     phone: "Private",
-    whatsapp: "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I",
+    whatsapp: "https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M",
     location: "Gojra, Faisalabad, Pakistan",
     avatar: "/avatar.png",
     avatar_fallback: "https://ik.imagekit.io/19imy4f1u/lite_1775822697436_IXJPba-z2.png",
@@ -1837,7 +1837,7 @@ class BotSession {
                                     }
 
                                     switch (commandName) {
-                                        case 'menu': case 'mene': case 'manu': case 'mainu': case 'commands': case 'list': case 'helpall':
+                                        case 'menu': case 'mene': case 'manu': case 'mainu': case 'commands': case 'list': case 'helpall': case 'allmenu': case 'fullmenu': case 'allcmd': case 'allcmds':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args);
                                             break;
                                         case 'typmenu': case 'typemenu': case 'paymenu': case 'paymentmenu': case 'famo': case 'famomenu':

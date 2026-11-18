@@ -1721,7 +1721,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
                       `┃ 📅 *Expired On:* ${expStr}${formatArcChannelsList(`${userArcChannels.length} Channels (Paused/Expired)`)}\n` +
                       `┃\n` +
                       `┃ 🔄 *Renew karane ke liye Channel visit karein:*\n` +
-                      `┃ 👉 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
+                      `┃ 👉 ${config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'}\n` +
                       `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
                       `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
                 mentions: target.jid ? [target.jid] : []
@@ -1756,7 +1756,7 @@ async function checkpremCommand(sock, from, msg, isOwner, args = [], groupMetada
               `┃\n` +
               `┃ 👑 *50+ Multi-Bot Boost & Auto-Reaction ke liye*\n` +
               `┃ *Premium Access hasil karein:*\n` +
-              `┃ 👉 ${config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I'}\n` +
+              `┃ 👉 ${config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'}\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`,
         mentions: target.jid ? [target.jid] : []

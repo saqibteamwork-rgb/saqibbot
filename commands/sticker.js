@@ -13,7 +13,7 @@ async function addExif(webpBuffer, packname = 'MR SAQIB MD', author = 'MR SAQIB'
         const img = new webpmux.Image();
         await img.load(webpBuffer);
         const json = {
-            'sticker-pack-id': 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I',
+            'sticker-pack-id': 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
             'sticker-pack-name': packname,
             'sticker-pack-publisher': author,
             'emojis': ['✨', '🤖', '👑']

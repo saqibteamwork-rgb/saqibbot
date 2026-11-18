@@ -83,7 +83,7 @@ module.exports = {
         `  ${config.prefix}chfollow <channel link or jid>\n` +
         `  ${config.prefix}chunfollow <channel link or jid>\n\n` +
         `💡 *Examples:*\n` +
-        `  ${config.prefix}chfollow https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I\n` +
+        `  ${config.prefix}chfollow https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M\n` +
         `  ${config.prefix}chfollow 120363431913895899@newsletter\n\n` +
         `✨ Every connected WhatsApp session will follow the specified channel!`
       );

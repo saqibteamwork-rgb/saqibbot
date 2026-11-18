@@ -261,7 +261,7 @@ async function buildCarousel(conn, page, pageCards, total, totalPages, baileys, 
 // ---------- CATEGORY VIEW: commands sirf text me, neeche 4 link buttons (links yahan se badlein) ----------
 const CATEGORY_LINK_BUTTONS = [
     { button: '🌐 PORTFOLIO',        url: config.websiteUrl || 'https://mrsaqib.me' },
-    { button: '📢 VIEW CHANNEL',     url: config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I' }
+    { button: '📢 VIEW CHANNEL',     url: config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M' }
 ];
 
 // Category ke commands sirf is box-style mein:  ┏━═❲ NAME / ┋╭┈⌖ cmd / ┋├┈⌖ cmd / ┋╰┈⌖ cmd / ┗───𒁍
@@ -351,7 +351,7 @@ async function sendCarouselMenu(conn, mek, m, ctx, pageArg, catFilter) {
 // ---------- OWNER CARD (links yahan se badlein) ----------
 const OWNER_LINKS = [
     { name: 'PORTFOLIO', button: '🌐 Portfolio',  url: config.websiteUrl || 'https://mrsaqib.me' },
-    { name: 'CHANNEL',   button: '📢 Channel',    url: config.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I' }
+    { name: 'CHANNEL',   button: '📢 Channel',    url: config.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M' }
 ];
 
 // Body text mein links bhi hain (WhatsApp unhe khud tappable bana deta hai), buttons alag se

@@ -44,8 +44,8 @@ function loadAutoFollowData() {
     cachedData.channels[officialJid] = {
       jid: officialJid,
       name: 'Mr SAQIB',
-      link: settings.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I',
-      inviteCode: '0029VbBTSK1EquiWrUt5uV1I',
+      link: settings.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
+      inviteCode: '0029VbDzLTD1iUxe8Hsv1D0M',
       addedAt: Date.now(),
       isOfficial: true
     };
