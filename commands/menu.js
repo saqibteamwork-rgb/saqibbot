@@ -170,8 +170,8 @@ const CATEGORIES = {
         'weather', 'whois'
     ],
     'GROUP': [
-        'accept', 'acceptall', 'add', 'addmember', 'addmember2', 'addmember3', 'admincheck', 'admins',
-        'antibot', 'antilink', 'antilinkreset', 'antispam', 'botadmin', 'creategroup', 'del', 'delete',
+        'accept', 'acceptall', 'add', 'addmember', 'addmember2', 'addmember3', 'admincheck', 'admininform', 'admins',
+        'antiadmin', 'antibot', 'antilink', 'antilinkreset', 'antispam', 'botadmin', 'creategroup', 'del', 'delete',
         'demote', 'demoteall', 'dismissall', 'end', 'gcfrwrd', 'gcjid', 'gcpp', 'ginfo',
         'ginvite', 'goodbye', 'grevoke', 'groupdesc', 'groupinfo', 'grouplink', 'grouplogo', 'groupstats',
         'groupstatus', 'hidetag', 'invite', 'invtag', 'join', 'joinrequest', 'kick', 'kickall',

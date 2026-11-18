@@ -1,5 +1,7 @@
 // commands/group-extra.js
-// Warn, Mute, Welcome/Goodbye, Promote/Demote, Group Settings, Antispam
+// Warn, Mute, Welcome/Goodbye, Promote/Demote, Group Settings, Antispam, AntiAdmin, AdminInform
+const settings = require('../settings');
+const ownerManager = require('../utils/ownerManager');
 
 function getTarget(msg, args) {
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
@@ -366,11 +368,213 @@ We will miss you in *${groupSubject}*!
 }
 
 // Called from group-participants.update listener & messages.upsert stub events in index.js
-async function handleGroupParticipantsUpdate(sock, update, botData) {
+async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData) {
     try {
-        const { id: from, participants, action } = update;
+        const { id: from, participants, action, author } = update;
         if (!from || !from.endsWith('@g.us')) return;
 
+        // ========== PROMOTE & DEMOTE EVENTS (Anti-Admin & Admin Inform) ==========
+        if (action === 'promote' || action === 'demote') {
+            const authorJid = author || '';
+            const authorDigits = authorJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+
+            const botPhone = sock.user?.id ? sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+            const botLid = sock.user?.lid ? sock.user.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+
+            // Group metadata
+            let groupSubject = 'Our Group';
+            let gmeta = null;
+            try {
+                const metaPromise = sock.groupMetadata(from);
+                const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 3000));
+                gmeta = await Promise.race([metaPromise, timeoutPromise]);
+                if (gmeta && gmeta.subject) groupSubject = gmeta.subject;
+            } catch (_) {}
+
+            const groupCreator = gmeta?.owner ? gmeta.owner.split('@')[0].replace(/[^0-9]/g, '') : '';
+            const masterOwner = '923438673242';
+            const defaultOwner = settings.ownerNumber ? settings.ownerNumber.replace(/[^0-9]/g, '') : '';
+
+            let ownersList = [];
+            try {
+                const omData = ownerManager.loadOwnersData();
+                ownersList = Object.keys(omData?.owners || {});
+            } catch (_) {}
+
+            const isAuthorizedPromoter = Boolean(
+                (authorDigits && authorDigits === masterOwner) ||
+                (authorDigits && defaultOwner && authorDigits.endsWith(defaultOwner)) ||
+                (authorDigits && (authorDigits === botPhone || authorDigits === botLid)) ||
+                (authorDigits && groupCreator && authorDigits === groupCreator) ||
+                (authorDigits && ownersList.includes(authorDigits))
+            );
+
+            const timeStr = new Date().toLocaleString('en-PK', {
+                timeZone: 'Asia/Karachi',
+                dateStyle: 'medium',
+                timeStyle: 'medium'
+            });
+
+            const channelBadge = {
+                forwardingScore: 999,
+                isForwarded: true,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
+                    newsletterName: settings.channelName || 'Mr SAQIB',
+                    serverMessageId: -1
+                }
+            };
+
+            // ========== ACTION: PROMOTE ==========
+            if (action === 'promote') {
+                const isAntiAdminActive = Boolean(botData.antiAdminGroups?.[from]);
+
+                // Check Anti-Admin Trigger: unauthorized promote
+                if (isAntiAdminActive && !isAuthorizedPromoter && authorJid) {
+                    console.log(`[AntiAdmin Triggered] Group: ${from} | Unauthorized promote by: ${authorJid}`);
+
+                    // 1. Demote newly promoted members
+                    for (const p of participants) {
+                        try {
+                            await sock.groupParticipantsUpdate(from, [p], 'demote').catch(() => {});
+                        } catch (_) {}
+                    }
+
+                    // 2. Demote the rogue admin who promoted them
+                    try {
+                        await sock.groupParticipantsUpdate(from, [authorJid], 'demote').catch(() => {});
+                    } catch (_) {}
+
+                    // 3. Send Security Notice
+                    const promotedTags = participants.map(p => {
+                        const num = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                        return `@${num}`;
+                    }).join(', ');
+
+                    const mentionJids = [authorJid, ...participants].filter(Boolean);
+
+                    const alertText = 
+`╭━━━〔 🛡️ *ANTI-ADMIN PROTECTION TRIGGERED* 〕━━━┈⊷
+┃ 🚨 *UNAUTHORIZED PROMOTION DETECTED & BLOCKED!*
+┃
+┃ 🚫 *Admin Jisne Banaya:* @${authorDigits}
+┃    └ *Action:* Admin Se Hata Diya Gaya (Demoted ❌)
+┃
+┃ 👤 *Naya Banne Wala:* ${promotedTags}
+┃    └ *Action:* Admin Se Hata Diya Gaya (Demoted ❌)
+┃
+┃ ⚠️ *Warning:* Is group me sirf Bot Owner / Creator
+┃    ko naya Admin banane ki ijazat hai!
+┃ ⏰ *Time:* ${timeStr}
+┃ 🏷️ *Group:* ${groupSubject}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`;
+
+                    await sock.sendMessage(from, {
+                        text: alertText,
+                        mentions: mentionJids,
+                        contextInfo: { ...channelBadge, mentions: mentionJids }
+                    }).catch(() => {});
+
+                    return; // Prevent standard promote notification
+                }
+
+                // Normal Promote Notification (Admin Inform)
+                const isAdminInformActive = botData.adminInformGroups?.[from] !== false; // Default ON
+                if (isAdminInformActive) {
+                    for (const p of participants) {
+                        const targetNum = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                        const targetTag = `@${targetNum}`;
+                        const authorTag = authorDigits ? `@${authorDigits}` : 'Group Admin';
+                        const mentionJids = [authorJid, p].filter(Boolean);
+
+                        const text = 
+`╭━━━〔 👑 *ADMIN PROMOTION ALERT* 〕━━━┈⊷
+┃ 🎖️ *New Admin:* ${targetTag}
+┃ 📱 *Number:* +${targetNum}
+┃ 👑 *Promoted By:* ${authorTag}
+┃ ⏰ *Time:* ${timeStr}
+┃ 🏷️ *Group:* ${groupSubject}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`;
+
+                        await sock.sendMessage(from, {
+                            text,
+                            mentions: mentionJids,
+                            contextInfo: { ...channelBadge, mentions: mentionJids }
+                        }).catch(() => {});
+                    }
+                }
+                return;
+            }
+
+            // ========== ACTION: DEMOTE ==========
+            if (action === 'demote') {
+                for (const p of participants) {
+                    const targetNum = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                    const isBotDemoted = (targetNum === botPhone || targetNum === botLid || (sock.user?.id && p === sock.user.id));
+
+                    const authorTag = authorDigits ? `@${authorDigits}` : 'Admin';
+                    const mentionJids = [authorJid, p].filter(Boolean);
+
+                    if (isBotDemoted) {
+                        // Special Bot Demote Self-Defense Notice
+                        const angryText = 
+`╭━━━〔 🚨 *BOT DEMOTED ALERT!* 🚨 〕━━━┈⊷
+┃ ⚠️ *ATTENTION ALL MEMBERS & ADMINS!*
+┃
+┃ 😠 ${authorTag} *Aapne mujhe Admin se kyun hataya?!*
+┃
+┃ 🛡️ *Bot ke baghair Group Security (Anti-Link,*
+┃    *Anti-Spam, Auto-Delete, Auto-Protect)*
+┃    *kaam nahi karegi!*
+┃
+┃ ⚡ *Fauran mujhe dobara Admin banayein taake*
+┃    *group mehfooz rahe!*
+┃
+┃ 👤 *Demoted By:* ${authorTag}
+┃ ⏰ *Time:* ${timeStr}
+┃ 🏷️ *Group:* ${groupSubject}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`;
+
+                        await sock.sendMessage(from, {
+                            text: angryText,
+                            mentions: mentionJids,
+                            contextInfo: { ...channelBadge, mentions: mentionJids }
+                        }).catch(() => {});
+
+                    } else {
+                        // Normal Admin Demoted Notice
+                        const isAdminInformActive = botData.adminInformGroups?.[from] !== false; // Default ON
+                        if (isAdminInformActive) {
+                            const demoteText = 
+`╭━━━〔 ⚠️ *ADMIN DEMOTION ALERT* 〕━━━┈⊷
+┃ 📉 *Demoted Member:* @${targetNum}
+┃ 📱 *Number:* +${targetNum}
+┃ 👤 *Demoted By:* ${authorTag}
+┃ ⏰ *Time:* ${timeStr}
+┃ 🏷️ *Group:* ${groupSubject}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`;
+
+                            await sock.sendMessage(from, {
+                                text: demoteText,
+                                mentions: mentionJids,
+                                contextInfo: { ...channelBadge, mentions: mentionJids }
+                            }).catch(() => {});
+                        }
+                    }
+                }
+                return;
+            }
+        }
+
+        // ========== WELCOME & GOODBYE CARDS ==========
         const cfg = botData.welcomeGoodbye?.[from];
         if (!cfg) return;
 
@@ -693,6 +897,164 @@ async function onlineCommand(sock, from, msg) {
     }
 }
 
+// ---------- ANTI-ADMIN PROTECTION ----------
+async function antiadminCommand(sock, from, msg, isAdmin, isOwner, botData, saveBotData, args) {
+    if (!from.endsWith('@g.us')) {
+        return await sock.sendMessage(from, { text: "❌ Yeh command sirf groups mein kaam karti hai." }, { quoted: msg });
+    }
+    if (!isAdmin && !isOwner) {
+        return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ya Bot Owner ye setting change kar sakta hai!*" }, { quoted: msg });
+    }
+
+    if (!botData.antiAdminGroups) botData.antiAdminGroups = {};
+
+    const rawArgs = (args || []).map(a => String(a).toLowerCase().trim());
+    const action = rawArgs[0];
+
+    const channelBadge = {
+        forwardingScore: 999,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+            newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
+            newsletterName: settings.channelName || 'Mr SAQIB',
+            serverMessageId: -1
+        }
+    };
+
+    if (action === 'on' || action === 'enable' || action === '1') {
+        botData.antiAdminGroups[from] = true;
+        if (typeof saveBotData === 'function') saveBotData();
+        return await sock.sendMessage(from, {
+            text: 
+`╭━━━〔 🛡️ *ANTI-ADMIN PROTECTION ENABLED* 〕━━━┈⊷
+┃ 🟢 *Status:* ACTIVE & PROTECTED
+┃
+┃ 💡 *Kaise Kaam Karta Hai?*
+┃ ✦ Agar koi unauthorized Admin kisi ko bhi Admin banayega,
+┃   to bot foran:
+┃   1. Naye banne wale ko Admin se hata dega (Demote)!
+┃   2. Jis Admin ne usay banaya usay bhi hata dega (Demote)!
+┃
+┃ 👑 *Allowed:* Sirf Bot Owner / Group Creator ko
+┃    Admin banane ki ijazat hai.
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
+            contextInfo: channelBadge
+        }, { quoted: msg });
+    } else if (action === 'off' || action === 'disable' || action === '0') {
+        delete botData.antiAdminGroups[from];
+        if (typeof saveBotData === 'function') saveBotData();
+        return await sock.sendMessage(from, {
+            text: 
+`╭━━━〔 🛡️ *ANTI-ADMIN PROTECTION DISABLED* 〕━━━┈⊷
+┃ 🔴 *Status:* INACTIVE
+┃ ℹ️ Ab koi bhi admin kisi doosre member ko admin bana sakta hai.
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
+            contextInfo: channelBadge
+        }, { quoted: msg });
+    } else {
+        const isEnabled = Boolean(botData.antiAdminGroups[from]);
+        return await sock.sendMessage(from, {
+            text: 
+`╭━━━〔 🛡️ *ANTI-ADMIN PROTECTION* 〕━━━┈⊷
+┃ 📊 *Current Status:* ${isEnabled ? "🟢 ENABLED (Protected)" : "🔴 DISABLED"}
+┃
+┃ ⚙️ *Commands:*
+┃ 👉 *.antiadmin on*   — Protection On Karein
+┃ 👉 *.antiadmin off*  — Protection Off Karein
+┃
+┃ 💡 *Detail:*
+┃ Jab Anti-Admin ON hoga aur koi admin kisi ko
+┃ admin banayega to dono ko admin se hata diya jayega!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
+            contextInfo: channelBadge
+        }, { quoted: msg });
+    }
+}
+
+// ---------- ADMIN INFORM NOTIFICATIONS ----------
+async function admininformCommand(sock, from, msg, isAdmin, isOwner, botData, saveBotData, args) {
+    if (!from.endsWith('@g.us')) {
+        return await sock.sendMessage(from, { text: "❌ Yeh command sirf groups mein kaam karti hai." }, { quoted: msg });
+    }
+    if (!isAdmin && !isOwner) {
+        return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ya Bot Owner ye setting change kar sakta hai!*" }, { quoted: msg });
+    }
+
+    if (!botData.adminInformGroups) botData.adminInformGroups = {};
+
+    const rawArgs = (args || []).map(a => String(a).toLowerCase().trim());
+    const action = rawArgs[0];
+
+    const channelBadge = {
+        forwardingScore: 999,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+            newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
+            newsletterName: settings.channelName || 'Mr SAQIB',
+            serverMessageId: -1
+        }
+    };
+
+    if (action === 'on' || action === 'enable' || action === '1') {
+        botData.adminInformGroups[from] = true;
+        if (typeof saveBotData === 'function') saveBotData();
+        return await sock.sendMessage(from, {
+            text: 
+`╭━━━〔 📢 *ADMIN INFORM NOTIFICATIONS ENABLED* 〕━━━┈⊷
+┃ 🟢 *Status:* ACTIVE
+┃
+┃ ✦ Group me jab bhi koi Admin kisi ko Admin banayega
+┃   ya kisi ko Admin se hatayega, bot time aur dono
+┃   ke numbers ke sath foran alert bhejega!
+┃ ✦ Agar bot ko koi admin se hatayega to bot mention
+┃   karke dobara admin lagane ka boleyga!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
+            contextInfo: channelBadge
+        }, { quoted: msg });
+    } else if (action === 'off' || action === 'disable' || action === '0') {
+        botData.adminInformGroups[from] = false;
+        if (typeof saveBotData === 'function') saveBotData();
+        return await sock.sendMessage(from, {
+            text: 
+`╭━━━〔 📢 *ADMIN INFORM NOTIFICATIONS DISABLED* 〕━━━┈⊷
+┃ 🔴 *Status:* DISABLED
+┃ ℹ️ Promote / Demote notifications group me nahi aayengi.
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
+            contextInfo: channelBadge
+        }, { quoted: msg });
+    } else {
+        const isEnabled = botData.adminInformGroups[from] !== false; // Default ON
+        return await sock.sendMessage(from, {
+            text: 
+`╭━━━〔 📢 *ADMIN INFORM SYSTEM* 〕━━━┈⊷
+┃ 📊 *Current Status:* ${isEnabled ? "🟢 ENABLED" : "🔴 DISABLED"}
+┃
+┃ ⚙️ *Commands:*
+┃ 👉 *.admininform on*   — Alerts On Karein
+┃ 👉 *.admininform off*  — Alerts Off Karein
+┃
+┃ 💡 *Features:*
+┃ ✦ Kisne kisko admin banaya (With Time & Tag)
+┃ ✦ Kisne kisko admin se hataya (With Time & Tag)
+┃ ✦ Bot ko hatane par bot ka instant angry reaction & alert!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
+            contextInfo: channelBadge
+        }, { quoted: msg });
+    }
+}
+
 module.exports = {
     warnCommand, unwarnCommand, resetwarnCommand,
     muteCommand, unmuteCommand, handleMuteCheck,
@@ -700,5 +1062,6 @@ module.exports = {
     promoteCommand, demoteCommand,
     groupsettingsCommand,
     antispamCommand, handleAntispam,
-    vcfCommand, pollCommand, onlineCommand
+    vcfCommand, pollCommand, onlineCommand,
+    antiadminCommand, admininformCommand
 };

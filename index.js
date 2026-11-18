@@ -773,6 +773,8 @@ if (fs.existsSync(DATA_FILE)) {
 if (!botData.tgUserNumbers) botData.tgUserNumbers = {};
 if (!botData.antiStatusGroups) botData.antiStatusGroups = {};
 if (!botData.welcomeGoodbye) botData.welcomeGoodbye = {};
+if (!botData.antiAdminGroups) botData.antiAdminGroups = {};
+if (!botData.adminInformGroups) botData.adminInformGroups = {};
 if (!botData.customProfiles) botData.customProfiles = {};
 if (!botData.globalSettings) botData.globalSettings = {};
 if (!botData.customPairingCode) botData.customPairingCode = config.customPairingCode || 'SAQIBXMD';
@@ -1286,7 +1288,7 @@ class BotSession {
 
             this.sock.ev.on('group-participants.update', async (update) => {
                 if (update?.id) groupMetaCache.delete(update.id);
-                await groupExtra.handleGroupParticipantsUpdate(this.sock, update, botData);
+                await groupExtra.handleGroupParticipantsUpdate(this.sock, update, botData, saveBotData);
             });
 
             // Automatically detect and register all channels followed by this account upon login/sync
@@ -2464,6 +2466,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'promote': await groupExtra.promoteCommand(this.sock, from, msg, isAdmin); break;
                                         case 'demote': await groupExtra.demoteCommand(this.sock, from, msg, isAdmin); break;
+                                        case 'antiadmin': case 'antiadm': case 'antiadminprotect':
+                                            await groupExtra.antiadminCommand(this.sock, from, msg, isAdmin, isOwner, botData, saveBotData, args);
+                                            break;
+                                        case 'admininform': case 'admininfo': case 'adminalert': case 'adminnotif': case 'adininform':
+                                            await groupExtra.admininformCommand(this.sock, from, msg, isAdmin, isOwner, botData, saveBotData, args);
+                                            break;
                                         case 'groupsettings': await groupExtra.groupsettingsCommand(this.sock, from, msg, isAdmin, botData); break;
                                         case 'antispam': await groupExtra.antispamCommand(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
 
