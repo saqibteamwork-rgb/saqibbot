@@ -544,7 +544,7 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
     rawText = rawText.replace(urlMatch[0], '').trim();
   }
 
-  // 2. Check for Newsletter JID in args if no URL: 120363421389121979@newsletter[/POST_ID]
+  // 2. Check for Newsletter JID in args if no URL: 120363431913895899@newsletter[/POST_ID]
   if (!code) {
     const jidMatch = rawText.match(/([0-9]{10,}@newsletter)(?:[\s/]+([0-9]+))?/i);
     if (jidMatch) {

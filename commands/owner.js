@@ -46,8 +46,8 @@ ${googleSearchUrl}
         forwardingScore: 999,
         isForwarded: true,
         forwardedNewsletterMessageInfo: {
-            newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
-            newsletterName: settings.botName || 'MR SAQIB MD',
+            newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
+            newsletterName: settings.botName || 'Mr SAQIB',
             serverMessageId: 1
         }
     };

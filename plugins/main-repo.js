@@ -95,8 +95,8 @@ async (conn, mek, m, { from, reply, userConfig }) => {
                 forwardingScore: 999,
                 isForwarded: true,
                 forwardedNewsletterMessageInfo: {
-                    newsletterJid: config.newsletterJid || '120363421389121979@newsletter',
-                    newsletterName: BOT_NAME || config.BOT_NAME || 'MR SAQIB MD',
+                    newsletterJid: config.newsletterJid || '120363431913895899@newsletter',
+                    newsletterName: config.channelName || 'Mr SAQIB',
                     serverMessageId: -1
                 }
             }

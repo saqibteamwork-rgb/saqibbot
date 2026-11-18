@@ -10,7 +10,7 @@ const shortUptime = (sec) => {
 };
 const { getBotPic } = require("../lib/botpic");
 
-const UPDATE_CHANNEL_JID = config.newsletterJid || config.NEWSLETTER_JID || "120363421389121979@newsletter";
+const UPDATE_CHANNEL_JID = config.newsletterJid || config.NEWSLETTER_JID || "120363431913895899@newsletter";
 // Channel JID is taken from config.CHANNEL_LINK automatically (cached after the first lookup).
 // The hard-coded JID is only a fallback if WhatsApp does not answer in time.
 const FALLBACK_JID = UPDATE_CHANNEL_JID;

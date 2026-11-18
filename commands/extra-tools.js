@@ -1,6 +1,7 @@
 // commands/extra-tools.js - Popular Essential Tools from D:\Mmm-main & D:\Server2-main
 const axios = require('axios');
 const { resolvePhoneNumberFromLid } = require('./pair');
+const settings = require('../settings');
 
 // Format uptime string
 function formatUptime(seconds) {
@@ -207,7 +208,7 @@ async function aliveCommand(sock, from, msg, sessions, BOT_START_TIME) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
 
 📢 *Official Channel:*
-https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I
+${settings.channelLink}
 
 🚀 *Fastest & Most Advanced Multi-Device WhatsApp Bot*`;
 
@@ -218,8 +219,8 @@ https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I
                 forwardingScore: 999,
                 isForwarded: true,
                 forwardedNewsletterMessageInfo: {
-                    newsletterJid: '120363421389121979@newsletter',
-                    newsletterName: 'MR SAQIB MD',
+                    newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
+                    newsletterName: settings.channelName || 'Mr SAQIB',
                     serverMessageId: -1
                 }
             }

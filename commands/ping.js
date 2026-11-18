@@ -98,7 +98,7 @@ async function pingCommand(sock, from, msg, session = null, botData = null) {
         forwardingScore: 999,
         isForwarded: true,
         forwardedNewsletterMessageInfo: {
-            newsletterJid: settings.newsletterJid || '120363421389121979@newsletter',
+            newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
             newsletterName: effectiveBotName || settings.botName || 'MR SAQIB MD',
             serverMessageId: 1
         }

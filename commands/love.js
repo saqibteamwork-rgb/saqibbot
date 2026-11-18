@@ -1,5 +1,6 @@
 // commands/love.js - Ultra Stylish Love Expression for Nishay & Loved Ones
 const sharp = require('sharp');
+const settings = require('../settings');
 
 function toBoldScript(str) {
     return str.split('').map(c => {
@@ -229,8 +230,8 @@ async function loveCommand(sock, from, msg, args) {
             forwardingScore: 999,
             isForwarded: true,
             forwardedNewsletterMessageInfo: {
-                newsletterJid: '120363421389121979@newsletter',
-                newsletterName: 'MR SAQIB MD',
+                newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',
+                newsletterName: settings.channelName || 'Mr SAQIB',
                 serverMessageId: -1
             }
         };

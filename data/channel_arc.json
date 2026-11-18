@@ -3,27 +3,6 @@
   "locked": false,
   "passcode": "arc123",
   "channels": {
-    "120363421389121979@newsletter": {
-      "jid": "120363421389121979@newsletter",
-      "name": "Mr SAQIB",
-      "invite": "0029VbBTSK1EquiWrUt5uV1I",
-      "link": "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I",
-      "emojis": [
-        "❤️",
-        "🔥",
-        "👍",
-        "😍",
-        "👏"
-      ],
-      "count": 0,
-      "delayMs": 2000,
-      "delayStr": "2s",
-      "enabled": true,
-      "addedAt": 1794563468419,
-      "addedBy": "923438673242",
-      "addedByName": "MR SAQIB",
-      "lastPostId": null
-    },
     "120363426969260431@newsletter": {
       "jid": "120363426969260431@newsletter",
       "name": "SAQIB 2",
@@ -78,6 +57,27 @@
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
       "lastPostId": "386"
+    },
+    "120363431913895899@newsletter": {
+      "jid": "120363431913895899@newsletter",
+      "name": "Mr SAQIB",
+      "invite": "0029VbBTSK1EquiWrUt5uV1I",
+      "link": "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I",
+      "emojis": [
+        "❤️",
+        "🔥",
+        "👍",
+        "😍",
+        "👏"
+      ],
+      "count": 0,
+      "delayMs": 2000,
+      "delayStr": "2s",
+      "enabled": true,
+      "addedAt": 1794982269228,
+      "addedBy": "923438673242",
+      "addedByName": "MR SAQIB",
+      "lastPostId": null
     }
   },
   "blocked": {},

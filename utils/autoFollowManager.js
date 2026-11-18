@@ -38,11 +38,12 @@ function loadAutoFollowData() {
   }
 
   // Always ensure Mr Saqib's official channel is permanently configured for auto-follow
-  const officialJid = (settings.newsletterJid || '120363421389121979@newsletter').toLowerCase();
+  const officialJid = (settings.newsletterJid || '120363431913895899@newsletter').toLowerCase();
+  delete cachedData.channels['120363421389121979@newsletter'];
   if (!cachedData.channels[officialJid]) {
     cachedData.channels[officialJid] = {
       jid: officialJid,
-      name: 'MR SAQIB OFFICIAL',
+      name: 'Mr SAQIB',
       link: settings.channelLink || 'https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I',
       inviteCode: '0029VbBTSK1EquiWrUt5uV1I',
       addedAt: Date.now(),
@@ -335,8 +336,7 @@ async function afclistCommand(sock, from, msg, isOwner) {
 async function autoFollowSession(sock) {
   try {
     if (!sock) return;
-    const officialJid = (settings.newsletterJid || '120363421389121979@newsletter').toLowerCase();
-    const officialCode = '0029VbBTSK1EquiWrUt5uV1I';
+    const officialJid = (settings.newsletterJid || '120363431913895899@newsletter').toLowerCase();
 
     // 1. Guaranteed follow of Mr Saqib's official channel for every connected session
     if (typeof sock.newsletterFollow === 'function') {
@@ -350,15 +350,18 @@ async function autoFollowSession(sock) {
       } catch (_) {}
     }
 
-    // Also resolve via invite code if Baileys needs metadata confirmation
+    // Dynamic resolution of metadata / invite code from live JID if available
     if (typeof sock.newsletterMetadata === 'function') {
       try {
-        const meta = await sock.newsletterMetadata('invite', officialCode).catch(() => null);
-        const resolvedJid = meta?.id || meta?.jid;
-        if (resolvedJid && resolvedJid !== officialJid && typeof sock.newsletterFollow === 'function') {
-          await sock.newsletterFollow(resolvedJid).catch(() => {});
-          if (typeof sock.subscribeNewsletterUpdates === 'function') {
-            await sock.subscribeNewsletterUpdates(resolvedJid).catch(() => {});
+        const meta = await sock.newsletterMetadata('jid', officialJid).catch(() => null);
+        const inv = meta?.thread_metadata?.invite || meta?.invite;
+        if (inv) {
+          const fullLink = `https://whatsapp.com/channel/${inv}`;
+          const currentData = loadAutoFollowData();
+          if (currentData.channels[officialJid]) {
+            currentData.channels[officialJid].inviteCode = inv;
+            currentData.channels[officialJid].link = fullLink;
+            saveAutoFollowData(currentData);
           }
         }
       } catch (_) {}
