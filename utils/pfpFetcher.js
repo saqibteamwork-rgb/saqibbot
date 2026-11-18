@@ -41,15 +41,16 @@ function resolveLidFast(cleanNum) {
  * WhatsApp protocol: <iq to="s.whatsapp.net" type="get" xmlns="w:profile:picture"><picture type="image|preview" query="url"/></iq>
  */
 async function queryRawProfilePic(sock, targetJid, type = 'image', timeoutMs = 4000) {
+    if (!sock || !targetJid) return null;
     try {
+        const isGroup = String(targetJid).endsWith('@g.us');
+        const attrs = isGroup
+            ? { to: targetJid, type: 'get', xmlns: 'w:profile:picture' }
+            : { target: targetJid, to: 's.whatsapp.net', type: 'get', xmlns: 'w:profile:picture' };
+
         const result = await sock.query({
             tag: 'iq',
-            attrs: {
-                target: targetJid,
-                to: 's.whatsapp.net',
-                type: 'get',
-                xmlns: 'w:profile:picture'
-            },
+            attrs,
             content: [{ tag: 'picture', attrs: { type, query: 'url' } }]
         }, timeoutMs);
 
