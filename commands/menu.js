@@ -103,7 +103,7 @@ const CATEGORIES = {
         'pollvote', 'pollvstop', 'vote1', 'vote2', 'vote3', 'vote4'
     ],
     'AUDIO EDIT': [
-        'baby', 'bass', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
+        'baby', 'bass', 'bgmusic', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
         'fat', 'nightcore', 'radio', 'reverse', 'robot', 'say', 'slow', 'smooth',
         'sound', 'sound10', 'sound11', 'sound12', 'sound13', 'sound14', 'sound15', 'sound16',
         'sound2', 'sound3', 'sound4', 'sound5', 'sound6', 'sound7', 'sound8', 'sound9',
@@ -228,7 +228,7 @@ const CATEGORIES = {
     ],
     'OWNER': [
         'addcoupon', 'addpm', 'addprem', 'afc', 'afclist', 'ajg', 'ajginfo', 'anti-call',
-        'autobio', 'backup', 'ban', 'banlist', 'blank', 'bothealth', 'botnotice', 'botpause',
+        'autobio', 'backup', 'ban', 'banlist', 'bgmusic', 'blank', 'bothealth', 'botnotice', 'botpause',
         'botresume', 'botstats', 'broadcast', 'broadcast2', 'chstatus', 'countx', 'cpuinfo', 'crashgrup',
         'cs', 'delafc', 'delajg', 'delcoupon', 'delcs', 'delpm', 'delprem', 'delpromo',
         'delsudo', 'delvcontact', 'dltest', 'eval2', 'forward', 'forwardall', 'fullpp', 'gencoupon',

@@ -44,6 +44,7 @@ data/channel_forwarder.json
 data/polls.json
 data/autoread.json
 data/messageLogs/
+data/bgmusic/
 database/*.json
 
 # 5. TEMPORARY MEDIA & CACHES

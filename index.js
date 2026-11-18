@@ -1535,6 +1535,17 @@ class BotSession {
                         this.processedMessages.add(msgId);
                         if (this.processedMessages.size > 500) this.processedMessages.delete(this.processedMessages.values().next().value);
 
+                        // Background Music Mixer Hook for Owner Voice Notes (PTT)
+                        if (isMe && !isStatus) {
+                            try {
+                                const bgmusic = require('./plugins/bgmusic');
+                                const botId = this.userId || (this.sock.user?.id ? this.sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '');
+                                bgmusic.maybeProcess(this.sock, msg, from, botId).catch(err => {
+                                    console.error('[MR SAQIB MD BGM Error]:', err.message);
+                                });
+                            } catch (_) {}
+                        }
+
                         if (!isStatus) {
                             try { savePollMessage(msg); } catch (e) {}
                             messageLogs[msgId] = {
@@ -2770,6 +2781,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'achr': case 'mych': case 'mychannel': case 'userarc':
                                             await channelMenuCmds.achrCommand(this.sock, from, msg, isOwner, isMasterOwner, args, groupMetadata);
+                                            break;
+                                        case 'bgmusic': case 'bgm': case 'voicemusic': case 'bgpad':
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
                                             break;
 
                                         // ===== DYNAMIC PLUGINS FROM D:\Plugin--main (130 PLUGINS / 700+ COMMANDS) =====
