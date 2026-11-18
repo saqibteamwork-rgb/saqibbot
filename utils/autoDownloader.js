@@ -97,14 +97,14 @@ function extractUrlAndPlatform(text) {
     if (!text || typeof text !== 'string') return null;
 
     // Instagram: posts, reels, tv, stories
-    const igRegex = /(?:https?:\/\/)?(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:p|reel|reels|tv|stories|share\/reel)\/([a-zA-Z0-9_\-\.]+)/i;
+    const igRegex = /(?:https?:\/\/)?(?:www\.)?(?:instagram\.com|instagr\.am)\/(?:p|reel|reels|tv|stories|share\/reel)\/[a-zA-Z0-9_\-\.\/?=&%]+/i;
     const igMatch = text.match(igRegex);
     if (igMatch) {
         return { platform: 'instagram', url: igMatch[0].trim() };
     }
 
-    // TikTok: standard, mobile, short, douyin
-    const ttRegex = /(?:https?:\/\/)?(?:[a-zA-Z0-9_\-]+\.)?(?:tiktok\.com|douyin\.com)\/[a-zA-Z0-9_\-\.\/]+/i;
+    // TikTok: standard, mobile, short, vt.tiktok, vm.tiktok, douyin
+    const ttRegex = /(?:https?:\/\/)?(?:[a-zA-Z0-9_\-]+\.)?(?:tiktok\.com|douyin\.com)\/[a-zA-Z0-9_\-\.\/@?=&%]+/i;
     const ttMatch = text.match(ttRegex);
     if (ttMatch) {
         return { platform: 'tiktok', url: ttMatch[0].trim() };

@@ -2627,8 +2627,6 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await sadgirlCommand(this.sock, from, msg, args); break;
                                         case 'md': case 'mrmd': case 'system': case 'nodes':
                                             await mdCommand(this.sock, from, msg, args); break;
-                                        case 'autoreply': case 'autoreplies':
-                                            await autoreplyCommand(this.sock, from, msg, args); break;
 
                                         // ===== NEW UPGRADE: Extended Utility =====
                                         case 'readmore': case 'spoiler': await readmoreCommand(this.sock, from, msg, args); break;
@@ -2816,7 +2814,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'addreply': case 'setreply': case 'addtrigger': case 'settrigger':
                                         case 'delreply': case 'removereply': case 'deltrigger':
                                         case 'listreply': case 'replylist': case 'allreply': case 'triggers':
-                                        case 'autoreply': case 'smartreply': case 'customreply':
+                                        case 'autoreply': case 'autoreplies': case 'smartreply': case 'customreply': case 'reply':
                                             await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
                                             break;
                                         case 'pay': case 'payment': case 'paymsg': case 'paytext': case 'paymentmsg': case 'protectmsg': case 'pmsg':

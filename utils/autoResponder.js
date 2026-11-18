@@ -31,36 +31,20 @@ function loadState() {
         if (fs.existsSync(STATE_FILE)) {
             const raw = fs.readFileSync(STATE_FILE, 'utf8');
             const parsed = JSON.parse(raw);
+            const rawReplies = Array.isArray(parsed.replies) ? parsed.replies : [];
+            // Strictly exclude any seed_ triggers so no unwanted triggers persist
+            const cleanReplies = rawReplies.filter(r => !String(r.id || '').startsWith('seed_') && r.trigger !== 'owner' && r.trigger !== 'salam');
             state = {
                 globalEnabled: parsed.globalEnabled !== false,
                 chats: parsed.chats || {},
-                replies: Array.isArray(parsed.replies) ? parsed.replies : []
+                replies: cleanReplies
             };
         } else {
-            // Seed with helpful friendly default triggers
+            // Fresh state: Start completely clean with zero unwanted default triggers
             state = {
                 globalEnabled: true,
                 chats: {},
-                replies: [
-                    {
-                        id: 'seed_salam',
-                        trigger: 'salam',
-                        response: 'Walaikum Assalam jani! Welcome to *MR SAQIB MD* ❤️\nType *.menu* for all commands.',
-                        matchType: 'word',
-                        hits: 0,
-                        addedBy: 'MR SAQIB',
-                        createdAt: Date.now()
-                    },
-                    {
-                        id: 'seed_owner',
-                        trigger: 'owner',
-                        response: '👑 *MR SAQIB MD OWNER*\nName: Mr SAQIB\nNewsletter: https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i\nType *.owner* to view full contact card.',
-                        matchType: 'word',
-                        hits: 0,
-                        addedBy: 'MR SAQIB',
-                        createdAt: Date.now()
-                    }
-                ]
+                replies: []
             };
             saveState();
         }
@@ -107,8 +91,8 @@ function setGlobalEnabled(enabled) {
 /**
  * Adds or updates a keyword trigger
  */
-function addReply(trigger, response, addedBy = 'Owner', matchType = 'word') {
-    const cleanTrigger = String(trigger || '').trim().toLowerCase();
+function addReply(trigger, response, addedBy = 'Owner', matchType = 'exact') {
+    const cleanTrigger = String(trigger || '').trim().toLowerCase().replace(/^[\s.,!?;:~`'"*#_-]+|[\s.,!?;:~`'"*#_-]+$/g, '');
     const cleanResponse = String(response || '').trim();
 
     if (!cleanTrigger || !cleanResponse) {
@@ -120,7 +104,7 @@ function addReply(trigger, response, addedBy = 'Owner', matchType = 'word') {
         id: existingIdx >= 0 ? state.replies[existingIdx].id : `reply_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         trigger: cleanTrigger,
         response: cleanResponse,
-        matchType: matchType || 'word',
+        matchType: matchType || 'exact',
         hits: existingIdx >= 0 ? (state.replies[existingIdx].hits || 0) : 0,
         addedBy: String(addedBy || 'User'),
         updatedAt: Date.now()
@@ -137,10 +121,25 @@ function addReply(trigger, response, addedBy = 'Owner', matchType = 'word') {
 }
 
 /**
- * Deletes a keyword trigger by trigger name or index (1-based)
+ * Clears all custom auto-replies
+ */
+function clearAllReplies() {
+    const count = state.replies.length;
+    state.replies = [];
+    saveState();
+    return count;
+}
+
+/**
+ * Deletes a keyword trigger by trigger name or index (1-based), or clears all
  */
 function deleteReply(target) {
     const clean = String(target || '').trim().toLowerCase();
+    if (!clean) return null;
+    if (clean === 'all' || clean === 'clear' || clean === 'reset') {
+        const count = clearAllReplies();
+        return { count, all: true };
+    }
     let idx = -1;
 
     // Check if number
@@ -165,26 +164,36 @@ function getReplies() {
 }
 
 /**
- * Checks if incoming text matches any trigger and returns the response
+ * Checks if incoming text matches any trigger and returns the response.
+ * Strictly prevents triggering on long normal conversation sentences!
  */
 function findMatch(text) {
     if (!text || typeof text !== 'string') return null;
-    const cleanText = text.trim().toLowerCase();
+    const rawClean = text.trim().toLowerCase();
+    const cleanText = rawClean.replace(/^[\s.,!?;:~`'"*#_-]+|[\s.,!?;:~`'"*#_-]+$/g, '').trim();
     if (!cleanText) return null;
 
+    const words = cleanText.split(/\s+/).filter(Boolean);
+    const wordCount = words.length;
+
     for (const item of state.replies) {
-        const trig = item.trigger.toLowerCase();
+        const trig = String(item.trigger || '').trim().toLowerCase().replace(/^[\s.,!?;:~`'"*#_-]+|[\s.,!?;:~`'"*#_-]+$/g, '').trim();
         if (!trig) continue;
 
         let matched = false;
-        if (item.matchType === 'exact') {
-            matched = (cleanText === trig);
-        } else {
-            // Word boundary match (safe for single words or phrases)
-            // Escapes regex specials
-            const escaped = trig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(`(^|\\s|[.,!?;:])${escaped}($|\\s|[.,!?;:])`, 'i');
-            matched = regex.test(cleanText);
+
+        // Exact match (highest priority): whole message text equals the trigger
+        if (cleanText === trig) {
+            matched = true;
+        } else if (item.matchType === 'word') {
+            // SAFE WORD MATCH:
+            // NEVER match if the message is a long sentence/conversation (more than 3 words)
+            // This prevents normal chatting messages from accidentally triggering!
+            if (wordCount <= 3) {
+                const escaped = trig.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(^|\\s)${escaped}($|\\s)`, 'i');
+                matched = regex.test(cleanText);
+            }
         }
 
         if (matched) {
@@ -250,6 +259,7 @@ module.exports = {
     isChatEnabled,
     setChatEnabled,
     setGlobalEnabled,
+    clearAllReplies,
     addReply,
     deleteReply,
     getReplies,
