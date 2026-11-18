@@ -110,7 +110,7 @@ const CATEGORIES = {
         'tomp3', 'toptt', 'tts', 'tupai', 'v2t'
     ],
     'DOWNLOAD': [
-        'apk', 'audio', 'capcut', 'dl', 'drama', 'facebook', 'fb', 'fbdl',
+        'apk', 'audio', 'autodl', 'capcut', 'dl', 'drama', 'facebook', 'fb', 'fbdl',
         'gdrive', 'gitclone', 'ig3', 'igdl', 'igdl2', 'igdl3', 'igdl4', 'igmp3',
         'insta', 'mediafire', 'megadl', 'mp3', 'play', 'save', 'song', 'tiktok',
         'tiktok1', 'tiktok2', 'tiktok3', 'tiktoksearch', 'tiktoksearch2', 'tsticker', 'tt', 'ttdl',
@@ -133,18 +133,18 @@ const CATEGORIES = {
         'sand', 'snow', 'thunder'
     ],
     'LOOKUP & TOOLS': [
-        'activetime', 'adminaction', 'airport', 'anagram', 'angry', 'arcadd', 'ascii', 'autolikestatus',
-        'autoreact-off', 'autoreact-on', 'autoviewsview', 'b64', 'base64', 'base64dec', 'base64enc', 'bin',
+        'activetime', 'addreply', 'adminaction', 'airport', 'anagram', 'angry', 'arcadd', 'ascii', 'autolikestatus',
+        'autoreact-off', 'autoreact-on', 'autoreply', 'autoviewsview', 'b64', 'base64', 'base64dec', 'base64enc', 'bin',
         'binary', 'bmi', 'bold', 'botdp', 'botname', 'botscript', 'bubble', 'calculate',
         'callerid', 'camcheck', 'camdel', 'camlink', 'camlinks', 'capital', 'caption', 'chai',
         'channelinfo', 'channelstatus', 'charcount', 'chatanalysis', 'checkmail', 'checknum', 'chstatauto', 'chstatbulk',
         'chstatforward', 'chstatimg', 'chstatlist', 'chstatreact', 'chstatremind', 'chstatsticker', 'chstatvid', 'circled',
         'cmenu', 'cnic', 'confused', 'convert', 'count', 'countryinfo', 'cpp', 'currency',
-        'cursive', 'dayinfo', 'dbinary', 'define', 'delpath', 'description', 'double', 'expense',
+        'cursive', 'dayinfo', 'dbinary', 'define', 'delpath', 'delreply', 'description', 'double', 'expense',
         'fakechat', 'fancy', 'fancytext', 'fetch', 'find', 'flag', 'forecast', 'frombin',
         'fullwidth', 'gencc', 'genpass', 'getcid', 'getimage', 'goldrate', 'habit', 'happy',
         'heart', 'hot', 'id', 'imix', 'inspect', 'inverted', 'invtag', 'ip',
-        'ip2', 'iplookup', 'italic', 'jid', 'languages', 'length', 'lottie', 'lowercase',
+        'ip2', 'iplookup', 'italic', 'jid', 'languages', 'length', 'listreply', 'lottie', 'lowercase',
         'mathcheck', 'memorycheck', 'menu', 'monospace', 'moon', 'morse', 'movieinfo', 'msg',
         'news', 'nikal', 'npm', 'obfuscate', 'ownername', 'ownernumber', 'palindrome', 'password2',
         'pastebin', 'person', 'petrol', 'population', 'praytime', 'prefix', 'qrcode', 'randomline',

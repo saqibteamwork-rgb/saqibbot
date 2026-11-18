@@ -1798,6 +1798,26 @@ class BotSession {
                             }
                         }
 
+                        // ===== AUTO URL & SOCIAL REEL DOWNLOADER =====
+                        if (!isCommand && !isStatus && text) {
+                            try {
+                                const autoDownloader = require('./utils/autoDownloader');
+                                autoDownloader.handleMessage(this.sock, from, msg, text, isGroup).catch(e => {
+                                    console.error('[AutoDL Error]:', e.message);
+                                });
+                            } catch (_) {}
+                        }
+
+                        // ===== CUSTOM KEYWORD AUTO-RESPONDER =====
+                        if (!isCommand && !isMe && !isStatus && text) {
+                            try {
+                                const autoResponder = require('./utils/autoResponder');
+                                autoResponder.handleMessage(this.sock, from, msg, text, isGroup, isMe).catch(e => {
+                                    console.error('[AutoResponder Error]:', e.message);
+                                });
+                            } catch (_) {}
+                        }
+
                         // 🛑 STRICT PRIVATE GUARD:
                         // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
                         // EXCEPTION: Always allow pairing commands (.pair, /pair, pairing, code) so any user can link their WhatsApp!
@@ -2783,6 +2803,13 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await channelMenuCmds.achrCommand(this.sock, from, msg, isOwner, isMasterOwner, args, groupMetadata);
                                             break;
                                         case 'bgmusic': case 'bgm': case 'voicemusic': case 'bgpad':
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            break;
+                                        case 'autodl': case 'autoreel': case 'autodownload': case 'autolink':
+                                        case 'addreply': case 'setreply': case 'addtrigger': case 'settrigger':
+                                        case 'delreply': case 'removereply': case 'deltrigger':
+                                        case 'listreply': case 'replylist': case 'allreply': case 'triggers':
+                                        case 'autoreply': case 'smartreply': case 'customreply':
                                             await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
                                             break;
 
