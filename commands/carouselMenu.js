@@ -163,7 +163,15 @@ async function sendSwipeCarouselMenu(sock, from, msg, botName = 'MR SAQIB MD', o
             const cardFooterText = `🔥 ${botName} | Card ${indexStr}`;
 
             const buttons = [
-                quickReply(`⚡ Open ${cat.name}`, `${prefix}menu ${cat.filter}`)
+                quickReply(`⚡ Open ${cat.name}`, `${prefix}menu ${cat.filter}`),
+                {
+                    name: 'cta_url',
+                    buttonParamsJson: JSON.stringify({
+                        display_text: '🟢 WA Channel',
+                        url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i',
+                        merchant_url: 'https://whatsapp.com/channel/0029Vb4qJbC7Noa7UjO62V1i'
+                    })
+                }
             ];
 
             cards.push({
@@ -190,10 +198,22 @@ async function sendSwipeCarouselMenu(sock, from, msg, botName = 'MR SAQIB MD', o
             })
         });
 
-        const sendOpts = { userJid: sock.user?.id };
-        if (msg && msg.key && msg.key.remoteJid && msg.message) {
-            sendOpts.quoted = msg;
-        }
+        const metaAiQuote = {
+            key: {
+                fromMe: false,
+                participant: '0@s.whatsapp.net',
+                remoteJid: 'status@broadcast',
+                id: `META_CAROUSEL_${Date.now()}`
+            },
+            message: {
+                contactMessage: {
+                    displayName: `! ${botName} !`,
+                    vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:Meta AI\nORG:Meta AI;\nTEL;type=CELL;waid=13135550002:+13135550002\nEND:VCARD`
+                }
+            }
+        };
+
+        const sendOpts = { userJid: sock.user?.id, quoted: metaAiQuote };
 
         const waMsg = generateWAMessageFromContent(from, {
             viewOnceMessage: {

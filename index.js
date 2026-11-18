@@ -1847,6 +1847,9 @@ class BotSession {
                                             const { sendSwipeCarouselMenu } = require('./commands/carouselMenu');
                                             await sendSwipeCarouselMenu(this.sock, from, msg, botData?.customProfiles?.[this.userId]?.botName || 'MR SAQIB MD', botData?.customProfiles?.[this.userId]?.ownerName || 'Mr SAQIB');
                                             break;
+                                        case 'btnmenu': case 'buttonmenu': case 'metaaimenu': case 'metamenu': case 'sayronmenu':
+                                            await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, ['15']);
+                                            break;
                                         case 'gcmenu': case 'groupmenu': case 'gmenu':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'GROUP');
                                             break;

@@ -375,6 +375,37 @@ Swipe through the cards to see all available commands.
 ┃ 🚀 ${toSansBold(p.ownerName)}
 ┃ 🔍 google.com/search?q=mr+saqib
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    },
+
+    15: {
+        id: 15,
+        name: 'Meta AI Luxury Button Menu (WaBot Card 🏷️)',
+        tag: '🏷️ Meta AI Buttons',
+        isMetaAiButton: true,
+        makeHeader: (p, s) =>
+`🏷️ *${p.botName}*
+Ends tomorrow at 5:40 PM
+Code: ${p.botName} WaBot
+
+╭───〔 *${p.botName} WaBot* 〕───╮
+│ Assalam-o-Alaikum,
+*${p.userName}* 🌸
+├─────────────
+│ 📅 ${s.dateStr} • ⏱️ 17:40:56
+├─────────────
+│ 🟢 *Status:* Online (${s.runtimeStr})
+│ 📶 *Host:* SAQIB-SRV-1
+│ ⚡ *Prefix:* [ . ] • ${s.totalCommands}+ Cmds
+╰─────────────\n\n`,
+        makeBox: (title, cmds) => {
+            const head = `┌───🏷️ ⚡ ${toSansBold(title.toUpperCase())} ⚡───\n`;
+            const body = cmds.map(cmd => `│ ◈ .${cmd}`).join('\n') + '\n';
+            const foot = `└───────────────────🏷️\n\n`;
+            return head + body + foot;
+        },
+        makeFooter: (p) =>
+`📚 *Use .allmenu to browse all commands.*
+🔥 *Powered by ${p.ownerName}*`
     }
 };
 
@@ -411,16 +442,17 @@ function getStyleCatalog(currentStyleId = 1, isOwner = false) {
         return `┃ ${st.id}. *${st.name}* [${st.tag}]${isCurrent}`;
     }).join('\n');
 
-    return `╭━━━〔 🎨 *MENU STYLES CATALOG (14 DESIGNS)* 〕━━━┈⊷\n` +
+    return `╭━━━〔 🎨 *MENU STYLES CATALOG (15 DESIGNS)* 〕━━━┈⊷\n` +
            lines + `\n` +
            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
            `💡 *Kaise Change Karein:*\n` +
-           `👉 \`.setmenu <1-14>\` — Apna default menu design set karein (e.g. \`.setmenu 14\` ya \`.setmenu carousel\`)\n` +
-           `👉 \`.menu <1-14>\` — Kisi bhi design ka foran live preview dekhein (e.g. \`.menu 14\`)\n` +
+           `👉 \`.setmenu <1-15>\` — Apna default menu design set karein (e.g. \`.setmenu 15\` ya \`.setmenu metaai\`)\n` +
+           `👉 \`.menu <1-15>\` — Kisi bhi design ka foran live preview dekhein (e.g. \`.menu 15\`)\n` +
+           `👉 \`.btnmenu\` ya \`.metaaimenu\` — Meta AI Button Card Menu dekhein\n` +
            `👉 \`.cmenu\` — Interactive Swipe Cards Slider Menu dekhein\n` +
            `👉 \`.typmenu\` — VIP Payment Request Card Menu dekhein\n` +
            `👉 \`.resetmenu\` — Wapas default Style 1 par reset karein\n` +
-           (isOwner ? `👉 \`.setmenu -g <1-14>\` — Poore bot ke naye users ka global default set karein\n\n` : `\n`) +
+           (isOwner ? `👉 \`.setmenu -g <1-15>\` — Poore bot ke naye users ka global default set karein\n\n` : `\n`) +
            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 }
 
@@ -434,6 +466,10 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
     let choiceNum = null;
     for (const a of args) {
         const clean = String(a).toLowerCase().trim();
+        if (['btn', 'button', 'meta', 'metaai', 'btnmenu', 'buttonmenu', 'sayron', 'wabot'].includes(clean)) {
+            choiceNum = 15;
+            break;
+        }
         if (['carousel', 'cmenu', 'card', 'cards', 'slide', 'slidemenu'].includes(clean)) {
             choiceNum = 14;
             break;
@@ -443,7 +479,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
             break;
         }
         const n = parseInt(a.replace(/[^0-9]/g, ''), 10);
-        if (!isNaN(n) && n >= 1 && n <= 14) {
+        if (!isNaN(n) && n >= 1 && n <= 15) {
             choiceNum = n;
             break;
         }
@@ -456,7 +492,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
 
     const selectedStyle = STYLES[choiceNum];
     if (!selectedStyle) {
-        return await sock.sendMessage(from, { text: `❌ *Invalid Style!* 1 se 14 ke darmiyan number dein (e.g. \`.setmenu 14\` ya \`.setmenu carousel\`).` }, { quoted: msg });
+        return await sock.sendMessage(from, { text: `❌ *Invalid Style!* 1 se 15 ke darmiyan number dein (e.g. \`.setmenu 15\` ya \`.setmenu metaai\`).` }, { quoted: msg });
     }
 
     if (!botData.customProfiles) botData.customProfiles = {};
@@ -487,7 +523,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
               `┃ 👤 *Session User:* +${userId}\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `💡 *Ab aap jab bhi \`.menu\` likhenge to ye naya style aayega!* ✨\n` +
-              `👉 Kisi bhi waqt wapas badalane ke liye: \`.setmenu <1-14>\``
+              `👉 Kisi bhi waqt wapas badalane ke liye: \`.setmenu <1-15>\``
     }, { quoted: msg });
 }
 
