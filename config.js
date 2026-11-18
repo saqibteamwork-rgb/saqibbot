@@ -31,6 +31,8 @@ const config = {
   CHANNEL_NAME: settings.channelName || 'Mr SAQIB',
   menuImage: settings.menuImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png',
   MENU_IMAGE: settings.menuImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png',
+  carouselImage: settings.carouselImage || './lib/carousel_banner.jpg',
+  CAROUSEL_IMAGE: settings.carouselImage || './lib/carousel_banner.jpg',
   telegramImage: settings.telegramImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png',
   TELEGRAM_IMAGE: settings.telegramImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png',
   WORK_TYPE: 'public',

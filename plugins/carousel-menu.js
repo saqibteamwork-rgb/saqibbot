@@ -94,7 +94,9 @@ const MEDIA_TTL_MS = 20 * 60 * 1000;
 const UPLOAD_TIMEOUT_MS = 4000;
 const mediaCache = new Map();
 function getHeaderMedia(conn, prepareWAMessageMedia, timeoutMs) {
-    const pic = getBotPic(conn) || {};
+    const bannerPath = path.join(__dirname, '..', 'lib', 'carousel_banner.jpg');
+    const localExists = fs.existsSync(bannerPath);
+    const pic = localExists ? { url: bannerPath } : (getBotPic(conn) || {});
     let mtime = 0;
     try { if (pic.url && !/^https?:/i.test(pic.url)) mtime = fs.statSync(pic.url).mtimeMs; } catch (_) {}
     const key = `${String((conn.user && conn.user.id) || '').split(':')[0]}|${pic.url}|${mtime}`;

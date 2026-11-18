@@ -10,6 +10,7 @@ module.exports = {
     openWeatherApiKey: process.env.OPENWEATHER_API_KEY || '',
     removeBgApiKey: process.env.REMOVEBG_API_KEY || '',
     menuImage: process.env.MENU_IMAGE || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png',
+    carouselImage: process.env.CAROUSEL_IMAGE || './lib/carousel_banner.jpg',
     telegramImage: process.env.TELEGRAM_IMAGE || process.env.MENU_IMAGE || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png',
     websiteUrl: process.env.WEBSITE_URL || 'https://mrsaqib.me',
     websiteTitle: process.env.WEBSITE_TITLE || 'Mr Saqib | Cyber Security Expert & Full-Stack App Developer',

@@ -23,8 +23,10 @@ const mediaCache = new Map();
 const MEDIA_TTL_MS = 20 * 60 * 1000;
 
 async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
-    const pic = getBotPic(sock) || { url: settings.menuImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png' };
-    const key = `${String(sock?.user?.id || '').split(':')[0]}|${pic.url}`;
+    const bannerPath = path.join(__dirname, '..', 'lib', 'carousel_banner.jpg');
+    const localExists = fs.existsSync(bannerPath);
+    const pic = localExists ? { url: bannerPath } : (getBotPic(sock) || { url: settings.menuImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png' });
+    const key = `${String(sock?.user?.id || '').split(':')[0]}|${localExists ? 'carousel_banner_v2' : pic.url}`;
 
     const hit = mediaCache.get(key);
     if (hit && Date.now() - hit.at < MEDIA_TTL_MS) {
