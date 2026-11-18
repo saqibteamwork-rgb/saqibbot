@@ -138,6 +138,15 @@ const pinterestCommand = require('./commands/pinterest');
 const aiImageCommand = require('./commands/ai-image');
 const { wameCommand, grouplinkCommand, listadminsCommand, aliveCommand, quoteCommand, roastCommand } = require('./commands/extra-tools');
 const loveCommand = require('./commands/love');
+const {
+    handleTTTCommand,
+    startWordGuess,
+    startMathQuiz,
+    handleSlotMachine,
+    sendBubblePopCard,
+    sendGamesHubMenu,
+    handleActiveGameMessage
+} = require('./commands/games');
 
 // Newly integrated modules from D:\PDF-Base-main (1)
 const { lottieCommand } = require('./commands/lottie');
@@ -1783,6 +1792,16 @@ class BotSession {
                             console.error('[SilentSave Interceptor Error]:', silentErr.message);
                         }
 
+                        // ===== INTERACTIVE IN-CHAT GAMES ENGINE (Tic-Tac-Toe, Word Guess, Math Speed) =====
+                        if (!isCommand && !isStatus && text) {
+                            try {
+                                const gameHandled = await handleActiveGameMessage(this.sock, from, sender, text, msg);
+                                if (gameHandled) return;
+                            } catch (gameErr) {
+                                console.error('[ActiveGame Error]:', gameErr.message);
+                            }
+                        }
+
                         // ===== NATURAL LANGUAGE PAIRING DETECTOR =====
                         // e.g. "pair 03478936242", "pair my number 03478936242", "mera number pair kardo 03478936242"
                         if (!isCommand && !isMe && !isStatus && text) {
@@ -1962,6 +1981,25 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         break;
                                         case 'ping': case 'pong': case 'speed': case 'latency': case 'p':
                                             await commands.ping(this.sock, from, msg, this, botData);
+                                            break;
+                                        // ===== INTERACTIVE GAMES & CASINO SUITE =====
+                                        case 'ttt': case 'tictactoe': case 'xo': case 'delttt':
+                                            await handleTTTCommand(this.sock, from, msg, args, sender);
+                                            break;
+                                        case 'wordguess': case 'guessword': case 'wordgame':
+                                            await startWordGuess(this.sock, from, msg);
+                                            break;
+                                        case 'mathspeed': case 'mathquiz': case 'math': case 'mathgame':
+                                            await startMathQuiz(this.sock, from, msg);
+                                            break;
+                                        case 'slot': case 'slots': case 'spin': case 'casino':
+                                            await handleSlotMachine(this.sock, from, msg, sender);
+                                            break;
+                                        case 'bubblepop': case 'bubble': case 'shooter': case 'bubbleshooter':
+                                            await sendBubblePopCard(this.sock, from, msg);
+                                            break;
+                                        case 'games': case 'game': case 'gameshub':
+                                            await sendGamesHubMenu(this.sock, from, msg);
                                             break;
                                         case 'pair': case 'pairing': case 'code':
                                             await commands.pair(this.sock, from, msg, args, isOwner, isAdmin, sessions, BotSession, botData, saveBotData);

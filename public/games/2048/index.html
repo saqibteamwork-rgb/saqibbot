@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2048 Game — MR SAQIB MD</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; touch-action: none; }
+        body {
+            background: #0f172a;
+            color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 15px;
+        }
+        .header {
+            width: 100%;
+            max-width: 360px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        h1 { font-size: 32px; font-weight: 800; color: #38bdf8; }
+        .score-container {
+            background: #1e293b;
+            padding: 8px 18px;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 700;
+            border: 1px solid #334155;
+        }
+        .score-val { color: #4ade80; font-size: 18px; }
+        .grid-container {
+            width: 360px;
+            height: 360px;
+            background: #1e293b;
+            border-radius: 16px;
+            border: 2px solid #38bdf8;
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.25);
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            padding: 10px;
+            position: relative;
+        }
+        .tile {
+            background: #334155;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 800;
+            color: #ffffff;
+            transition: all 0.15s ease-in-out;
+        }
+        .t-2 { background: #0284c7; }
+        .t-4 { background: #0369a1; }
+        .t-8 { background: #f97316; }
+        .t-16 { background: #ea580c; }
+        .t-32 { background: #ef4444; }
+        .t-64 { background: #dc2626; }
+        .t-128 { background: #eab308; font-size: 20px; box-shadow: 0 0 10px #eab308; }
+        .t-256 { background: #ca8a04; font-size: 20px; }
+        .t-512 { background: #a855f7; font-size: 20px; }
+        .t-1024 { background: #9333ea; font-size: 18px; }
+        .t-2048 { background: #ec4899; font-size: 18px; box-shadow: 0 0 15px #ec4899; }
+        .controls {
+            margin-top: 15px;
+            width: 100%;
+            max-width: 360px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-action {
+            background: #38bdf8;
+            color: #0f172a;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .footer {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #64748b;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>2048</h1>
+        <div class="score-container">
+            SCORE<br><span id="scoreVal" class="score-val">0</span>
+        </div>
+    </div>
+
+    <div class="grid-container" id="grid"></div>
+
+    <div class="controls">
+        <span style="font-size: 13px; color: #94a3b8;">Swipe or Arrow Keys</span>
+        <button class="btn-action" onclick="initGame()">New Game 🔄</button>
+    </div>
+
+    <div class="footer">
+        🔥 Powered by <b>MR SAQIB MD</b>
+    </div>
+
+    <script>
+        let board = [
+            [0,0,0,0],
+            [0,0,0,0],
+            [0,0,0,0],
+            [0,0,0,0]
+        ];
+        let score = 0;
+        const gridEl = document.getElementById('grid');
+        const scoreEl = document.getElementById('scoreVal');
+
+        function initGame() {
+            board = [[0,0,0,0],[0,0,0,0],[0,0,0,0],[0,0,0,0]];
+            score = 0;
+            scoreEl.innerText = score;
+            spawnTile();
+            spawnTile();
+            render();
+        }
+
+        function spawnTile() {
+            const empty = [];
+            for (let r=0; r<4; r++) {
+                for (let c=0; c<4; c++) {
+                    if (board[r][c] === 0) empty.push({r, c});
+                }
+            }
+            if (empty.length > 0) {
+                const spot = empty[Math.floor(Math.random() * empty.length)];
+                board[spot.r][spot.c] = Math.random() < 0.9 ? 2 : 4;
+            }
+        }
+
+        function render() {
+            gridEl.innerHTML = '';
+            for (let r=0; r<4; r++) {
+                for (let c=0; c<4; c++) {
+                    const val = board[r][c];
+                    const tile = document.createElement('div');
+                    tile.className = 'tile' + (val ? ` t-${val}` : '');
+                    tile.innerText = val ? val : '';
+                    gridEl.appendChild(tile);
+                }
+            }
+            scoreEl.innerText = score;
+        }
+
+        function slide(row) {
+            let arr = row.filter(val => val);
+            for (let i = 0; i < arr.length - 1; i++) {
+                if (arr[i] === arr[i + 1]) {
+                    arr[i] *= 2;
+                    score += arr[i];
+                    arr[i + 1] = 0;
+                }
+            }
+            arr = arr.filter(val => val);
+            while (arr.length < 4) arr.push(0);
+            return arr;
+        }
+
+        function moveLeft() {
+            let changed = false;
+            for (let r=0; r<4; r++) {
+                const oldRow = [...board[r]];
+                board[r] = slide(board[r]);
+                if (oldRow.join(',') !== board[r].join(',')) changed = true;
+            }
+            if (changed) { spawnTile(); render(); }
+        }
+
+        function moveRight() {
+            let changed = false;
+            for (let r=0; r<4; r++) {
+                const oldRow = [...board[r]];
+                board[r] = slide(board[r].reverse()).reverse();
+                if (oldRow.join(',') !== board[r].join(',')) changed = true;
+            }
+            if (changed) { spawnTile(); render(); }
+        }
+
+        function moveUp() {
+            let changed = false;
+            for (let c=0; c<4; c++) {
+                const col = [board[0][c], board[1][c], board[2][c], board[3][c]];
+                const slid = slide(col);
+                for (let r=0; r<4; r++) {
+                    if (board[r][c] !== slid[r]) changed = true;
+                    board[r][c] = slid[r];
+                }
+            }
+            if (changed) { spawnTile(); render(); }
+        }
+
+        function moveDown() {
+            let changed = false;
+            for (let c=0; c<4; c++) {
+                const col = [board[3][c], board[2][c], board[1][c], board[0][c]];
+                const slid = slide(col);
+                for (let r=0; r<4; r++) {
+                    if (board[3-r][c] !== slid[r]) changed = true;
+                    board[3-r][c] = slid[r];
+                }
+            }
+            if (changed) { spawnTile(); render(); }
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') moveLeft();
+            else if (e.key === 'ArrowRight') moveRight();
+            else if (e.key === 'ArrowUp') moveUp();
+            else if (e.key === 'ArrowDown') moveDown();
+        });
+
+        // Touch Swipe Handling
+        let touchStartX = 0, touchStartY = 0;
+        window.addEventListener('touchstart', (e) => {
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+        }, { passive: true });
+
+        window.addEventListener('touchend', (e) => {
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+                if (dx > 0) moveRight(); else moveLeft();
+            } else if (Math.abs(dy) > 30) {
+                if (dy > 0) moveDown(); else moveUp();
+            }
+        }, { passive: true });
+
+        initGame();
+    </script>
+</body>
+</html>
