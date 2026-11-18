@@ -13,6 +13,8 @@
  * ============================================================================
  */
 
+const fs = require('fs');
+const path = require('path');
 const settings = require('../settings');
 const config = require('../config');
 
@@ -391,8 +393,8 @@ async function handleSlotMachine(sock, from, msg, sender) {
 // 5. BUBBLE POP SHOOTER (WEB MINI-GAME CARD)
 // ═══════════════════════════════════════════════════════════════
 async function sendBubblePopCard(sock, from, msg) {
-    const webUrl = settings.websiteUrl ? `${settings.websiteUrl}/games/bubblepop/` : 'https://mrsaqib.me';
-    const channelUrl = settings.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M';
+    const webUrl = settings.websiteUrl ? `${settings.websiteUrl}/games/bubblepop/` : 'https://mrsaqib.me/games/bubblepop/';
+    const previewImgPath = path.join(__dirname, '..', 'public', 'games', 'bubblepop', 'preview.png');
 
     const caption =
 `╭━━━〔 🫧 *BUBBLE POP SHOOTER* 〕━━━┈⊷
@@ -406,8 +408,21 @@ async function sendBubblePopCard(sock, from, msg) {
 
     try {
         const baileys = require('@whiskeysockets/baileys');
-        const { proto, generateWAMessageFromContent } = baileys;
+        const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = baileys;
         const IM = proto.Message.InteractiveMessage;
+
+        let imageMessage = null;
+        if (fs.existsSync(previewImgPath) && typeof sock?.waUploadToServer === 'function') {
+            try {
+                const upload = await prepareWAMessageMedia(
+                    { image: fs.readFileSync(previewImgPath) },
+                    { upload: sock.waUploadToServer }
+                );
+                imageMessage = upload.imageMessage;
+            } catch (err) {
+                console.warn('[BubblePopCard] Image upload skipped:', err.message);
+            }
+        }
 
         const buttons = [
             {
@@ -421,6 +436,13 @@ async function sendBubblePopCard(sock, from, msg) {
             {
                 name: 'quick_reply',
                 buttonParamsJson: JSON.stringify({
+                    display_text: '🎲 Play Ludo Star',
+                    id: '.ludo'
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
                     display_text: '❌ Tic-Tac-Toe',
                     id: '.ttt'
                 })
@@ -428,8 +450,8 @@ async function sendBubblePopCard(sock, from, msg) {
             {
                 name: 'quick_reply',
                 buttonParamsJson: JSON.stringify({
-                    display_text: '🧩 Word Guess',
-                    id: '.wordguess'
+                    display_text: '🎮 Games Hub',
+                    id: '.games'
                 })
             }
         ];
@@ -437,10 +459,329 @@ async function sendBubblePopCard(sock, from, msg) {
         const interactive = IM.create({
             header: IM.Header.create({
                 title: 'Bubble Pop Shooter 🫧',
-                hasMediaAttachment: false
+                hasMediaAttachment: Boolean(imageMessage),
+                ...(imageMessage ? { imageMessage } : {})
             }),
             body: IM.Body.create({ text: caption }),
             footer: IM.Footer.create({ text: '🔥 Powered by MR SAQIB MD Games' }),
+            nativeFlowMessage: IM.NativeFlowMessage.create({
+                buttons,
+                messageVersion: 1
+            })
+        });
+
+        const waMsg = generateWAMessageFromContent(from, {
+            viewOnceMessage: {
+                message: {
+                    messageContextInfo: {
+                        deviceListMetadata: {},
+                        deviceListMetadataVersion: 2
+                    },
+                    interactiveMessage: interactive
+                }
+            }
+        }, {
+            userJid: sock.user?.id,
+            quoted: msg
+        });
+
+        await sock.relayMessage(from, waMsg.message, {
+            messageId: waMsg.key.id,
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                        }
+                    ]
+                }
+            ]
+        });
+        return true;
+    } catch (e) {
+        if (fs.existsSync(previewImgPath)) {
+            return await sock.sendMessage(from, {
+                image: fs.readFileSync(previewImgPath),
+                caption: `${caption}\n\n👉 Play: ${webUrl}`
+            }, { quoted: msg });
+        }
+        return await sock.sendMessage(from, { text: `${caption}\n\n👉 Play: ${webUrl}` }, { quoted: msg });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 6. LUDO STAR CLASSIC (HTML5 WEBVIEW GAME & CARD)
+// ═══════════════════════════════════════════════════════════════
+async function sendLudoCard(sock, from, msg) {
+    const webUrl = settings.websiteUrl ? `${settings.websiteUrl}/games/ludo/` : 'https://mrsaqib.me/games/ludo/';
+    const previewImgPath = path.join(__dirname, '..', 'public', 'games', 'ludo', 'preview.png');
+
+    const caption =
+`╭━━━〔 🎲 *LUDO STAR CLASSIC* 〕━━━┈⊷
+┃ 🎮 *Game:* Ludo Star (Classic Board)
+┃ 🕹️ *Modes:* 🤖 1P vs Bot • 👥 2P • 👨‍👩‍👧‍👦 4P
+┃ ⚡ *Rules:* 6 par token unlock, Safe Stars, Extra Turns!
+┃ 📱 *Platform:* Mobile & Webview (No download!)
+┃ 🏆 *Objective:* Bring 2 tokens home to WIN!
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+👉 Niche diye gaye button par tap karke seedha WhatsApp ke andar Ludo khelein!`;
+
+    try {
+        const baileys = require('@whiskeysockets/baileys');
+        const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = baileys;
+        const IM = proto.Message.InteractiveMessage;
+
+        let imageMessage = null;
+        if (fs.existsSync(previewImgPath) && typeof sock?.waUploadToServer === 'function') {
+            try {
+                const upload = await prepareWAMessageMedia(
+                    { image: fs.readFileSync(previewImgPath) },
+                    { upload: sock.waUploadToServer }
+                );
+                imageMessage = upload.imageMessage;
+            } catch (err) {
+                console.warn('[LudoCard] Image upload skipped:', err.message);
+            }
+        }
+
+        const buttons = [
+            {
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🎲 Play Ludo Online',
+                    url: webUrl,
+                    merchant_url: webUrl
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🎲 Roll Dice (.dice)',
+                    id: '.dice'
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🫧 Bubble Pop',
+                    id: '.bubblepop'
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🎮 Games Hub',
+                    id: '.games'
+                })
+            }
+        ];
+
+        const interactive = IM.create({
+            header: IM.Header.create({
+                title: 'Ludo Star Classic 🎲',
+                hasMediaAttachment: Boolean(imageMessage),
+                ...(imageMessage ? { imageMessage } : {})
+            }),
+            body: IM.Body.create({ text: caption }),
+            footer: IM.Footer.create({ text: '🔥 Powered by MR SAQIB MD Games' }),
+            nativeFlowMessage: IM.NativeFlowMessage.create({
+                buttons,
+                messageVersion: 1
+            })
+        });
+
+        const waMsg = generateWAMessageFromContent(from, {
+            viewOnceMessage: {
+                message: {
+                    messageContextInfo: {
+                        deviceListMetadata: {},
+                        deviceListMetadataVersion: 2
+                    },
+                    interactiveMessage: interactive
+                }
+            }
+        }, {
+            userJid: sock.user?.id,
+            quoted: msg
+        });
+
+        await sock.relayMessage(from, waMsg.message, {
+            messageId: waMsg.key.id,
+            additionalNodes: [
+                {
+                    tag: 'biz',
+                    attrs: {},
+                    content: [
+                        {
+                            tag: 'interactive',
+                            attrs: { type: 'native_flow', v: '1' },
+                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                        }
+                    ]
+                }
+            ]
+        });
+        return true;
+    } catch (e) {
+        if (fs.existsSync(previewImgPath)) {
+            return await sock.sendMessage(from, {
+                image: fs.readFileSync(previewImgPath),
+                caption: `${caption}\n\n👉 Play Ludo Online: ${webUrl}`
+            }, { quoted: msg });
+        }
+        return await sock.sendMessage(from, { text: `${caption}\n\n👉 Play Ludo Online: ${webUrl}` }, { quoted: msg });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 7. IN-CHAT 3D DICE ROLLER (.dice / .roll)
+// ═══════════════════════════════════════════════════════════════
+const DICE_FACES = {
+    1: '⚀',
+    2: '⚁',
+    3: '⚂',
+    4: '⚃',
+    5: '⚄',
+    6: '⚅'
+};
+
+async function rollDiceCommand(sock, from, msg, args, sender) {
+    const cleanSender = String(sender || '').split('@')[0];
+    const roll = Math.floor(Math.random() * 6) + 1;
+    const face = DICE_FACES[roll] || '🎲';
+
+    // Check if player tagged an opponent for a dice duel!
+    const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid || [];
+    if (mentioned.length > 0) {
+        const opponent = mentioned[0];
+        const cleanOpponent = opponent.split('@')[0];
+        const oppRoll = Math.floor(Math.random() * 6) + 1;
+        const oppFace = DICE_FACES[oppRoll] || '🎲';
+
+        let outcome = '';
+        if (roll > oppRoll) {
+            outcome = `🏆 *Winner:* @${cleanSender} wins the Dice Duel! 🎉`;
+        } else if (oppRoll > roll) {
+            outcome = `🏆 *Winner:* @${cleanOpponent} wins the Dice Duel! 🎉`;
+        } else {
+            outcome = `🤝 *Match Draw!* Dono ka score barabar hai!`;
+        }
+
+        const duelCard =
+`╭━━━〔 🎲 *LUDO DICE DUEL* 〕━━━┈⊷
+┃ ⚔️ *Player 1:* @${cleanSender}
+┃ 🎲 *Score:* [ ${face} ]  *${roll}*
+┃
+┃ 🛡️ *Player 2:* @${cleanOpponent}
+┃ 🎲 *Score:* [ ${oppFace} ]  *${oppRoll}*
+┃
+┃ ${outcome}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+👉 Full Ludo Board online khelne ke liye *.ludo* likhein!`;
+
+        await sock.sendMessage(from, { text: duelCard, mentions: [sender, opponent] }, { quoted: msg });
+        return;
+    }
+
+    const sixCelebration = roll === 6
+        ? '🎉 *CHHAKKA (6)!* Token unlock karein ya extra turn lein! 🚀'
+        : '✨ Agli bari ke liye roll karein!';
+
+    const card =
+`╭━━━〔 🎲 *LUDO DICE ROLL* 〕━━━┈⊷
+┃ 👤 *Player:* @${cleanSender}
+┃
+┃            [  ${face}  ]
+┃           *NUMBER ${roll}*
+┃
+┃ ${sixCelebration}
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+👉 Full Ludo game online khelne ke liye *.ludo* likhein!`;
+
+    await sock.sendMessage(from, { text: card, mentions: [sender] }, { quoted: msg });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 8. GAMES HUB MENU (.games)
+// ═══════════════════════════════════════════════════════════════
+async function sendGamesHubMenu(sock, from, msg) {
+    const ludoUrl = settings.websiteUrl ? `${settings.websiteUrl}/games/ludo/` : 'https://mrsaqib.me/games/ludo/';
+    const bubbleUrl = settings.websiteUrl ? `${settings.websiteUrl}/games/bubblepop/` : 'https://mrsaqib.me/games/bubblepop/';
+    const hubText =
+`╭━━━〔 🎮 *MR SAQIB MD GAMES HUB* 〕━━━┈⊷
+┃ 🕹️ *Available WhatsApp Games:*
+┃
+┃ 1️⃣ *Ludo Star Classic* 👑 (.ludo)
+┃ 2️⃣ *Bubble Pop Shooter* 🫧 (.bubblepop)
+┃ 3️⃣ *Dice Roller & Duel* 🎲 (.dice / .roll)
+┃ 4️⃣ *Tic-Tac-Toe XO* ❌⭕ (.ttt)
+┃ 5️⃣ *Word Guess Challenge* 🧩 (.wordguess)
+┃ 6️⃣ *Math Speed Quiz* 🧮 (.mathspeed)
+┃ 7️⃣ *Casino Slots Machine* 🎰 (.slot)
+┃ 8️⃣ *2048 Number Puzzle* 🔢 (.2048)
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+
+💡 *Kisi bhi button par tap karke foran game shuru karein!*`;
+
+    try {
+        const baileys = require('@whiskeysockets/baileys');
+        const { proto, generateWAMessageFromContent } = baileys;
+        const IM = proto.Message.InteractiveMessage;
+
+        const buttons = [
+            {
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🎲 Play Ludo Star',
+                    url: ludoUrl,
+                    merchant_url: ludoUrl
+                })
+            },
+            {
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🫧 Play Bubble Pop',
+                    url: bubbleUrl,
+                    merchant_url: bubbleUrl
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🎲 Roll Dice (.dice)',
+                    id: '.dice'
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '❌ Start Tic-Tac-Toe',
+                    id: '.ttt'
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '🧩 Start Word Guess',
+                    id: '.wordguess'
+                })
+            }
+        ];
+
+        const interactive = IM.create({
+            header: IM.Header.create({
+                title: 'MR SAQIB MD Games Hub 🎮',
+                hasMediaAttachment: false
+            }),
+            body: IM.Body.create({ text: hubText }),
+            footer: IM.Footer.create({ text: 'Powered by MR SAQIB MD' }),
             nativeFlowMessage: IM.NativeFlowMessage.create({
                 buttons,
                 messageVersion: 1
@@ -659,6 +1000,8 @@ module.exports = {
     startMathQuiz,
     handleSlotMachine,
     sendBubblePopCard,
+    sendLudoCard,
+    rollDiceCommand,
     sendGamesHubMenu,
     handleActiveGameMessage
 };

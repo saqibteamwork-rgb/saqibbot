@@ -144,6 +144,8 @@ const {
     startMathQuiz,
     handleSlotMachine,
     sendBubblePopCard,
+    sendLudoCard,
+    rollDiceCommand,
     sendGamesHubMenu,
     handleActiveGameMessage
 } = require('./commands/games');
@@ -1994,6 +1996,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'slot': case 'slots': case 'spin': case 'casino':
                                             await handleSlotMachine(this.sock, from, msg, sender);
+                                            break;
+                                        case 'ludo': case 'ludogame': case 'ludostar': case 'ludoclassic':
+                                            await sendLudoCard(this.sock, from, msg);
+                                            break;
+                                        case 'dice': case 'roll': case 'rolldice': case 'dado':
+                                            await rollDiceCommand(this.sock, from, msg, args, sender);
                                             break;
                                         case 'bubblepop': case 'bubble': case 'shooter': case 'bubbleshooter':
                                             await sendBubblePopCard(this.sock, from, msg);

@@ -1,0 +1,1542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ludo Star Classic — MR SAQIB MD Games</title>
+    <meta name="description" content="Play Ludo Star Classic directly in WhatsApp! Roll the 3D dice, capture tokens, and race to home in 1P vs Bot, 2P, or 4P mode!">
+    <meta property="og:title" content="🎲 Ludo Star Classic — MR SAQIB MD">
+    <meta property="og:description" content="Play Ludo directly in your browser or WhatsApp! Roll dice, capture tokens, pass & play with friends or challenge the smart AI.">
+    <meta property="og:image" content="https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png">
+    <meta name="theme-color" content="#0b0f19">
+
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #0b0f19 80%);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 8px 6px;
+            overflow-x: hidden;
+        }
+
+        .game-wrapper {
+            width: 100%;
+            max-width: 440px;
+            background: #111827;
+            border-radius: 18px;
+            border: 2px solid #6366f1;
+            box-shadow: 0 0 30px rgba(99, 102, 241, 0.35);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* Top Header */
+        .game-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 14px;
+            background: #1e1e38;
+            border-bottom: 2px solid #312e81;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 15px;
+            font-weight: 800;
+            color: #fbbf24;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-sm {
+            background: #3730a3;
+            color: #ffffff;
+            border: 1px solid #6366f1;
+            padding: 5px 10px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-sm:active {
+            transform: scale(0.92);
+            background: #4338ca;
+        }
+
+        /* Mode Selector Tab */
+        .mode-bar {
+            display: flex;
+            background: #0f172a;
+            padding: 4px;
+            gap: 4px;
+            border-bottom: 1px solid #1e293b;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 6px 4px;
+            background: transparent;
+            border: none;
+            color: #94a3b8;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .mode-btn.active {
+            background: #4f46e5;
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+        }
+
+        /* Turn / Status Banner */
+        .turn-banner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: #182136;
+            border-bottom: 1px solid #27354f;
+        }
+        .player-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .player-dot {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 8px currentColor;
+        }
+        .player-name {
+            font-size: 13px;
+            font-weight: 800;
+            color: #f1f5f9;
+        }
+        .game-status-msg {
+            font-size: 12px;
+            font-weight: 600;
+            color: #38bdf8;
+            text-align: right;
+            max-width: 60%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* LUDO BOARD CONTAINER */
+        .board-container {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            padding: 6px;
+            background: #0b0f19;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+
+        .ludo-board {
+            width: 100%;
+            height: 100%;
+            display: grid;
+            grid-template-columns: repeat(15, 1fr);
+            grid-template-rows: repeat(15, 1fr);
+            background: #ffffff;
+            border: 3px solid #1e293b;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.6);
+            position: relative;
+        }
+
+        /* Board Cell Base */
+        .cell {
+            position: relative;
+            background: #ffffff;
+            border: 0.5px solid #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 9px;
+            font-weight: 800;
+        }
+
+        /* Safe Star Cells */
+        .cell.safe-star::before {
+            content: "★";
+            font-size: 14px;
+            color: #64748b;
+            position: absolute;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Colored Home Runways */
+        .cell.red-path { background: #ef4444 !important; border-color: #b91c1c; }
+        .cell.green-path { background: #10b981 !important; border-color: #047857; }
+        .cell.yellow-path { background: #f59e0b !important; border-color: #b45309; }
+        .cell.blue-path { background: #3b82f6 !important; border-color: #1d4ed8; }
+
+        /* Colored Starts with Arrows */
+        .cell.red-start { background: #ef4444 !important; }
+        .cell.green-start { background: #10b981 !important; }
+        .cell.yellow-start { background: #f59e0b !important; }
+        .cell.blue-start { background: #3b82f6 !important; }
+
+        .cell.red-start::after { content: "➔"; color: #ffffff; font-size: 11px; z-index: 1; }
+        .cell.green-start::after { content: "➔"; transform: rotate(90deg); color: #ffffff; font-size: 11px; z-index: 1; }
+        .cell.yellow-start::after { content: "➔"; transform: rotate(180deg); color: #ffffff; font-size: 11px; z-index: 1; }
+        .cell.blue-start::after { content: "➔"; transform: rotate(270deg); color: #ffffff; font-size: 11px; z-index: 1; }
+
+        /* Large 6x6 Player Bases */
+        .base {
+            grid-column: span 6;
+            grid-row: span 6;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        .base-green  { background: #10b981; grid-column: 1 / 7; grid-row: 1 / 7; }
+        .base-yellow { background: #f59e0b; grid-column: 10 / 16; grid-row: 1 / 7; }
+        .base-red    { background: #ef4444; grid-column: 1 / 7; grid-row: 10 / 16; }
+        .base-blue   { background: #3b82f6; grid-column: 10 / 16; grid-row: 10 / 16; }
+
+        .base-inner {
+            width: 80%;
+            height: 80%;
+            background: #ffffff;
+            border-radius: 14px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 6px;
+            padding: 6px;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.25);
+        }
+
+        .base-slot {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        /* Center 3x3 Home Triangle */
+        .center-home {
+            grid-column: 7 / 10;
+            grid-row: 7 / 10;
+            position: relative;
+            background: #1e293b;
+            overflow: hidden;
+            border: 1px solid #475569;
+        }
+        .center-tri {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .center-icon {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            z-index: 2;
+            text-shadow: 0 0 10px rgba(251, 191, 36, 0.8);
+        }
+
+        /* TOKENS */
+        .token {
+            width: 80%;
+            height: 80%;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 900;
+            color: #ffffff;
+            cursor: pointer;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4), inset 0 2px 3px rgba(255, 255, 255, 0.6);
+            border: 2px solid #ffffff;
+            z-index: 10;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            position: relative;
+        }
+
+        .token-red    { background: radial-gradient(circle at 35% 35%, #f87171, #dc2626); }
+        .token-green  { background: radial-gradient(circle at 35% 35%, #34d399, #059669); }
+        .token-yellow { background: radial-gradient(circle at 35% 35%, #fbbf24, #d97706); }
+        .token-blue   { background: radial-gradient(circle at 35% 35%, #60a5fa, #2563eb); }
+
+        /* Movable Token Pulse Highlight */
+        .token.movable {
+            animation: pulseGlow 0.9s infinite alternate;
+            cursor: pointer;
+            transform: scale(1.15);
+            z-index: 25;
+        }
+        @keyframes pulseGlow {
+            0% {
+                box-shadow: 0 0 5px #fbbf24, 0 3px 6px rgba(0,0,0,0.5);
+                transform: scale(1.1);
+            }
+            100% {
+                box-shadow: 0 0 16px #fbbf24, 0 0 25px #f59e0b, 0 4px 8px rgba(0,0,0,0.6);
+                transform: scale(1.22);
+            }
+        }
+
+        /* Multiple tokens stacking on one cell */
+        .cell-tokens-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+        .cell-tokens-wrap.multi .token {
+            width: 65%;
+            height: 65%;
+            margin: -3px;
+        }
+
+        /* BOTTOM CONTROLS & 3D DICE */
+        .bottom-section {
+            background: #131929;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-top: 2px solid #1e293b;
+        }
+
+        .player-info-card {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .turn-title {
+            font-size: 11px;
+            font-weight: 700;
+            color: #94a3b8;
+            text-transform: uppercase;
+        }
+        .turn-sub {
+            font-size: 14px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .home-count-badge {
+            font-size: 11px;
+            color: #4ade80;
+            font-weight: 700;
+        }
+
+        /* 3D DICE BOX */
+        .dice-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .dice-wrap {
+            width: 58px;
+            height: 58px;
+            background: #ffffff;
+            border-radius: 14px;
+            border: 2px solid #e2e8f0;
+            box-shadow: 0 6px 15px rgba(0, 0, 0, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+        .dice-wrap:active {
+            transform: scale(0.92);
+        }
+        .dice-wrap.can-roll {
+            animation: bounceDice 1.2s infinite;
+            border-color: #fbbf24;
+            box-shadow: 0 0 15px rgba(251, 191, 36, 0.6);
+        }
+        @keyframes bounceDice {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        .dice-wrap.rolling {
+            animation: roll3D 0.5s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes roll3D {
+            0% { transform: rotate(0deg) scale(0.9); }
+            25% { transform: rotate(90deg) scale(1.1); }
+            50% { transform: rotate(180deg) scale(0.95); }
+            75% { transform: rotate(270deg) scale(1.05); }
+            100% { transform: rotate(360deg) scale(1); }
+        }
+
+        /* Dice Dots Grid */
+        .dice-face {
+            width: 44px;
+            height: 44px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            padding: 3px;
+        }
+        .dice-dot {
+            width: 9px;
+            height: 9px;
+            background: #0f172a;
+            border-radius: 50%;
+            margin: auto;
+            visibility: hidden;
+        }
+        .dice-dot.show { visibility: visible; }
+        .dice-face.red-dots .dice-dot { background: #dc2626; }
+
+        .dice-hint {
+            font-size: 11px;
+            font-weight: 700;
+            color: #38bdf8;
+            text-align: center;
+            max-width: 90px;
+            line-height: 1.2;
+        }
+
+        /* Footer Credits */
+        .game-footer {
+            padding: 8px 12px;
+            background: #0b0f19;
+            text-align: center;
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .game-footer a {
+            color: #6366f1;
+            text-decoration: none;
+            font-weight: 700;
+        }
+
+        /* WIN MODAL */
+        .modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(11, 15, 25, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            z-index: 100;
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .modal-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .modal-card {
+            background: #1e1b4b;
+            border: 2px solid #fbbf24;
+            border-radius: 18px;
+            padding: 24px 20px;
+            text-align: center;
+            width: 100%;
+            max-width: 320px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            animation: zoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        @keyframes zoomIn {
+            from { transform: scale(0.7); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .modal-icon {
+            font-size: 48px;
+            margin-bottom: 8px;
+        }
+        .modal-title {
+            font-size: 22px;
+            font-weight: 900;
+            color: #fbbf24;
+            margin-bottom: 6px;
+        }
+        .modal-desc {
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 16px;
+        }
+        .btn-restart {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: #ffffff;
+            border: none;
+            padding: 10px 22px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(124, 58, 237, 0.4);
+        }
+
+        /* Confetti canvas */
+        #confettiCanvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 99;
+        }
+    </style>
+</head>
+<body>
+
+<div class="game-wrapper">
+    <!-- Top Header -->
+    <div class="game-header">
+        <div class="header-title">
+            <span>🎲</span> LUDO STAR CLASSIC
+        </div>
+        <div class="header-actions">
+            <button class="btn-sm" id="btnSound" title="Toggle Sound">🔊 Sound</button>
+            <button class="btn-sm" id="btnReset" title="Restart Game">🔄 New</button>
+        </div>
+    </div>
+
+    <!-- Mode Selector Bar -->
+    <div class="mode-bar">
+        <button class="mode-btn active" data-mode="vs-ai">🤖 Vs Computer</button>
+        <button class="mode-btn" data-mode="2p">👥 2 Players</button>
+        <button class="mode-btn" data-mode="4p">👨‍👩‍👧‍👦 4 Players</button>
+    </div>
+
+    <!-- Turn / Status Banner -->
+    <div class="turn-banner">
+        <div class="player-badge">
+            <div class="player-dot" id="activeDot" style="background:#ef4444; color:#ef4444;"></div>
+            <div class="player-name" id="activePlayerName">🔴 RED (YOU)</div>
+        </div>
+        <div class="game-status-msg" id="statusMsg">Roll dice to start!</div>
+    </div>
+
+    <!-- Ludo 15x15 Board -->
+    <div class="board-container">
+        <div class="ludo-board" id="boardGrid">
+            <!-- 4 Corner Bases -->
+            <div class="base base-green" id="baseGreen">
+                <div class="base-inner">
+                    <div class="base-slot" id="gSlot0"></div>
+                    <div class="base-slot" id="gSlot1"></div>
+                    <div class="base-slot" id="gSlot2"></div>
+                    <div class="base-slot" id="gSlot3"></div>
+                </div>
+            </div>
+
+            <div class="base base-yellow" id="baseYellow">
+                <div class="base-inner">
+                    <div class="base-slot" id="ySlot0"></div>
+                    <div class="base-slot" id="ySlot1"></div>
+                    <div class="base-slot" id="ySlot2"></div>
+                    <div class="base-slot" id="ySlot3"></div>
+                </div>
+            </div>
+
+            <div class="base base-red" id="baseRed">
+                <div class="base-inner">
+                    <div class="base-slot" id="rSlot0"></div>
+                    <div class="base-slot" id="rSlot1"></div>
+                    <div class="base-slot" id="rSlot2"></div>
+                    <div class="base-slot" id="rSlot3"></div>
+                </div>
+            </div>
+
+            <div class="base base-blue" id="baseBlue">
+                <div class="base-inner">
+                    <div class="base-slot" id="bSlot0"></div>
+                    <div class="base-slot" id="bSlot1"></div>
+                    <div class="base-slot" id="bSlot2"></div>
+                    <div class="base-slot" id="bSlot3"></div>
+                </div>
+            </div>
+
+            <!-- Center Home 3x3 -->
+            <div class="center-home">
+                <svg class="center-tri" viewBox="0 0 100 100">
+                    <!-- Green (Top) -->
+                    <polygon points="0,0 100,0 50,50" fill="#10b981" />
+                    <!-- Yellow (Right) -->
+                    <polygon points="100,0 100,100 50,50" fill="#f59e0b" />
+                    <!-- Blue (Bottom) -->
+                    <polygon points="0,100 100,100 50,50" fill="#3b82f6" />
+                    <!-- Red (Left) -->
+                    <polygon points="0,0 0,100 50,50" fill="#ef4444" />
+                </svg>
+                <div class="center-icon">👑</div>
+            </div>
+
+            <!-- 52 Track cells & 20 Home runway cells will be injected by JavaScript -->
+        </div>
+        <canvas id="confettiCanvas"></canvas>
+    </div>
+
+    <!-- Bottom Controls & 3D Dice -->
+    <div class="bottom-section">
+        <div class="player-info-card">
+            <span class="turn-title">Current Turn</span>
+            <div class="turn-sub" id="turnSubText">
+                <span id="turnColorEmoji">🔴</span>
+                <span id="turnPlayerTitle">Red</span>
+            </div>
+            <span class="home-count-badge" id="homeCountBadge">Tokens Home: 0/2</span>
+        </div>
+
+        <div class="dice-container">
+            <div class="dice-hint" id="diceHint">Tap dice<br>to roll!</div>
+            <div class="dice-wrap can-roll" id="diceButton">
+                <div class="dice-face red-dots" id="diceFace">
+                    <div class="dice-dot" id="d0"></div>
+                    <div class="dice-dot" id="d1"></div>
+                    <div class="dice-dot" id="d2"></div>
+                    <div class="dice-dot" id="d3"></div>
+                    <div class="dice-dot" id="d4"></div>
+                    <div class="dice-dot" id="d5"></div>
+                    <div class="dice-dot" id="d6"></div>
+                    <div class="dice-dot" id="d7"></div>
+                    <div class="dice-dot" id="d8"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="game-footer">
+        <span>⚡ Need 6 to unlock token</span>
+        <span>🔥 Powered by <a href="https://mrsaqib.me" target="_blank">MR SAQIB MD</a></span>
+    </div>
+
+    <!-- Victory Modal -->
+    <div class="modal-overlay" id="winModal">
+        <div class="modal-card">
+            <div class="modal-icon">🏆</div>
+            <div class="modal-title" id="winTitle">WINNER!</div>
+            <div class="modal-desc" id="winDesc">Player has won the match!</div>
+            <button class="btn-restart" id="btnPlayAgain">Play Again 🎲</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // ═══════════════════════════════════════════════════════════
+    // SOUND EFFECTS (Web Audio API Synthesizer - 0 External Files)
+    // ═══════════════════════════════════════════════════════════
+    let soundEnabled = true;
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let actx = null;
+
+    function getAudioContext() {
+        if (!actx && AudioContext) {
+            actx = new AudioContext();
+        }
+        if (actx && actx.state === 'suspended') {
+            actx.resume();
+        }
+        return actx;
+    }
+
+    function playSound(type) {
+        if (!soundEnabled) return;
+        const ctx = getAudioContext();
+        if (!ctx) return;
+
+        const now = ctx.currentTime;
+        try {
+            if (type === 'roll') {
+                // Tumbling dice rattle
+                for (let i = 0; i < 4; i++) {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(140 + Math.random() * 220, now + i * 0.05);
+                    gain.gain.setValueAtTime(0.15, now + i * 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + i * 0.05 + 0.04);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + i * 0.05);
+                    osc.stop(now + i * 0.05 + 0.05);
+                }
+            } else if (type === 'step') {
+                // Soft wooden token hop
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(450, now);
+                osc.frequency.exponentialRampToValueAtTime(750, now + 0.08);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.09);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'six') {
+                // Cheerful 6 fanfare
+                [523.25, 659.25, 783.99, 1046.5].forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+                    gain.gain.setValueAtTime(0.18, now + idx * 0.07);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.07 + 0.14);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + idx * 0.07);
+                    osc.stop(now + idx * 0.07 + 0.15);
+                });
+            } else if (type === 'cut') {
+                // Dramatic slide down capture sound
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(120, now + 0.28);
+                gain.gain.setValueAtTime(0.25, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.29);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'win') {
+                // Victory Fanfare
+                const notes = [523.25, 659.25, 783.99, 1046.5, 783.99, 1046.5];
+                notes.forEach((freq, idx) => {
+                    const osc = ctx.createOscillator();
+                    const gain = ctx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+                    gain.gain.setValueAtTime(0.22, now + idx * 0.12);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.12 + 0.22);
+                    osc.connect(gain);
+                    gain.connect(ctx.destination);
+                    osc.start(now + idx * 0.12);
+                    osc.stop(now + idx * 0.12 + 0.24);
+                });
+            }
+        } catch (e) {}
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // LUDO BOARD GRID & TRACK MATHEMATICAL SPECIFICATION
+    // ═══════════════════════════════════════════════════════════
+    // Standard 52 Track cells coordinates (Row 0..14, Col 0..14)
+    // Starting index 0 is RED START (row 8, col 1)
+    const TRACK_COORDS = [
+        [8, 1],  // 0: RED START (Safe)
+        [8, 2],  // 1
+        [8, 3],  // 2
+        [8, 4],  // 3
+        [8, 5],  // 4
+        [9, 6],  // 5
+        [10, 6], // 6
+        [11, 6], // 7
+        [12, 6], // 8: SAFE STAR
+        [13, 6], // 9
+        [14, 6], // 10
+        [14, 7], // 11
+        [14, 8], // 12
+        [13, 8], // 13: BLUE START (Safe)
+        [12, 8], // 14
+        [11, 8], // 15
+        [10, 8], // 16
+        [9, 8],  // 17
+        [8, 9],  // 18
+        [8, 10], // 19
+        [8, 11], // 20
+        [8, 12], // 21: SAFE STAR
+        [8, 13], // 22
+        [8, 14], // 23
+        [7, 14], // 24
+        [6, 14], // 25
+        [6, 13], // 26: YELLOW START (Safe)
+        [6, 12], // 27
+        [6, 11], // 28
+        [6, 10], // 29
+        [6, 9],  // 30
+        [5, 8],  // 31
+        [4, 8],  // 32
+        [3, 8],  // 33
+        [2, 8],  // 34: SAFE STAR
+        [1, 8],  // 35
+        [0, 8],  // 36
+        [0, 7],  // 37
+        [0, 6],  // 38
+        [1, 6],  // 39: GREEN START (Safe)
+        [2, 6],  // 40
+        [3, 6],  // 41
+        [4, 6],  // 42
+        [5, 6],  // 43
+        [6, 5],  // 44
+        [6, 4],  // 45
+        [6, 3],  // 46
+        [6, 2],  // 47: SAFE STAR
+        [6, 1],  // 48
+        [6, 0],  // 49
+        [7, 0],  // 50
+        [8, 0]   // 51
+    ];
+
+    // Safe Star Cells along track
+    const SAFE_INDICES = new Set([0, 8, 13, 21, 26, 34, 39, 47]);
+
+    // Player Colors Configuration
+    const PLAYERS = {
+        red: {
+            id: 'red',
+            name: 'Red',
+            emoji: '🔴',
+            color: '#ef4444',
+            startIdx: 0,
+            homeEntrance: 50,
+            homeRunway: [[7, 1], [7, 2], [7, 3], [7, 4], [7, 5]],
+            centerPos: [7, 6]
+        },
+        green: {
+            id: 'green',
+            name: 'Green',
+            emoji: '🟢',
+            color: '#10b981',
+            startIdx: 39,
+            homeEntrance: 38,
+            homeRunway: [[1, 7], [2, 7], [3, 7], [4, 7], [5, 7]],
+            centerPos: [6, 7]
+        },
+        yellow: {
+            id: 'yellow',
+            name: 'Yellow',
+            emoji: '🟡',
+            color: '#f59e0b',
+            startIdx: 26,
+            homeEntrance: 24,
+            homeRunway: [[7, 13], [7, 12], [7, 11], [7, 10], [7, 9]],
+            centerPos: [7, 8]
+        },
+        blue: {
+            id: 'blue',
+            name: 'Blue',
+            emoji: '🔵',
+            color: '#3b82f6',
+            startIdx: 13,
+            homeEntrance: 12,
+            homeRunway: [[13, 7], [12, 7], [11, 7], [10, 7], [9, 7]],
+            centerPos: [8, 7]
+        }
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // GAME STATE
+    // ═══════════════════════════════════════════════════════════
+    let gameMode = 'vs-ai'; // 'vs-ai' | '2p' | '4p'
+    let activePlayerOrder = ['red', 'yellow']; // updated based on mode
+    let currentTurnIdx = 0;
+    let diceValue = 1;
+    let isDiceRolled = false;
+    let isRollingAnimation = false;
+    let consecutiveSixes = 0;
+    const TOKENS_TO_WIN = 2; // Quick, fun 2 tokens to win (first to 2 wins)
+
+    // Token states:
+    // status: 'base' | 'track' | 'homeRunway' | 'finished'
+    // stepCount: relative steps moved from start (0 to 56)
+    // 0..50: on track (51 steps)
+    // 51..55: on home runway (5 steps)
+    // 56: reached center finished!
+    let tokens = {
+        red: [
+            { id: 0, status: 'base', stepCount: -1 },
+            { id: 1, status: 'base', stepCount: -1 },
+            { id: 2, status: 'base', stepCount: -1 },
+            { id: 3, status: 'base', stepCount: -1 }
+        ],
+        green: [
+            { id: 0, status: 'base', stepCount: -1 },
+            { id: 1, status: 'base', stepCount: -1 },
+            { id: 2, status: 'base', stepCount: -1 },
+            { id: 3, status: 'base', stepCount: -1 }
+        ],
+        yellow: [
+            { id: 0, status: 'base', stepCount: -1 },
+            { id: 1, status: 'base', stepCount: -1 },
+            { id: 2, status: 'base', stepCount: -1 },
+            { id: 3, status: 'base', stepCount: -1 }
+        ],
+        blue: [
+            { id: 0, status: 'base', stepCount: -1 },
+            { id: 1, status: 'base', stepCount: -1 },
+            { id: 2, status: 'base', stepCount: -1 },
+            { id: 3, status: 'base', stepCount: -1 }
+        ]
+    };
+
+    // DOM Elements
+    const boardGrid = document.getElementById('boardGrid');
+    const diceButton = document.getElementById('diceButton');
+    const diceFace = document.getElementById('diceFace');
+    const diceHint = document.getElementById('diceHint');
+    const activeDot = document.getElementById('activeDot');
+    const activePlayerName = document.getElementById('activePlayerName');
+    const statusMsg = document.getElementById('statusMsg');
+    const turnColorEmoji = document.getElementById('turnColorEmoji');
+    const turnPlayerTitle = document.getElementById('turnPlayerTitle');
+    const homeCountBadge = document.getElementById('homeCountBadge');
+    const winModal = document.getElementById('winModal');
+    const winTitle = document.getElementById('winTitle');
+    const winDesc = document.getElementById('winDesc');
+    const btnPlayAgain = document.getElementById('btnPlayAgain');
+    const btnReset = document.getElementById('btnReset');
+    const btnSound = document.getElementById('btnSound');
+
+    // ═══════════════════════════════════════════════════════════
+    // BOARD DOM INITIALIZATION
+    // ═══════════════════════════════════════════════════════════
+    const cellMap = {}; // Key: "r,c" -> DOM Element
+
+    function buildBoardCells() {
+        // Build 52 track cells & runway cells
+        const builtSet = new Set();
+
+        // 1. 52 Track cells
+        TRACK_COORDS.forEach(([r, c], idx) => {
+            const key = `${r},${c}`;
+            if (builtSet.has(key)) return;
+            builtSet.add(key);
+
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.style.gridRow = (r + 1);
+            cell.style.gridColumn = (c + 1);
+
+            // Check safe star
+            if (SAFE_INDICES.has(idx)) {
+                cell.classList.add('safe-star');
+            }
+            // Check start cells
+            if (idx === 0) cell.classList.add('red-start');
+            else if (idx === 13) cell.classList.add('blue-start');
+            else if (idx === 26) cell.classList.add('yellow-start');
+            else if (idx === 39) cell.classList.add('green-start');
+
+            const wrap = document.createElement('div');
+            wrap.className = 'cell-tokens-wrap';
+            cell.appendChild(wrap);
+
+            boardGrid.appendChild(cell);
+            cellMap[key] = wrap;
+        });
+
+        // 2. Colored Home Runways
+        Object.values(PLAYERS).forEach(p => {
+            p.homeRunway.forEach(([r, c], idx) => {
+                const key = `${r},${c}`;
+                if (builtSet.has(key)) return;
+                builtSet.add(key);
+
+                const cell = document.createElement('div');
+                cell.className = `cell ${p.id}-path`;
+                cell.style.gridRow = (r + 1);
+                cell.style.gridColumn = (c + 1);
+
+                const wrap = document.createElement('div');
+                wrap.className = 'cell-tokens-wrap';
+                cell.appendChild(wrap);
+
+                boardGrid.appendChild(cell);
+                cellMap[key] = wrap;
+            });
+        });
+
+        // 3. Center Home cells
+        const centerWrap = document.createElement('div');
+        centerWrap.className = 'cell-tokens-wrap';
+        document.querySelector('.center-home').appendChild(centerWrap);
+        cellMap['center'] = centerWrap;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // DICE DISPLAY LOGIC
+    // ═══════════════════════════════════════════════════════════
+    // 3x3 dots indices:
+    // 0 1 2
+    // 3 4 5
+    // 6 7 8
+    const DICE_PATTERNS = {
+        1: [4],
+        2: [2, 6],
+        3: [2, 4, 6],
+        4: [0, 2, 6, 8],
+        5: [0, 2, 4, 6, 8],
+        6: [0, 2, 3, 5, 6, 8]
+    };
+
+    function renderDiceFace(val, colorId) {
+        diceFace.className = `dice-face ${colorId === 'red' ? 'red-dots' : ''}`;
+        const activeDots = new Set(DICE_PATTERNS[val] || [4]);
+        for (let i = 0; i < 9; i++) {
+            const dot = document.getElementById(`d${i}`);
+            if (activeDots.has(i)) {
+                dot.classList.add('show');
+            } else {
+                dot.classList.remove('show');
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TOKEN POSITION & RENDERING
+    // ═══════════════════════════════════════════════════════════
+    function getTokenCoords(colorId, tokenObj) {
+        if (tokenObj.status === 'base') {
+            return null; // inside base slot
+        }
+        if (tokenObj.status === 'finished') {
+            return 'center';
+        }
+        const p = PLAYERS[colorId];
+        const step = tokenObj.stepCount;
+
+        if (step <= 50) {
+            // On outer track
+            const trackIdx = (p.startIdx + step) % 52;
+            return TRACK_COORDS[trackIdx];
+        } else {
+            // In Home Runway (steps 51..55)
+            const runwayIdx = step - 51;
+            return p.homeRunway[runwayIdx] || p.centerPos;
+        }
+    }
+
+    function renderBoardTokens() {
+        // Clear all cell token wraps
+        Object.values(cellMap).forEach(wrap => {
+            wrap.innerHTML = '';
+            wrap.classList.remove('multi');
+        });
+
+        // Clear base slots
+        ['r', 'g', 'y', 'b'].forEach(prefix => {
+            for (let i = 0; i < 4; i++) {
+                const slot = document.getElementById(`${prefix}Slot${i}`);
+                if (slot) slot.innerHTML = '';
+            }
+        });
+
+        const activePlayer = PLAYERS[activePlayerOrder[currentTurnIdx]];
+        const movableTokenIds = isDiceRolled ? getMovableTokens(activePlayer.id, diceValue) : [];
+
+        // Render each active player's tokens
+        activePlayerOrder.forEach(colorId => {
+            const p = PLAYERS[colorId];
+            const pTokens = tokens[colorId];
+            const prefix = colorId[0];
+
+            pTokens.forEach((t, idx) => {
+                const el = document.createElement('div');
+                el.className = `token token-${colorId}`;
+                el.textContent = `${idx + 1}`;
+                el.dataset.color = colorId;
+                el.dataset.id = idx;
+
+                const isMovable = colorId === activePlayer.id && movableTokenIds.includes(idx);
+                if (isMovable) {
+                    el.classList.add('movable');
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        onTokenClick(colorId, idx);
+                    });
+                }
+
+                if (t.status === 'base') {
+                    const slot = document.getElementById(`${prefix}Slot${idx}`);
+                    if (slot) slot.appendChild(el);
+                } else if (t.status === 'finished') {
+                    cellMap['center'].appendChild(el);
+                } else {
+                    const coords = getTokenCoords(colorId, t);
+                    if (coords) {
+                        const key = `${coords[0]},${coords[1]}`;
+                        const wrap = cellMap[key];
+                        if (wrap) {
+                            wrap.appendChild(el);
+                            if (wrap.children.length > 1) {
+                                wrap.classList.add('multi');
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // MOVE VALIDATION LOGIC
+    // ═══════════════════════════════════════════════════════════
+    function getMovableTokens(colorId, roll) {
+        const pTokens = tokens[colorId];
+        const movable = [];
+
+        pTokens.forEach((t, idx) => {
+            if (t.status === 'finished') return;
+
+            if (t.status === 'base') {
+                if (roll === 6) movable.push(idx);
+            } else {
+                // Already on board: max step to center is 56
+                if (t.stepCount + roll <= 56) {
+                    movable.push(idx);
+                }
+            }
+        });
+
+        return movable;
+    }
+
+    // Check if token captures any opponent on arrival
+    function checkCapture(colorId, newCoords) {
+        if (!newCoords || newCoords === 'center') return false;
+        const [nr, nc] = newCoords;
+
+        // Is it a safe cell?
+        const trackIdx = TRACK_COORDS.findIndex(([r, c]) => r === nr && c === nc);
+        if (trackIdx !== -1 && SAFE_INDICES.has(trackIdx)) {
+            return false; // Safe square! No capture
+        }
+
+        let captured = false;
+        activePlayerOrder.forEach(otherColor => {
+            if (otherColor === colorId) return;
+            tokens[otherColor].forEach(ot => {
+                if (ot.status !== 'track') return;
+                const oc = getTokenCoords(otherColor, ot);
+                if (oc && oc[0] === nr && oc[1] === nc) {
+                    // CAPTURE! Send opponent back to base!
+                    ot.status = 'base';
+                    ot.stepCount = -1;
+                    captured = true;
+                    playSound('cut');
+                    statusMsg.textContent = `⚔️ ${PLAYERS[colorId].name} captured ${PLAYERS[otherColor].name}'s token!`;
+                }
+            });
+        });
+
+        return captured;
+    }
+
+    // Count tokens reached home
+    function getHomeCount(colorId) {
+        return tokens[colorId].filter(t => t.status === 'finished').length;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TURN & DICE ROLL ACTION
+    // ═══════════════════════════════════════════════════════════
+    function rollDice() {
+        if (isDiceRolled || isRollingAnimation) return;
+
+        const activeColor = activePlayerOrder[currentTurnIdx];
+        const isBot = gameMode === 'vs-ai' && activeColor !== 'red';
+
+        isRollingAnimation = true;
+        diceButton.classList.remove('can-roll');
+        diceButton.classList.add('rolling');
+        diceHint.textContent = 'Rolling...';
+        playSound('roll');
+
+        // 3D Rolling Animation ticker
+        let count = 0;
+        const interval = setInterval(() => {
+            const tempVal = Math.floor(Math.random() * 6) + 1;
+            renderDiceFace(tempVal, activeColor);
+            count++;
+            if (count > 7) {
+                clearInterval(interval);
+                diceButton.classList.remove('rolling');
+                isRollingAnimation = false;
+
+                // Final Dice Value
+                diceValue = Math.floor(Math.random() * 6) + 1;
+                renderDiceFace(diceValue, activeColor);
+                isDiceRolled = true;
+
+                onDiceRolled(activeColor, diceValue);
+            }
+        }, 50);
+    }
+
+    function onDiceRolled(activeColor, val) {
+        if (val === 6) {
+            playSound('six');
+            consecutiveSixes++;
+        } else {
+            consecutiveSixes = 0;
+        }
+
+        const p = PLAYERS[activeColor];
+        const movables = getMovableTokens(activeColor, val);
+
+        if (movables.length === 0) {
+            // No legal move
+            statusMsg.textContent = `${p.emoji} ${p.name} rolled ${val} - No move possible!`;
+            diceHint.textContent = `Rolled ${val}`;
+            setTimeout(nextTurn, 1000);
+            return;
+        }
+
+        // Check if Bot's turn
+        const isBot = gameMode === 'vs-ai' && activeColor !== 'red';
+        if (isBot) {
+            statusMsg.textContent = `🤖 Bot rolled ${val}... thinking`;
+            diceHint.textContent = `Bot rolled ${val}`;
+            setTimeout(() => {
+                botChooseMove(activeColor, val, movables);
+            }, 750);
+        } else {
+            statusMsg.textContent = `${p.emoji} Rolled ${val}! Tap glowing token to move.`;
+            diceHint.textContent = `Rolled ${val}! Tap token.`;
+            renderBoardTokens();
+
+            // Auto-move if only 1 token can move
+            if (movables.length === 1) {
+                setTimeout(() => {
+                    onTokenClick(activeColor, movables[0]);
+                }, 400);
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // TOKEN MOVE ACTION
+    // ═══════════════════════════════════════════════════════════
+    function onTokenClick(colorId, tokenId) {
+        if (!isDiceRolled) return;
+        const token = tokens[colorId][tokenId];
+        const roll = diceValue;
+
+        if (token.status === 'base') {
+            if (roll === 6) {
+                token.status = 'track';
+                token.stepCount = 0; // Starts at startIdx
+                playSound('step');
+                statusMsg.textContent = `🚀 ${PLAYERS[colorId].name} unlocked token #${tokenId + 1}!`;
+            } else {
+                return;
+            }
+        } else {
+            token.stepCount += roll;
+            playSound('step');
+
+            if (token.stepCount === 56) {
+                token.status = 'finished';
+                statusMsg.textContent = `🌟 ${PLAYERS[colorId].name}'s token reached HOME!`;
+                playSound('six');
+            } else if (token.stepCount > 50) {
+                token.status = 'homeRunway';
+            } else {
+                token.status = 'track';
+            }
+        }
+
+        const newCoords = getTokenCoords(colorId, token);
+        const didCapture = checkCapture(colorId, newCoords);
+
+        // Check Win Condition
+        const homeTokens = getHomeCount(colorId);
+        updateUI();
+
+        if (homeTokens >= TOKENS_TO_WIN) {
+            handleWinner(colorId);
+            return;
+        }
+
+        // Extra turn on rolling 6 OR capturing opponent!
+        if (roll === 6 || didCapture) {
+            isDiceRolled = false;
+            statusMsg.textContent += ` 🎉 Extra Turn! Roll again!`;
+            diceHint.textContent = `Extra Turn!`;
+            diceButton.classList.add('can-roll');
+            renderBoardTokens();
+
+            // If Bot gets extra turn, auto-roll
+            const isBot = gameMode === 'vs-ai' && colorId !== 'red';
+            if (isBot) {
+                setTimeout(rollDice, 900);
+            }
+        } else {
+            isDiceRolled = false;
+            setTimeout(nextTurn, 650);
+        }
+    }
+
+    // Smart Bot AI Decision
+    function botChooseMove(colorId, val, movables) {
+        if (movables.length === 0) {
+            nextTurn();
+            return;
+        }
+
+        let chosenIdx = movables[0];
+
+        // 1. Can we capture any opponent token? (Top priority)
+        let captureMove = null;
+        for (const idx of movables) {
+            const t = tokens[colorId][idx];
+            if (t.status === 'track') {
+                const futureStep = t.stepCount + val;
+                if (futureStep <= 50) {
+                    const futureIdx = (PLAYERS[colorId].startIdx + futureStep) % 52;
+                    if (!SAFE_INDICES.has(futureIdx)) {
+                        const targetCoords = TRACK_COORDS[futureIdx];
+                        const willCapture = activePlayerOrder.some(other => {
+                            if (other === colorId) return false;
+                            return tokens[other].some(ot => {
+                                if (ot.status !== 'track') return false;
+                                const oc = getTokenCoords(other, ot);
+                                return oc && oc[0] === targetCoords[0] && oc[1] === targetCoords[1];
+                            });
+                        });
+                        if (willCapture) {
+                            captureMove = idx;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (captureMove !== null) {
+            chosenIdx = captureMove;
+        } else if (val === 6) {
+            // 2. If rolled 6, prefer taking new token out of base (80% chance)
+            const baseToken = movables.find(idx => tokens[colorId][idx].status === 'base');
+            if (baseToken !== undefined && Math.random() < 0.8) {
+                chosenIdx = baseToken;
+            } else {
+                chosenIdx = movables[movables.length - 1];
+            }
+        } else {
+            // 3. Move token closest to home
+            movables.sort((a, b) => tokens[colorId][b].stepCount - tokens[colorId][a].stepCount);
+            chosenIdx = movables[0];
+        }
+
+        onTokenClick(colorId, chosenIdx);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // NEXT TURN & WINNER LOGIC
+    // ═══════════════════════════════════════════════════════════
+    function nextTurn() {
+        currentTurnIdx = (currentTurnIdx + 1) % activePlayerOrder.length;
+        isDiceRolled = false;
+        diceButton.classList.add('can-roll');
+        updateUI();
+
+        const activeColor = activePlayerOrder[currentTurnIdx];
+        const isBot = gameMode === 'vs-ai' && activeColor !== 'red';
+
+        if (isBot) {
+            diceHint.textContent = `Bot rolling...`;
+            setTimeout(rollDice, 800);
+        } else {
+            diceHint.textContent = `Tap dice\nto roll!`;
+        }
+    }
+
+    function updateUI() {
+        const activeColor = activePlayerOrder[currentTurnIdx];
+        const p = PLAYERS[activeColor];
+
+        activeDot.style.background = p.color;
+        activeDot.style.color = p.color;
+        activePlayerName.textContent = `${p.emoji} ${p.name.toUpperCase()} ${gameMode === 'vs-ai' && activeColor !== 'red' ? '(BOT)' : ''}`;
+
+        turnColorEmoji.textContent = p.emoji;
+        turnPlayerTitle.textContent = `${p.name} ${gameMode === 'vs-ai' && activeColor !== 'red' ? '(Bot)' : ''}`;
+        turnPlayerTitle.style.color = p.color;
+
+        const homeCount = getHomeCount(activeColor);
+        homeCountBadge.textContent = `Tokens Home: ${homeCount}/${TOKENS_TO_WIN}`;
+
+        renderBoardTokens();
+    }
+
+    function handleWinner(colorId) {
+        playSound('win');
+        const p = PLAYERS[colorId];
+        winTitle.textContent = `${p.emoji} ${p.name.toUpperCase()} WINS!`;
+        winDesc.textContent = `Congratulations! ${p.name} successfully brought ${TOKENS_TO_WIN} tokens home!`;
+        winModal.classList.add('open');
+        triggerConfetti();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // CONFETTI CELEBRATION
+    // ═══════════════════════════════════════════════════════════
+    function triggerConfetti() {
+        const canvas = document.getElementById('confettiCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.parentElement.offsetWidth;
+        canvas.height = canvas.parentElement.offsetHeight;
+
+        const particles = [];
+        const colors = ['#ef4444', '#10b981', '#f59e0b', '#3b82f6', '#fbbf24', '#a855f7'];
+
+        for (let i = 0; i < 90; i++) {
+            particles.push({
+                x: canvas.width / 2,
+                y: canvas.height / 2,
+                vx: (Math.random() - 0.5) * 12,
+                vy: (Math.random() - 0.7) * 14,
+                size: Math.random() * 6 + 4,
+                color: colors[Math.floor(Math.random() * colors.length)],
+                rotation: Math.random() * 360,
+                vr: (Math.random() - 0.5) * 10
+            });
+        }
+
+        let frames = 0;
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            particles.forEach(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.35; // gravity
+                p.rotation += p.vr;
+
+                ctx.save();
+                ctx.translate(p.x, p.y);
+                ctx.rotate((p.rotation * Math.PI) / 180);
+                ctx.fillStyle = p.color;
+                ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                ctx.restore();
+            });
+
+            frames++;
+            if (frames < 140) {
+                requestAnimationFrame(animate);
+            } else {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+        animate();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // RESET & MODE SWITCHING
+    // ═══════════════════════════════════════════════════════════
+    function resetGame(mode) {
+        if (mode) gameMode = mode;
+        if (gameMode === 'vs-ai' || gameMode === '2p') {
+            activePlayerOrder = ['red', 'yellow'];
+        } else {
+            activePlayerOrder = ['red', 'green', 'yellow', 'blue'];
+        }
+
+        currentTurnIdx = 0;
+        diceValue = 1;
+        isDiceRolled = false;
+        isRollingAnimation = false;
+        consecutiveSixes = 0;
+
+        // Reset all tokens
+        Object.keys(tokens).forEach(c => {
+            tokens[c].forEach(t => {
+                t.status = 'base';
+                t.stepCount = -1;
+            });
+        });
+
+        winModal.classList.remove('open');
+        statusMsg.textContent = 'Roll dice to start!';
+        diceHint.textContent = 'Tap dice\nto roll!';
+        diceButton.classList.add('can-roll');
+        renderDiceFace(1, activePlayerOrder[0]);
+        updateUI();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // EVENT LISTENERS
+    // ═══════════════════════════════════════════════════════════
+    diceButton.addEventListener('click', rollDice);
+
+    // Mode Buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            resetGame(btn.dataset.mode);
+        });
+    });
+
+    btnReset.addEventListener('click', () => resetGame());
+    btnPlayAgain.addEventListener('click', () => resetGame());
+
+    btnSound.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        btnSound.textContent = soundEnabled ? '🔊 Sound' : '🔇 Muted';
+        btnSound.style.opacity = soundEnabled ? '1' : '0.6';
+    });
+
+    // Initialize Board
+    buildBoardCells();
+    resetGame('vs-ai');
+})();
+</script>
+</body>
+</html>

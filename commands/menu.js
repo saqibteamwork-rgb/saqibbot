@@ -216,7 +216,7 @@ const CATEGORIES = {
         'tagme', 'tata', 'teacher', 'technologia', 'thanks', 'theme', 'think', 'thumbsup',
         'tickle', 'traveltip', 'trivia', 'truth', 'truth2', 'twin', 'typingtest', 'wave',
         'wife', 'wink', 'wordchain', 'wouldyou', 'wouldyourather', 'yawn', 'yeet', 'yesno',
-        'zodiacsign', 'bubblepop', 'tictactoe', 'ttt', 'wordguess', 'games'
+        'zodiacsign', 'bubblepop', 'ludo', 'dice', 'roll', 'tictactoe', 'ttt', 'wordguess', 'games'
     ],
     'ISLAMIC': [
         'allahname', 'allnamaz', 'ayat', 'ayat2', 'azkar', 'charityideas', 'cleanliness', 'dailyhadith',
