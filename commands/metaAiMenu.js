@@ -27,9 +27,10 @@ const { getBotPic } = require('../lib/botpic');
 const settings = require('../settings');
 const config = require('../config');
 
-// In-memory media upload cache (20-minute TTL)
+// In-memory media upload cache (30-minute TTL)
 const mediaCache = new Map();
-const MEDIA_TTL_MS = 20 * 60 * 1000;
+const MEDIA_TTL_MS = 30 * 60 * 1000;
+const MENU15_MP4_PATH = path.join(__dirname, '..', 'media', 'menu15.mp4');
 const MENU15_IMAGE_PATH = path.join(__dirname, '..', 'media', 'menu15.jpg');
 
 async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
@@ -37,7 +38,34 @@ async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
 
     const sockId = String(sock?.user?.id || '').split(':')[0];
 
-    // Priority 1: Check media/menu15.jpg (high-res banner extracted from video)
+    // Priority 1: Check animated GIF / video file
+    if (fs.existsSync(MENU15_MP4_PATH)) {
+        const vidKey = `${sockId}|gif|${MENU15_MP4_PATH}`;
+        const hitVid = mediaCache.get(vidKey);
+        if (hitVid && Date.now() - hitVid.at < MEDIA_TTL_MS) {
+            return hitVid.media;
+        }
+
+        try {
+            const videoBuffer = fs.readFileSync(MENU15_MP4_PATH);
+            const upload = await Promise.race([
+                prepareWAMessageMedia(
+                    { video: videoBuffer, gifPlayback: true, mimetype: 'video/mp4' },
+                    { upload: sock.waUploadToServer }
+                ),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Video GIF upload timeout')), 5000))
+            ]);
+            if (upload?.videoMessage) {
+                const media = { videoMessage: upload.videoMessage };
+                mediaCache.set(vidKey, { at: Date.now(), media });
+                return media;
+            }
+        } catch (e) {
+            console.warn('[MetaAiMenu] Warning: GIF video upload timeout/failed, falling back to image:', e.message);
+        }
+    }
+
+    // Priority 2: Check high-res banner image
     let imageSource = null;
     let imgKey = null;
 
@@ -60,9 +88,9 @@ async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
     try {
         const upload = await Promise.race([
             prepareWAMessageMedia({ image: imageSource }, { upload: sock.waUploadToServer }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Image upload timeout')), 8000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Image upload timeout')), 4000))
         ]);
-        const media = upload?.imageMessage || null;
+        const media = upload?.imageMessage ? { imageMessage: upload.imageMessage } : null;
         if (media) mediaCache.set(imgKey, { at: Date.now(), media });
         return media;
     } catch (e) {
@@ -87,7 +115,16 @@ function buildMetaAiQuote(botName = 'MR SAQIB MD', ownerNumber = '923468616487')
         message: {
             contactMessage: {
                 displayName: `! ${botName} !`,
-                vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:Meta AI\nORG:Meta AI;\nTEL;type=CELL;type=VOICE;waid=${cleanNum}:+${cleanNum}\nEND:VCARD`
+                vcard: `BEGIN:VCARD\nVERSION:3.0\nFN:Meta AI\nORG:Meta AI;\nTEL;type=CELL;type=VOICE;waid=${cleanNum}:+${cleanNum}\nEND:VCARD`,
+                contextInfo: {
+                    forwardingScore: 999,
+                    isForwarded: true,
+                    forwardedNewsletterMessageInfo: {
+                        newsletterJid: '120363431913895899@newsletter',
+                        newsletterName: `${botName} • X-IK AI`,
+                        serverMessageId: 1
+                    }
+                }
             }
         }
     };
@@ -165,15 +202,21 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
         const { proto, prepareWAMessageMedia, generateWAMessageFromContent } = baileys;
         const IM = proto.Message.InteractiveMessage;
 
-        // Upload / fetch banner image (high-res frame extracted from user's video)
-        const imageMessage = await getUploadedHeaderMedia(sock, prepareWAMessageMedia);
+        // Upload / fetch banner GIF video / image
+        const mediaObj = await getUploadedHeaderMedia(sock, prepareWAMessageMedia);
 
-        const cardHeader = IM.Header.fromObject({
+        const cardHeaderObj = {
             title: `${botName} WaBot`,
-            subtitle: `${timings.endTomorrowStr}\nOfficial WaBot`,
-            hasMediaAttachment: Boolean(imageMessage),
-            ...(imageMessage ? { imageMessage } : {})
-        });
+            subtitle: `${timings.endTomorrowStr}\nCode: ${botName} WaBot`,
+            hasMediaAttachment: Boolean(mediaObj?.videoMessage || mediaObj?.imageMessage)
+        };
+        if (mediaObj?.videoMessage) {
+            cardHeaderObj.videoMessage = mediaObj.videoMessage;
+        } else if (mediaObj?.imageMessage) {
+            cardHeaderObj.imageMessage = mediaObj.imageMessage;
+        }
+
+        const cardHeader = IM.Header.fromObject(cardHeaderObj);
 
         const buttons = [
             {
@@ -198,6 +241,13 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
                     url: websiteUrl,
                     merchant_url: websiteUrl
                 })
+            },
+            {
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Copy Bot Code',
+                    copy_code: `${botName} WaBot`
+                })
             }
         ];
 
@@ -211,6 +261,7 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
             })
         });
 
+        // 100% Reliable Native Flow node (NO biz_bot:1 to ensure flawless delivery in private & group chats)
         const additionalNodes = [
             {
                 tag: 'biz',
@@ -224,14 +275,6 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
                 ]
             }
         ];
-
-        // Private chat business bot tag
-        if (!from.endsWith('@g.us')) {
-            additionalNodes.push({
-                tag: 'bot',
-                attrs: { biz_bot: '1' }
-            });
-        }
 
         const waMsg = generateWAMessageFromContent(from, {
             viewOnceMessage: {
@@ -256,8 +299,16 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
         return true;
     } catch (err) {
         console.error('[sendMetaAiButtonMenu Error]:', err.stack || err.message);
-        // Fallback: Send image quoting Meta AI
+        // Fallback: Send GIF video, image, or text quoting Meta AI
         try {
+            if (fs.existsSync(MENU15_MP4_PATH)) {
+                await sock.sendMessage(from, {
+                    video: fs.readFileSync(MENU15_MP4_PATH),
+                    gifPlayback: true,
+                    caption: bodyText
+                }, { quoted: metaAiQuote });
+                return true;
+            }
             if (fs.existsSync(MENU15_IMAGE_PATH)) {
                 await sock.sendMessage(from, {
                     image: fs.readFileSync(MENU15_IMAGE_PATH),

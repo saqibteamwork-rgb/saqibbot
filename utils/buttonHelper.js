@@ -138,14 +138,6 @@ async function sendInteractiveButtons(sock, to, bodyText, buttons = [], quotedMs
             }
         ];
 
-        // In private chat, also include biz_bot node
-        if (!to.endsWith('@g.us')) {
-            additionalNodes.push({
-                tag: "bot",
-                attrs: { biz_bot: "1" }
-            });
-        }
-
         const msgObj = generateWAMessageFromContent(to, {
             viewOnceMessage: {
                 message: {

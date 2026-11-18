@@ -359,6 +359,7 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
                 })
             });
 
+            // Native flow button node (reliable in both private & group chats)
             const additionalNodes = [
                 {
                     tag: 'biz',
@@ -372,10 +373,6 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
                     ]
                 }
             ];
-
-            if (!from.endsWith('@g.us')) {
-                additionalNodes.push({ tag: 'bot', attrs: { biz_bot: '1' } });
-            }
 
             const sendOpts = { userJid: sock.user?.id };
             if (msg && msg.key && msg.key.remoteJid && msg.message) {
