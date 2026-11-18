@@ -350,6 +350,31 @@ const STYLES = {
 ┃ 🚀 ${toSansBold(p.ownerName)}
 ┃ 🔍 google.com/search?q=mr+saqib
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+    },
+
+    14: {
+        id: 14,
+        name: 'Interactive Carousel Cards (Swipe Slider ◈)',
+        tag: '🎠 Swipe Cards',
+        isCarousel: true,
+        makeHeader: (p, s) =>
+`⚡³*${p.botName.toUpperCase()}*⁴⚡
+📚 *ALL MENU*
+
+Swipe through the cards to see all available commands.
+
+🔥 *Powered by ${p.ownerName}* | _Swipe left/right_\n\n`,
+        makeBox: (title, cmds) => {
+            const head = `┌───🎠 ⚡ ${toSansBold(title.toUpperCase())} ⚡───\n`;
+            const body = cmds.map(cmd => `│ ◈ .${cmd}`).join('\n') + '\n';
+            const foot = `└───────────────────🎠\n\n`;
+            return head + body + foot;
+        },
+        makeFooter: (p) =>
+`╭━━━〔 👑 ${toSansBold('POWERED BY')} 〕━━━┈⊷
+┃ 🚀 ${toSansBold(p.ownerName)}
+┃ 🔍 google.com/search?q=mr+saqib
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
     }
 };
 
@@ -386,15 +411,16 @@ function getStyleCatalog(currentStyleId = 1, isOwner = false) {
         return `┃ ${st.id}. *${st.name}* [${st.tag}]${isCurrent}`;
     }).join('\n');
 
-    return `╭━━━〔 🎨 *MENU STYLES CATALOG (13 DESIGNS)* 〕━━━┈⊷\n` +
+    return `╭━━━〔 🎨 *MENU STYLES CATALOG (14 DESIGNS)* 〕━━━┈⊷\n` +
            lines + `\n` +
            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
            `💡 *Kaise Change Karein:*\n` +
-           `👉 \`.setmenu <1-13>\` — Apna default menu design set karein (e.g. \`.setmenu 13\` ya \`.setmenu pay\`)\n` +
-           `👉 \`.menu <1-13>\` — Kisi bhi design ka foran live preview dekhein (e.g. \`.menu 13\`)\n` +
+           `👉 \`.setmenu <1-14>\` — Apna default menu design set karein (e.g. \`.setmenu 14\` ya \`.setmenu carousel\`)\n` +
+           `👉 \`.menu <1-14>\` — Kisi bhi design ka foran live preview dekhein (e.g. \`.menu 14\`)\n` +
+           `👉 \`.cmenu\` — Interactive Swipe Cards Slider Menu dekhein\n` +
            `👉 \`.typmenu\` — VIP Payment Request Card Menu dekhein\n` +
            `👉 \`.resetmenu\` — Wapas default Style 1 par reset karein\n` +
-           (isOwner ? `👉 \`.setmenu -g <1-13>\` — Poore bot ke naye users ka global default set karein\n\n` : `\n`) +
+           (isOwner ? `👉 \`.setmenu -g <1-14>\` — Poore bot ke naye users ka global default set karein\n\n` : `\n`) +
            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 }
 
@@ -408,12 +434,16 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
     let choiceNum = null;
     for (const a of args) {
         const clean = String(a).toLowerCase().trim();
+        if (['carousel', 'cmenu', 'card', 'cards', 'slide', 'slidemenu'].includes(clean)) {
+            choiceNum = 14;
+            break;
+        }
         if (clean === 'pay' || clean === 'payment' || clean === 'typ' || clean === 'type') {
             choiceNum = 13;
             break;
         }
         const n = parseInt(a.replace(/[^0-9]/g, ''), 10);
-        if (!isNaN(n) && n >= 1 && n <= 13) {
+        if (!isNaN(n) && n >= 1 && n <= 14) {
             choiceNum = n;
             break;
         }
@@ -426,7 +456,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
 
     const selectedStyle = STYLES[choiceNum];
     if (!selectedStyle) {
-        return await sock.sendMessage(from, { text: `❌ *Invalid Style!* 1 se 13 ke darmiyan number dein (e.g. \`.setmenu 13\` ya \`.setmenu pay\`).` }, { quoted: msg });
+        return await sock.sendMessage(from, { text: `❌ *Invalid Style!* 1 se 14 ke darmiyan number dein (e.g. \`.setmenu 14\` ya \`.setmenu carousel\`).` }, { quoted: msg });
     }
 
     if (!botData.customProfiles) botData.customProfiles = {};
@@ -457,7 +487,7 @@ async function setmenuCommand(sock, from, msg, isOwner, isSessionOwner, botData,
               `┃ 👤 *Session User:* +${userId}\n` +
               `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
               `💡 *Ab aap jab bhi \`.menu\` likhenge to ye naya style aayega!* ✨\n` +
-              `👉 Kisi bhi waqt wapas badalane ke liye: \`.setmenu <1-12>\``
+              `👉 Kisi bhi waqt wapas badalane ke liye: \`.setmenu <1-14>\``
     }, { quoted: msg });
 }
 

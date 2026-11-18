@@ -482,17 +482,16 @@ async function sendCategoryPicker(conn, jid, quoted, bodyText, opts) {
 
 cmd({
     pattern: 'cmenu',
-    alias: ['swipemenu', 'cardmenu', 'cmenu1'],
-    use: '.cmenu  |  .cmenu <page>',
-    desc: 'Swipe-able card menu with tappable buttons',
+    alias: ['swipemenu', 'cardmenu', 'carousel', 'slidemenu', 'cardsmenu'],
+    use: '.cmenu',
+    desc: 'Interactive 12-Card Swipe Slider Menu',
     category: 'system',
-    react: '📜',
+    react: '🎠',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    const from = ctx.from || m.chat;
-    const arg = (ctx.args && ctx.args[0]) || (ctx.q || '').trim();
-    const ok = await sendCarouselMenu(conn, mek, m, ctx, arg);
-    if (!ok) await conn.sendMessage(from, { text: sendCarouselMenu.lastFallback }, { quoted: mek });
+    const from = (ctx && ctx.from) || m.chat;
+    const { sendSwipeCarouselMenu } = require('../commands/carouselMenu');
+    await sendSwipeCarouselMenu(conn, from, mek, config.BOT_NAME || 'MR SAQIB MD', config.OWNER_NAME || 'Mr SAQIB', config.prefix || '.');
 });
 
 module.exports = { relayInteractive, buildCategoryCards, sendCarouselMenu, sendCategoryPicker, groupCommands, sendOwnerCard, sendOwnerContact, ownerCardText, OWNER_LINKS };

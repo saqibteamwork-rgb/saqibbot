@@ -1843,6 +1843,10 @@ class BotSession {
                                         case 'typmenu': case 'typemenu': case 'paymenu': case 'paymentmenu': case 'famo': case 'famomenu':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, null, true);
                                             break;
+                                        case 'cmenu': case 'carousel': case 'slidemenu': case 'cardmenu': case 'cardsmenu': case 'swipemenu':
+                                            const { sendSwipeCarouselMenu } = require('./commands/carouselMenu');
+                                            await sendSwipeCarouselMenu(this.sock, from, msg, botData?.customProfiles?.[this.userId]?.botName || 'MR SAQIB MD', botData?.customProfiles?.[this.userId]?.ownerName || 'Mr SAQIB');
+                                            break;
                                         case 'gcmenu': case 'groupmenu': case 'gmenu':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args, 'GROUP');
                                             break;

@@ -40,6 +40,7 @@ const {
     quickReplyButton,
     urlButton
 } = require('../utils/buttonHelper');
+const { sendSwipeCarouselMenu } = require('./carouselMenu');
 
 /**
  * Convert string to Mathematical Sans-Serif Bold Unicode (e.g. 𝗠𝗥 𝗦𝗔𝗤𝗜𝗕 𝗠𝗗)
@@ -448,21 +449,29 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     if (Array.isArray(args) && args.length > 0) {
         const firstClean = String(args[0]).trim();
         const firstNum = parseInt(firstClean, 10);
-        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 13 && String(firstNum) === firstClean) {
+        if (!isNaN(firstNum) && firstNum >= 1 && firstNum <= 14 && String(firstNum) === firstClean) {
             requestedStyle = firstNum;
             if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
         } else if (['pay', 'payment', 'typ', 'type', 'typmenu', 'typemenu', 'famo'].includes(firstClean.toLowerCase())) {
             requestedStyle = 13;
+            if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
+        } else if (['carousel', 'cmenu', 'card', 'cards', 'slide', 'slidemenu'].includes(firstClean.toLowerCase())) {
+            requestedStyle = 14;
             if (args[1]) filterArg = String(args[1]).toLowerCase().trim();
         } else {
             filterArg = firstClean.toLowerCase();
         }
     }
 
+    const effectiveStyleId = requestedStyle || profile.menuStyle || 1;
+
+    // Check if Carousel Cards Slider requested (Style 14)
+    if (effectiveStyleId === 14 || (Array.isArray(args) && args.some(a => ['carousel', 'cmenu', 'card', 'cards', 'slide', 'slidemenu'].includes(String(a).toLowerCase())))) {
+        return await sendSwipeCarouselMenu(sock, from, msg, effectiveBotName, effectiveOwnerName, '.');
+    }
+
     // Resolve target single category (if forced or specified in args)
     const targetCategory = forcedCategory ? resolveCategory(forcedCategory) : (filterArg ? resolveCategory(filterArg) : null);
-
-    const effectiveStyleId = requestedStyle || profile.menuStyle || 1;
     const styleObj = STYLES[effectiveStyleId] || STYLES[1];
 
     const profileData = {
