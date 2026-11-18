@@ -2815,6 +2815,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'autoreply': case 'smartreply': case 'customreply':
                                             await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
                                             break;
+                                        case 'pay': case 'payment': case 'paymsg': case 'paytext': case 'paymentmsg': case 'protectmsg': case 'pmsg':
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            break;
 
                                         // ===== DYNAMIC PLUGINS FROM D:\Plugin--main (130 PLUGINS / 700+ COMMANDS) =====
                                         default:

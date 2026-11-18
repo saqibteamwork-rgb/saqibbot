@@ -147,7 +147,7 @@ const CATEGORIES = {
         'ip2', 'iplookup', 'italic', 'jid', 'languages', 'length', 'listreply', 'lottie', 'lowercase',
         'mathcheck', 'memorycheck', 'menu', 'monospace', 'moon', 'morse', 'movieinfo', 'msg',
         'news', 'nikal', 'npm', 'obfuscate', 'ownername', 'ownernumber', 'palindrome', 'password2',
-        'pastebin', 'person', 'petrol', 'population', 'praytime', 'prefix', 'qrcode', 'randomline',
+        'pastebin', 'pay', 'person', 'petrol', 'population', 'praytime', 'prefix', 'protectmsg', 'qrcode', 'randomline',
         'raw', 'rcolor', 'reactemojis', 'reactioncheck', 'readmore', 'recording', 'remind', 'remindme',
         'remini', 'removebg', 'removedup', 'removepp', 'replace', 'report', 'reportcarding', 'reportguide',
         'reportscam', 'reportscamchannel', 'rnum', 'rs', 'rs10', 'rw', 'sad', 'savecontact',
