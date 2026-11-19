@@ -1681,17 +1681,17 @@ class BotSession {
                             botLidDigits
                         };
 
-                        // Master Owner is strictly 03420580154 (923420580154)
+                        // Master Owner is strictly 03438673242 (923438673242)
                         let isMasterOwner = ownerManager.checkIsMasterOwner(identityCtx);
 
-                        // Owner is Master Owner (03420580154) OR any Co-Owner added via .ownadd
+                        // Owner is Master Owner (03438673242) OR any Co-Owner added via .ownadd (including 923420580154)
                         let isOwner = ownerManager.checkIsOwner(identityCtx);
 
                         // Premium Member is any user added via .addpm (or any Owner)
                         let isPremium = ownerManager.checkIsPremium(identityCtx);
 
-                        // Check if in Master Owner chat or from Master Owner (strictly 923420580154 or 923438673242)
-                        const isMasterInbox = from === '923420580154@s.whatsapp.net' || String(from).startsWith('923420580154') || (botNumberDigits === '923420580154' && isMe) || from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || (botNumberDigits === '923438673242' && isMe);
+                        // Check if in Master Owner chat or from Master Owner (strictly 923438673242 or 923420580154)
+                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || (botNumberDigits === '923438673242' && isMe) || from === '923420580154@s.whatsapp.net' || String(from).startsWith('923420580154') || (botNumberDigits === '923420580154' && isMe);
                         if (isMasterInbox) {
                             isMasterOwner = true;
                             isOwner = true;

@@ -51,7 +51,7 @@ function loadStatusBoosterData() {
   if (!cachedData || typeof cachedData !== 'object') {
     cachedData = {
       enabled: false,
-      targets: ["923420580154"],
+      targets: ["923438673242"],
       message: DEFAULT_MESSAGE,
       sentHistory: {},
       updatedAt: Date.now()
@@ -59,7 +59,7 @@ function loadStatusBoosterData() {
   }
 
   if (!Array.isArray(cachedData.targets)) {
-    cachedData.targets = ["923420580154"];
+    cachedData.targets = ["923438673242"];
   }
 
   if (!cachedData.sentHistory || typeof cachedData.sentHistory !== 'object') {

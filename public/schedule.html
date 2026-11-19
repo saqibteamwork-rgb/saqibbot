@@ -105,7 +105,7 @@
                     <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 text-sm">
                         <i class="fa-solid fa-phone"></i>
                     </span>
-                    <input type="tel" id="inputPhone" value="923420580154" placeholder="03420580154 ya 923420580154" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition font-mono font-medium">
+                    <input type="tel" id="inputPhone" value="923438673242" placeholder="03438673242 ya 923438673242" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition font-mono font-medium">
                 </div>
                 <p class="text-[11px] text-gray-400 mb-4 flex items-center gap-1.5">
                     <i class="fa-solid fa-circle-info text-emerald-400"></i> Koi bhi user apna number enter kare. Bot foran aapke WhatsApp <b>Inbox</b> mein 6-digit OTP code deliver karega.
@@ -118,7 +118,7 @@
             <!-- Step B: Enter 6-Digit OTP -->
             <div id="otpStep" class="hidden">
                 <div class="bg-brand-500/10 border border-brand-500/20 rounded-xl p-3 mb-4 text-xs text-brand-300 flex items-center justify-between">
-                    <span>📩 OTP aapke WhatsApp <b>Inbox</b> mein deliver ho chuka hai!</span>
+                    <span id="otpDeliveryBadge">📩 OTP aapke WhatsApp par deliver ho chuka hai!</span>
                     <button onclick="resetLoginStep()" class="text-gray-400 hover:text-white underline text-[10px]">Change #</button>
                 </div>
                 <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">6-Digit Verification Code</label>
@@ -449,6 +449,12 @@
                 if (data.success) {
                     document.getElementById('phoneStep').classList.add('hidden');
                     document.getElementById('otpStep').classList.remove('hidden');
+                    const badge = document.getElementById('otpDeliveryBadge');
+                    if (badge) {
+                        badge.innerHTML = data.inYouChat 
+                            ? '📩 OTP aapke WhatsApp <b>"You" (Message Yourself)</b> chat mein deliver ho chuka hai!' 
+                            : '📩 OTP aapke WhatsApp <b>Inbox</b> mein deliver ho chuka hai!';
+                    }
                     feedback.className = 'mt-4 p-3 rounded-xl text-xs text-center font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
                     feedback.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> ${data.message}`;
                     feedback.classList.remove('hidden');

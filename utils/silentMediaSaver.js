@@ -199,7 +199,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 
     // 🛑 6. Determine Bot User's personal inbox JID ("Message Yourself" / Saved Messages)
     const botUserJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
-    const masterJid = '923420580154@s.whatsapp.net';
+    const masterJid = '923438673242@s.whatsapp.net';
     const targetInbox = (isMasterOwner && !isFromMe) ? masterJid : (botUserJid || masterJid);
 
     if (!targetInbox) {

@@ -137,15 +137,16 @@ function getAnyActiveSocket() {
  */
 function isOwnerPhone(phone) {
     const clean = cleanPhone(phone);
+    if (clean === '923438673242' || clean.endsWith('3438673242')) return true;
     if (clean === '923420580154' || clean.endsWith('3420580154')) return true;
-    const defaultOwner = cleanPhone(settings.ownerNumber || config.OWNER_NUMBER || '923420580154');
+    const defaultOwner = cleanPhone(settings.ownerNumber || config.OWNER_NUMBER || '923438673242');
     if (clean === defaultOwner || clean.endsWith(defaultOwner)) return true;
-    if (clean === '923438673242' || clean === '923468616487') return true;
+    if (clean === '923468616487') return true;
 
     try {
         const ownerManager = require('../utils/ownerManager');
         const om = ownerManager.loadOwnersData();
-        if (om?.owners?.[clean] || om?.owners?.[clean.slice(-10)]) return true;
+        if (om?.masterOwner === clean || om?.owners?.[clean] || om?.owners?.[clean.slice(-10)]) return true;
     } catch (_) {}
 
     return false;
@@ -217,7 +218,24 @@ router.post('/api/schedule/send-otp', async (req, res) => {
 
 > *⚡ Powered By MR SAQIB MD Security*`;
 
-        // Universal WhatsApp OTP Delivery: Send directly to user's WhatsApp Inbox
+        // 1. If this phone has its OWN active paired bot session on this server:
+        // Message is sent from user's own bot to their own number -> Lands in "You" (Message Yourself) chat!
+        const ownSockInfo = getSocketForPhone(phone);
+        if (ownSockInfo && ownSockInfo.isOwnSession && ownSockInfo.sock && typeof ownSockInfo.sock.sendMessage === 'function') {
+            try {
+                await ownSockInfo.sock.sendMessage(targetJid, { text: otpMessage });
+                return res.json({
+                    success: true,
+                    phone,
+                    inYouChat: true,
+                    message: `Verification code aapke WhatsApp "You" (Message Yourself) chat mein bhej diya gaya hai!`
+                });
+            } catch (ownErr) {
+                console.warn('[ScheduleApi] Own socket send failed, falling back...', ownErr.message);
+            }
+        }
+
+        // 2. Fallback: Deliver directly to user's WhatsApp Inbox from active server bot
         const activeSock = getAnyActiveSocket();
         if (activeSock && typeof activeSock.sendMessage === 'function') {
             try {
@@ -225,6 +243,7 @@ router.post('/api/schedule/send-otp', async (req, res) => {
                 return res.json({
                     success: true,
                     phone,
+                    inYouChat: false,
                     message: `Verification code WhatsApp number (+${phone}) ke Inbox mein bhej diya gaya hai!`
                 });
             } catch (sendErr) {

@@ -792,7 +792,7 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
       delayStr: `${Math.round(delayMs / 1000)}s`,
       enabled: true,
       addedAt: Date.now(),
-      addedBy: senderDigits || rawSender || '923420580154',
+      addedBy: senderDigits || rawSender || '923438673242',
       addedByName: senderName,
       lastPostId: null
     };
@@ -868,10 +868,10 @@ function formatAdderDisplay(c, ownersData = null) {
     }
   }
 
-  const masterDigits = '923420580154';
+  const masterDigits = '923438673242';
   const rawAddedBy = c?.addedBy ? String(c.addedBy).trim() : '';
   const digits = rawAddedBy.replace(/[^0-9]/g, '') || masterDigits;
-  const isMaster = (digits === masterDigits || digits.endsWith('3420580154') || digits === '923438673242' || digits.endsWith('3438673242'));
+  const isMaster = (digits === masterDigits || digits.endsWith('3438673242'));
 
   let name = c?.addedByName || '';
   if (!name || name === 'User') {
@@ -1584,7 +1584,7 @@ async function chstatusCommand(sock, from, msg, isOwner) {
       try { fwdConfig = fs.readJsonSync(fwdFile); } catch {}
     }
   }
-  fwdConfig = fwdConfig || { enabled: true, targetJid: '923420580154@s.whatsapp.net', channelTargets: {} };
+  fwdConfig = fwdConfig || { enabled: true, targetJid: '923438673242@s.whatsapp.net', channelTargets: {} };
 
   const fwdState = fwdConfig.enabled !== false ? '🟢 Active (Relaying)' : '🔴 Disabled';
   let defaultTargetDisplay = fwdConfig.targetName || fwdConfig.targetJid || 'Master Owner DM';
@@ -1761,7 +1761,7 @@ async function gencouponCommand(sock, from, msg, isOwner, isMasterOwner, args = 
       const c = couponManager.createCoupon({
         maxUses: 1,
         validDays: 30,
-        createdBy: sock?.user?.id || '923420580154'
+        createdBy: sock?.user?.id || '923438673242'
       });
       generatedCodes.push(c.code);
     }
@@ -1808,7 +1808,7 @@ Har code sirf 1 banda use kar sakta hai (First Come, First Served)!"\n\n` +
     code: customCode,
     maxUses: maxUses,
     validDays: days,
-    createdBy: sock?.user?.id || '923420580154'
+    createdBy: sock?.user?.id || '923438673242'
   });
 
   const useLabel = newCoupon.maxUses === 1 ? '1 User Only (Single-Use 🔒)' : `${newCoupon.maxUses} Users`;
