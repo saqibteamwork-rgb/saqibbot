@@ -51,19 +51,19 @@ async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
     }
 }
 
-// 12 Iconic Categories for the 12 Carousel Cards
+// 12 Iconic Categories for the 12 Carousel Cards (100% Real, Working Bot Commands)
 const CAROUSEL_CATEGORIES = [
     {
         name: 'MAIN & SYSTEM',
         icon: '🤖',
         filter: 'general',
-        cmds: ['menu', 'allmenu', 'ping', 'runtime', 'systeminfo', 'trackip', 'info', 'speed', 'alive', 'serverinfo', 'owner']
+        cmds: ['menu', 'allmenu', 'ping', 'runtime', 'speed', 'alive', 'botinfo', 'botstatus', 'owner', 'mode', 'public', 'private']
     },
     {
         name: 'OWNER & ADMIN',
         icon: '👑',
         filter: 'owner',
-        cmds: ['mode', 'broadcast', 'backup', 'restart', 'setbotname', 'setbotpic', 'setownername', 'setownerpic', 'setprefix', 'ban', 'unban', 'sudo']
+        cmds: ['broadcast', 'restart', 'setbotname', 'setownername', 'setprefix', 'addpm', 'delpm', 'ownadd', 'owndel', 'setpaircode', 'mode', 'block']
     },
     {
         name: 'GROUP MANAGEMENT',
@@ -75,37 +75,37 @@ const CAROUSEL_CATEGORIES = [
         name: 'MEDIA DOWNLOADER',
         icon: '📥',
         filter: 'download',
-        cmds: ['autodl', 'igdl', 'tiktok', 'fb', 'ytmp3', 'ytmp4', 'play', 'song', 'video', 'gdrive', 'mediafire', 'capcut']
+        cmds: ['autodl', 'tiktok', 'fb', 'ig', 'ytmp3', 'ytmp4', 'play', 'song', 'video', 'gdrive', 'mediafire', 'capcut']
     },
     {
         name: 'AI & CHATBOT',
         icon: '🧠',
         filter: 'ai',
-        cmds: ['ai', 'gpt', 'gemini', 'imagine', 'draw', 'transcribe', 'tts', 'say', 'sticker', 'toimg', 'tovideo', 'removebg']
+        cmds: ['ai', 'gpt', 'gemini', 'imagine', 'bard', 'tts', 'say', 'sticker', 'toimg', 'tourl', 'removebg', 'attp']
     },
     {
         name: 'ISLAMIC & DEEN',
         icon: '🕌',
         filter: 'islamic',
-        cmds: ['quran', 'surah', 'ayat', 'hadith', 'tafsir', 'dua', 'azkar', 'praytime', 'azan', 'allah', 'prophet', 'islamicquote']
+        cmds: ['quran', 'surah', 'ayat', 'hadith', 'dua', 'azkar', 'allnamaz', 'hijri', 'allahname', 'durood', 'hajjguide', 'dailyhadith']
     },
     {
         name: 'FUN & GAMES',
         icon: '🎮',
         filter: 'fun',
-        cmds: ['game', 'tictactoe', 'trivia', 'quiz', 'dare', 'truth', 'joke', 'meme', 'coinflip', 'slot', 'dice', 'roll']
+        cmds: ['ludo', 'bubblepop', 'games', 'ttt', 'wordguess', 'mathspeed', 'slot', 'dice', 'roll', 'joke', 'meme', 'trivia']
     },
     {
         name: 'ANIME & WEEB',
         icon: '🎌',
         filter: 'anime',
-        cmds: ['anime', 'manga', 'character', 'quote', 'waifu', 'neko', 'husbando', 'wall', 'wallpaper', 'cosplay', 'animesearch', 'topanime']
+        cmds: ['anime', 'animecharacters', 'animesearch', 'animequote', 'waifu', 'neko', 'wallpaper', 'animedance', 'animecuddle', 'animenews', 'animeship', 'animestatus']
     },
     {
         name: 'LOOKUP & TOOLS',
         icon: '🛠️',
         filter: 'tools',
-        cmds: ['pay', 'addreply', 'delreply', 'listreply', 'autoreply', 'shorturl', 'calc', 'weather', 'translate', 'qrcode', 'whois', 'device']
+        cmds: ['tourl', 'addreply', 'delreply', 'listreply', 'autoreply', 'shorturl', 'calc', 'weather', 'translate', 'qrcode', 'trackip', 'simdata']
     },
     {
         name: 'AUDIO & MUSIC',
@@ -114,16 +114,16 @@ const CAROUSEL_CATEGORIES = [
         cmds: ['bgmusic', 'bass', 'blown', 'deep', 'earrape', 'fast', 'nightcore', 'reverse', 'robot', 'slow', 'smooth', 'tomp3']
     },
     {
-        name: 'SEARCH & LOOKUP',
+        name: 'SEARCH & DISCOVERY',
         icon: '🔍',
         filter: 'search',
-        cmds: ['google', 'yts', 'bing', 'wiki', 'lyrics', 'pinterest', 'github', 'imdb', 'applemusic', 'spotify', 'apk', 'news']
+        cmds: ['google', 'yts', 'lyrics', 'pinterest', 'github', 'apk', 'news', 'playstore', 'gsearch', 'sc', 'deviceinfo', 'whois']
     },
     {
         name: 'SECURITY & ANTI',
         icon: '🛡️',
         filter: 'security',
-        cmds: ['antiadmin', 'antilink', 'antibot', 'anticall', 'antidelete', 'antispam', 'antiviewonce', 'antiforeign', 'antivirus', 'antitag', 'lockgroup', 'unlockgroup']
+        cmds: ['antiadmin', 'antilink', 'antibot', 'anticall', 'antidelete', 'antispam', 'antistatus', 'autoreact', 'autoread', 'lockgroup', 'unlockgroup', 'antitag']
     }
 ];
 

@@ -26,6 +26,7 @@
  * ============================================================================
  */
 
+const { getBotPic } = require('../lib/botpic');
 const settings = require('../settings');
 const config = require('../config');
 
@@ -94,8 +95,21 @@ async function sendCategoryButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', 
 
     try {
         const baileys = require('@whiskeysockets/baileys');
-        const { proto, generateWAMessageFromContent } = baileys;
+        const { proto, generateWAMessageFromContent, prepareWAMessageMedia } = baileys;
         const IM = proto.Message.InteractiveMessage;
+
+        // Upload official menu image if available
+        let imageMessage = null;
+        if (typeof sock?.waUploadToServer === 'function') {
+            try {
+                const pic = getBotPic(sock) || { url: settings.menuImage || 'https://ik.imagekit.io/mrsaqib/image_ePUwM_YDT.png' };
+                const upload = await Promise.race([
+                    prepareWAMessageMedia({ image: pic }, { upload: sock.waUploadToServer }),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000))
+                ]);
+                imageMessage = upload.imageMessage;
+            } catch (_) {}
+        }
 
         // Build native flow buttons list
         const buttons = [
@@ -123,7 +137,8 @@ async function sendCategoryButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', 
         const interactive = IM.create({
             header: IM.Header.create({
                 title: `${botName}`,
-                hasMediaAttachment: false
+                hasMediaAttachment: Boolean(imageMessage),
+                ...(imageMessage ? { imageMessage } : {})
             }),
             body: IM.Body.create({ text: bodyText }),
             footer: IM.Footer.create({ text: `Powered By ${botName}` }),
