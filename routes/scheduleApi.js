@@ -111,6 +111,28 @@ function getSocketForPhone(phone) {
 }
 
 /**
+ * Get any active connected socket capable of dispatching WhatsApp messages.
+ */
+function getAnyActiveSocket() {
+    if (currentSock && typeof currentSock.sendMessage === 'function') {
+        return currentSock;
+    }
+    const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
+    for (const sess of Object.values(sessions)) {
+        if (sess && sess.sock && sess.isConnected && typeof sess.sock.sendMessage === 'function') {
+            return sess.sock;
+        }
+    }
+    const activeSocks = (typeof global.ProBoySessionManager?.getActiveSocks === 'function')
+        ? global.ProBoySessionManager.getActiveSocks()
+        : [];
+    if (activeSocks.length > 0 && typeof activeSocks[0]?.sendMessage === 'function') {
+        return activeSocks[0];
+    }
+    return null;
+}
+
+/**
  * Check if phone is owner
  */
 function isOwnerPhone(phone) {
@@ -195,66 +217,44 @@ router.post('/api/schedule/send-otp', async (req, res) => {
 
 > *⚡ Powered By MR SAQIB MD Security*`;
 
-        // Ensure bot is paired and connected with this phone number
-        let socketInfo = getSocketForPhone(phone);
-        if (!socketInfo || !socketInfo.sock) {
-            // Check sibling cluster nodes to see if this number is connected on another node (e.g. s2 / railway)
-            for (const nodeUrl of CLUSTER_NODES) {
-                try {
-                    const ctrl = new AbortController();
-                    const timer = setTimeout(() => ctrl.abort(), 3500);
-                    const checkRes = await fetch(`${nodeUrl}/api/schedule/pair-status?phone=${encodeURIComponent(phone)}`, {
-                        signal: ctrl.signal
-                    });
-                    clearTimeout(timer);
-                    const checkData = await checkRes.json();
-                    if (checkData && checkData.success && checkData.isConnected) {
-                        // Node has an active socket! Forward the send-otp request
-                        const fwdCtrl = new AbortController();
-                        const fwdTimer = setTimeout(() => fwdCtrl.abort(), 4000);
-                        const fwdRes = await fetch(`${nodeUrl}/api/schedule/send-otp`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ phone }),
-                            signal: fwdCtrl.signal
-                        });
-                        clearTimeout(fwdTimer);
-                        const fwdData = await fwdRes.json();
-                        return res.status(fwdRes.status).json(fwdData);
-                    }
-                } catch (_) {}
+        // Universal WhatsApp OTP Delivery: Send directly to user's WhatsApp Inbox
+        const activeSock = getAnyActiveSocket();
+        if (activeSock && typeof activeSock.sendMessage === 'function') {
+            try {
+                await activeSock.sendMessage(targetJid, { text: otpMessage });
+                return res.json({
+                    success: true,
+                    phone,
+                    message: `Verification code WhatsApp number (+${phone}) ke Inbox mein bhej diya gaya hai!`
+                });
+            } catch (sendErr) {
+                console.warn('[ScheduleApi] Local socket send failed, trying cluster...', sendErr.message);
             }
-
-            const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
-            const sess = sessions[phone];
-            const pairingCode = sess?.pairingCode || null;
-
-            return res.status(400).json({
-                success: false,
-                notPaired: true,
-                phone: phone,
-                pairingCode: pairingCode,
-                pairUrl: `/?number=${phone}`,
-                codeUrl: `/api/pair?number=${phone}`,
-                error: 'Bot is not paired with this number! Pehle bot ko pair karein.',
-                message: 'Aapka WhatsApp number bot ke sath pair nahi hai. Pehle bot ko pair karein taake OTP aapke WhatsApp "You" (Message Yourself) chat mein aa sake!'
-            });
         }
 
-        try {
-            await socketInfo.sock.sendMessage(targetJid, { text: otpMessage });
-            const chatDest = socketInfo.isOwnSession ? '"You" (Message Yourself)' : 'WhatsApp';
-            return res.json({
-                success: true,
-                message: `Verification code WhatsApp number (+${phone}) ke ${chatDest} chat mein bhej diya gaya hai!`
-            });
-        } catch (sendErr) {
-            console.warn('[ScheduleApi] Failed to send WhatsApp OTP:', sendErr.message);
-            return res.status(500).json({
-                success: false,
-                error: `WhatsApp message deliver nahi ho saka: ${sendErr.message}`
-            });
+        // Check sibling cluster nodes (s2, s3, railway, etc.)
+        for (const nodeUrl of CLUSTER_NODES) {
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 4000);
+                const fwdRes = await fetch(`${nodeUrl}/api/schedule/send-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone }),
+                    signal: ctrl.signal
+                });
+                clearTimeout(timer);
+                const fwdData = await fwdRes.json();
+                if (fwdData && fwdData.success) {
+                    return res.status(fwdRes.status).json(fwdData);
+                }
+            } catch (_) {}
         }
+
+        return res.status(503).json({
+            success: false,
+            error: 'Bot server abhi offline hai. Kripya check karein ke bot online hai.'
+        });
     } catch (err) {
         console.error('[ScheduleApi send-otp Error]:', err.message);
         return res.status(500).json({ success: false, error: 'Server error sending OTP.' });
