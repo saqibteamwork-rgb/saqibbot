@@ -169,7 +169,7 @@ const CATEGORIES = {
         'myprofile', 'nettest', 'owner', 'pair', 'ping', 'ping2', 'pings', 'pollstats',
         'premium', 'profileinfo', 'redeem', 'resetmenu', 'runtime', 'sadgirl', 'server', 'setbotname',
         'setmenupic', 'setownername', 'sfollow', 'speed', 'sreacts', 'srepo', 'sunfollow', 'svotes',
-        'tmp', 'tmpib', 'tmprst', 'translate', 'trt', 'typemenu', 'typmenu', 'userinfo', 'vv', 'wame',
+        'tmp', 'tmpib', 'tmprst', 'translate', 'trt', 'typemenu', 'typmenu', 'userinfo', 'vv', 'autovv', 'viewonce', 'wame',
         'weather', 'whois'
     ],
     'GROUP': [

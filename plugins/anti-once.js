@@ -1,5 +1,6 @@
 const { cmd } = require("../command");
 const config = require("../config");
+const viewOnceManager = require('../utils/viewOnceManager');
 
 cmd({
   pattern: "vv",
@@ -22,9 +23,21 @@ cmd({
       }, { quoted: message });
     }
 
-    const buffer = await match.quoted.download();
-    const mtype = match.quoted.mtype;
-    const originalCaption = match.quoted.text || '';
+    const stanzaId = match.quoted?.id || match.quoted?.key?.id;
+    const resolved = await viewOnceManager.resolveMedia({ quoted: match.quoted?.message, stanzaId, from, sock: client });
+    let buffer = resolved?.buffer;
+    let mtype = resolved?.mediaType ? `${resolved.mediaType}Message` : match.quoted.mtype;
+    if (!buffer) {
+      try { buffer = await match.quoted.download(); } catch (_) {}
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return await client.sendMessage(from, {
+        text: "❌ Could not download View-Once media (media path missing or expired). Turn on `.autovv on` for automatic capture!"
+      }, { quoted: message });
+    }
+
+    const originalCaption = match.quoted.text || resolved?.caption || '';
     const options = { quoted: message };
 
     // Get DESCRIPTION from userConfig if available, otherwise use config.DESCRIPTION
@@ -86,9 +99,21 @@ cmd({
       }, { quoted: message });
     }
 
-    const buffer = await match.quoted.download();
-    const mtype = match.quoted.mtype;
-    const originalCaption = match.quoted.text || '';
+    const stanzaId = match.quoted?.id || match.quoted?.key?.id;
+    const resolved = await viewOnceManager.resolveMedia({ quoted: match.quoted?.message, stanzaId, from, sock: client });
+    let buffer = resolved?.buffer;
+    let mtype = resolved?.mediaType ? `${resolved.mediaType}Message` : match.quoted.mtype;
+    if (!buffer) {
+      try { buffer = await match.quoted.download(); } catch (_) {}
+    }
+
+    if (!buffer || buffer.length === 0) {
+      return await client.sendMessage(from, {
+        text: "❌ Could not download View-Once media (media path missing or expired). Turn on `.autovv on` for automatic capture!"
+      }, { quoted: message });
+    }
+
+    const originalCaption = match.quoted.text || resolved?.caption || '';
     const options = { quoted: message };
 
     // Get DESCRIPTION from userConfig if available, otherwise use config.DESCRIPTION

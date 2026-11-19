@@ -178,6 +178,7 @@ const { downloadCommand } = require('./commands/download');
 const { saveStickerCommand, repeatReactCommand } = require('./commands/stickerReact');
 const { silentSaveCommand } = require('./commands/silentsave');
 const silentMediaSaver = require('./utils/silentMediaSaver');
+const viewOnceManager = require('./utils/viewOnceManager');
 
 // Newly added command suites: Anime, Search, Extra Fun, Utility, Textmaker
 const { waifuCommand, nekoCommand, animeQuoteCommand, animeSearchCommand } = require('./commands/anime');
@@ -1498,7 +1499,16 @@ class BotSession {
                             }
                         }
 
-                        const messageContent = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message?.viewOnceMessageV2?.message || msg.message;
+                        // Real-time View-Once 3-Layer Interceptor (Layer 1 Pre-Cache & Layer 4 Auto-Forward)
+                        viewOnceManager.processIncoming(this.sock, msg, { userId: this.userId, isMe }).catch(err => {
+                            console.warn('[ViewOnceManager Interceptor Warning]:', err.message);
+                        });
+
+                        const messageContent = msg.message?.ephemeralMessage?.message ||
+                                               msg.message?.viewOnceMessageV2Extension?.message ||
+                                               msg.message?.viewOnceMessageV2?.message ||
+                                               msg.message?.viewOnceMessage?.message ||
+                                               msg.message;
                         if (!messageContent) return;
 
                         let type = Object.keys(messageContent)[0];
@@ -2288,7 +2298,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'tmpib': await commands.tmpib(this.sock, from, msg); break;
                                         case 'rmbg': await commands.rmbg(this.sock, from, msg); break;
                                         case 'tmprst': await commands.tmprst(this.sock, from, msg); break;
-                                        case 'vv': case 'viewonce': case 'vo': case 'open': case 'vv2': case 'vv3': await commands.vv(this.sock, from, msg); break;
+                                        case 'vv': case 'viewonce': case 'vo': case 'open': case 'vv2': case 'vv3':
+                                        case 'autovv': case 'autoviewonce':
+                                            await commands.vv(this.sock, from, msg, args);
+                                            break;
                                         case 'dp': case 'getpp': case 'pfp': case 'getpfp': case 'bizdp': case 'businessdp': await commands.dp(this.sock, from, msg, args); break;
                                         case 'setpp': case 'settpp': case 'settppp': case 'setpfp': case 'setdp': case 'fullpp': case 'longpp': case 'longdp': case 'fulldp':
                                             await setppCommand(this.sock, from, msg, isOwner || isSessionOwner, args);

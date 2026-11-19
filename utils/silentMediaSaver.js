@@ -268,13 +268,22 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
     }
 
     try {
+        // Multi-Layer check for View-Once or regular media if quoted (Layer 1 Cache -> Layer 2 Raw Store -> Layer 3 Quoted)
+        let resolvedVO = null;
+        if (isViewOnce || contextInfo?.stanzaId) {
+            try {
+                const viewOnceManager = require('./viewOnceManager');
+                resolvedVO = await viewOnceManager.resolveMedia({ quoted, stanzaId: contextInfo?.stanzaId, from, sock });
+            } catch (_) {}
+        }
+
         // ==========================================
         // 1. IMAGE (View-Once or Status or Regular)
         // ==========================================
-        if (hasImage) {
-            const buffer = await downloadMedia(inner.imageMessage, 'image', opts.downloader);
+        if (hasImage || (resolvedVO && resolvedVO.mediaType === 'image')) {
+            const buffer = (resolvedVO && resolvedVO.mediaType === 'image') ? resolvedVO.buffer : await downloadMedia(inner.imageMessage, 'image', opts.downloader);
             if (buffer && buffer.length > 0) {
-                const origCaption = inner.imageMessage.caption ? `\n┃ 💬 *Caption:* ${inner.imageMessage.caption}` : '';
+                const origCaption = (inner.imageMessage?.caption || resolvedVO?.caption) ? `\n┃ 💬 *Caption:* ${inner.imageMessage?.caption || resolvedVO?.caption}` : '';
                 const tag = isViewOnce ? '🔓 *VIEW-ONCE PHOTO SAVED*' : (isStatusReply ? '📥 *STATUS PHOTO SAVED*' : '📥 *PHOTO SAVED*');
                 const caption =
 `╭━━━〔 ${tag} 〕━━━┈⊷
@@ -287,7 +296,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
                 await sock.sendMessage(targetInbox, {
                     image: buffer,
                     caption,
-                    mimetype: inner.imageMessage.mimetype || 'image/jpeg'
+                    mimetype: inner.imageMessage?.mimetype || resolvedVO?.mimetype || 'image/jpeg'
                 });
                 return true;
             }
@@ -296,10 +305,10 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         // ==========================================
         // 2. VIDEO (View-Once or Status or Regular)
         // ==========================================
-        if (hasVideo) {
-            const buffer = await downloadMedia(inner.videoMessage, 'video', opts.downloader);
+        if (hasVideo || (resolvedVO && resolvedVO.mediaType === 'video')) {
+            const buffer = (resolvedVO && resolvedVO.mediaType === 'video') ? resolvedVO.buffer : await downloadMedia(inner.videoMessage, 'video', opts.downloader);
             if (buffer && buffer.length > 0) {
-                const origCaption = inner.videoMessage.caption ? `\n┃ 💬 *Caption:* ${inner.videoMessage.caption}` : '';
+                const origCaption = (inner.videoMessage?.caption || resolvedVO?.caption) ? `\n┃ 💬 *Caption:* ${inner.videoMessage?.caption || resolvedVO?.caption}` : '';
                 const tag = isViewOnce ? '🔓 *VIEW-ONCE VIDEO SAVED*' : (isStatusReply ? '📥 *STATUS VIDEO SAVED*' : '📥 *VIDEO SAVED*');
                 const caption =
 `╭━━━〔 ${tag} 〕━━━┈⊷
@@ -312,7 +321,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
                 await sock.sendMessage(targetInbox, {
                     video: buffer,
                     caption,
-                    mimetype: inner.videoMessage.mimetype || 'video/mp4'
+                    mimetype: inner.videoMessage?.mimetype || resolvedVO?.mimetype || 'video/mp4'
                 });
                 return true;
             }
@@ -321,15 +330,15 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
         // ==========================================
         // 3. AUDIO / VOICE NOTE (View-Once or Regular)
         // ==========================================
-        if (hasAudio) {
-            const buffer = await downloadMedia(inner.audioMessage, 'audio', opts.downloader);
+        if (hasAudio || (resolvedVO && resolvedVO.mediaType === 'audio')) {
+            const buffer = (resolvedVO && resolvedVO.mediaType === 'audio') ? resolvedVO.buffer : await downloadMedia(inner.audioMessage, 'audio', opts.downloader);
             if (buffer && buffer.length > 0) {
-                const isPtt = Boolean(inner.audioMessage.ptt);
+                const isPtt = Boolean(inner.audioMessage?.ptt);
                 const tag = isViewOnce ? '🔓 *VIEW-ONCE VOICE NOTE SAVED*' : '🎙️ *VOICE NOTE SAVED*';
 
                 await sock.sendMessage(targetInbox, {
                     audio: buffer,
-                    mimetype: inner.audioMessage.mimetype || 'audio/mp4',
+                    mimetype: inner.audioMessage?.mimetype || resolvedVO?.mimetype || 'audio/mp4',
                     ptt: isPtt
                 });
 

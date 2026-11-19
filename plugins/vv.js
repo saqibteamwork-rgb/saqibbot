@@ -1,5 +1,6 @@
 const { cmd } = require('../arslan')
 const { downloadContentFromMessage } = require('@whiskeysockets/baileys')
+const viewOnceManager = require('../utils/viewOnceManager')
 
 // .vv  (aur alias: .viewonce .view .open  +  .ok .theek .nice .good .acha .sahi .thanks)
 // Kisi view-once photo / video / audio par reply karke likho -> media sirf OWNER ke apne DM mein aati hai.
@@ -59,29 +60,46 @@ async (conn, mek, m, { from, isCreator, reply, command }) => {
             )
         }
 
-        const { msg, viewOnce } = unwrap(m.quoted.message)
-        const type = Object.keys(msg || {}).find(k => /^(image|video|audio)Message$/.test(k))
-        const isVO = viewOnce || (type && msg[type] && msg[type].viewOnce === true)
-
-        // chhote lafz sirf asli view-once par chalte hain
-        if (quiet && (!type || !isVO)) return
-        if (!type) return reply("*❌ YE VIEW ONCE MEDIA SUPPORT NAHI KARTA 🥺*")
-
         if (!quiet) conn.sendMessage(from, { react: { text: '🥺', key: mek.key } }).catch(() => {})
 
-        const media = msg[type]
-        const kind = type.replace('Message', '')
-        const stream = await downloadContentFromMessage(media, kind)
-        const chunks = []
-        for await (const chunk of stream) chunks.push(chunk)
-        const buffer = Buffer.concat(chunks)
-        if (!buffer.length) throw new Error("MEDIA_EMPTY (shayad pehle hi khul chuka hai ya expire ho gaya)")
+        const stanzaId = m.quoted.id || m.quoted.key?.id || mek?.message?.extendedTextMessage?.contextInfo?.stanzaId;
+        const resolved = await viewOnceManager.resolveMedia({ quoted: m.quoted.message, stanzaId, from, sock: conn });
 
-        const caption = ((media.caption || "") + `\n\n👁️ From: ${prettyFrom(m, mek, from)}`).trim()
+        let buffer = null;
+        let kind = null;
+        let caption = '';
+        let mediaMimetype = 'image/jpeg';
+
+        if (resolved && resolved.buffer && resolved.buffer.length > 0) {
+            buffer = resolved.buffer;
+            kind = resolved.mediaType;
+            caption = ((resolved.caption || "") + `\n\n👁️ From: ${prettyFrom(m, mek, from)}\n> ⚡ *Protection: Layer ${resolved.layer}*`).trim();
+            mediaMimetype = resolved.mimetype;
+        } else {
+            const { msg, viewOnce } = unwrap(m.quoted.message)
+            const type = Object.keys(msg || {}).find(k => /^(image|video|audio)Message$/.test(k))
+            const isVO = viewOnce || (type && msg[type] && msg[type].viewOnce === true)
+
+            // chhote lafz sirf asli view-once par chalte hain
+            if (quiet && (!type || !isVO)) return
+            if (!type) return reply("*❌ YE VIEW ONCE MEDIA SUPPORT NAHI KARTA 🥺*")
+
+            const media = msg[type]
+            kind = type.replace('Message', '')
+            const stream = await downloadContentFromMessage(media, kind)
+            const chunks = []
+            for await (const chunk of stream) chunks.push(chunk)
+            buffer = Buffer.concat(chunks)
+            if (!buffer.length) throw new Error("MEDIA_EMPTY (shayad pehle hi khul chuka hai ya expire ho gaya)")
+
+            caption = ((media.caption || "") + `\n\n👁️ From: ${prettyFrom(m, mek, from)}`).trim()
+            mediaMimetype = media.mimetype || (kind === 'image' ? 'image/jpeg' : kind === 'video' ? 'video/mp4' : 'audio/mp4')
+        }
+
         let content
         if (kind === 'image') content = { image: buffer, caption }
         else if (kind === 'video') content = { video: buffer, caption }
-        else content = { audio: buffer, mimetype: media.mimetype || "audio/mp4", ptt: false }
+        else content = { audio: buffer, mimetype: mediaMimetype, ptt: false }
 
         await conn.sendMessage(me, content)
         if (kind === 'audio') await conn.sendMessage(me, { text: `👁️ Voice/audio from: ${prettyFrom(m, mek, from)}` })

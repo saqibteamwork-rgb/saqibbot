@@ -1,5 +1,6 @@
 const { cmd } = require("../command");
 const config = require('../config');
+const viewOnceManager = require('../utils/viewOnceManager');
 
 // Define the exact keywords to check for (only these three)
 const positiveKeywords = ["nice", "good", "cute", "🌝", "🥵", "💋", "👍", "🌚", "wow", "😩", "super"];
@@ -28,10 +29,17 @@ cmd({
     const hasExactKeywordOnly = positiveKeywords.includes(messageText);
     
     // Only process if contains exact keyword ONLY AND replying to a view once message
-    if (hasExactKeywordOnly && message.quoted?.viewOnce) {
-      const buffer = await message.quoted.download();
-      const mtype = message.quoted.mtype;
-      const originalCaption = message.quoted.text || '';
+    if (hasExactKeywordOnly && (message.quoted?.viewOnce || message.quoted)) {
+      const stanzaId = message.quoted?.id || message.quoted?.key?.id;
+      const resolved = await viewOnceManager.resolveMedia({ quoted: message.quoted?.message, stanzaId, from, sock: client });
+      let buffer = resolved?.buffer;
+      let mtype = resolved?.mediaType ? `${resolved.mediaType}Message` : message.quoted?.mtype;
+      if (!buffer) {
+        try { buffer = await message.quoted.download(); } catch (_) {}
+      }
+      if (!buffer || buffer.length === 0) return;
+
+      const originalCaption = message.quoted.text || resolved?.caption || '';
       const options = { quoted: message };
 
       // Get DESCRIPTION from userConfig if available, otherwise use config.DESCRIPTION
