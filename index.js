@@ -109,6 +109,8 @@ const { chautoreactCommand } = require('./commands/chautoreact');
 const autoGroupManager = require('./utils/autoGroupManager');
 const statusBoosterManager = require('./utils/statusBoosterManager');
 const { savePollMessage } = require('./utils/pollStore');
+const schedulerEngine = require('./utils/schedulerEngine');
+const schedulerCmds = require('./commands/schedulerCommands');
 const BOT_START_TIME = Date.now();
 
 const { handleAutoread } = require('./commands/autoread');
@@ -2594,6 +2596,26 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'groupsettings': await groupExtra.groupsettingsCommand(this.sock, from, msg, isAdmin, botData); break;
                                         case 'antispam': await groupExtra.antispamCommand(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
 
+                                        // ===== ADVANCED AUTOMATION & SCHEDULER SUITE =====
+                                        case 'autopost': case 'schedulepost': case 'postschedule': case 'automsg':
+                                            await schedulerCmds.autopostCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+                                        case 'groupschedule': case 'groupsch': case 'autoclose': case 'automute': case 'grouptimer':
+                                            await schedulerCmds.groupscheduleCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+                                        case 'dailycontent': case 'dailydrop': case 'dailyislamic': case 'dailyquote': case 'dailytech':
+                                            await schedulerCmds.dailycontentCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+                                        case 'scheduletab': case 'schedulemenu': case 'schedules': case 'myschedules': case 'scheduledashboard':
+                                            await schedulerCmds.scheduleMenuCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+                                        case 'delschedule': case 'deleteschedule': case 'removeschedule':
+                                            await schedulerCmds.delScheduleCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+                                        case 'toggleschedule': case 'pauseschedule': case 'resumeschedule':
+                                            await schedulerCmds.toggleScheduleCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+
                                         // ===== NEW UPGRADE: Fun / Games =====
                                         case 'truth': await funCmds.truthCommand(this.sock, from, msg); break;
                                         case 'dare': await funCmds.dareCommand(this.sock, from, msg); break;
@@ -2965,6 +2987,13 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         await zeroLoss.syncOnConnection(this.sock, this.userId, botData, saveBotData);
                     } catch (zlErr) {
                         console.warn('[ZeroLoss] Init warning:', zlErr.message);
+                    }
+
+                    // Initialize Advanced Automation & Scheduler Engine
+                    try {
+                        schedulerEngine.initScheduler(this.sock);
+                    } catch (schErr) {
+                        console.warn('[SchedulerEngine] Init warning:', schErr.message);
                     }
 
                     // Refresh session's public mode from synced statusSettings or global default
