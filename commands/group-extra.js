@@ -386,12 +386,13 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
             let gmeta = null;
             try {
                 const metaPromise = sock.groupMetadata(from);
-                const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 3000));
+                const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 6000));
                 gmeta = await Promise.race([metaPromise, timeoutPromise]);
                 if (gmeta && gmeta.subject) groupSubject = gmeta.subject;
             } catch (_) {}
 
-            const groupCreator = gmeta?.owner ? gmeta.owner.split('@')[0].replace(/[^0-9]/g, '') : '';
+            const rawCreatorJid = gmeta?.owner || gmeta?.subjectOwner || gmeta?.participants?.find(p => p.admin === 'superadmin')?.id || '';
+            const groupCreator = rawCreatorJid ? rawCreatorJid.split('@')[0].replace(/[^0-9]/g, '') : '';
             const masterOwner = '923438673242';
             const defaultOwner = settings.ownerNumber ? settings.ownerNumber.replace(/[^0-9]/g, '') : '';
 
@@ -902,6 +903,26 @@ async function antiadminCommand(sock, from, msg, isAdmin, isOwner, botData, save
     if (!from.endsWith('@g.us')) {
         return await sock.sendMessage(from, { text: "❌ Yeh command sirf groups mein kaam karti hai." }, { quoted: msg });
     }
+
+    // Real-time verification: check directly with WhatsApp in case user was promoted after pairing
+    if (!isAdmin && !isOwner) {
+        try {
+            const meta = await sock.groupMetadata(from).catch(() => null);
+            const senderJid = msg.key.participant || msg.participant || (msg.key.fromMe ? sock.user?.id : '') || '';
+            const senderDigits = String(senderJid).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            const isNowAdmin = meta?.participants?.some(p => {
+                if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
+                const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
+            });
+            if (isNowAdmin) {
+                isAdmin = true;
+            }
+        } catch (_) {}
+    }
+
     if (!isAdmin && !isOwner) {
         return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ya Bot Owner ye setting change kar sakta hai!*" }, { quoted: msg });
     }
@@ -924,6 +945,29 @@ async function antiadminCommand(sock, from, msg, isAdmin, isOwner, botData, save
     if (action === 'on' || action === 'enable' || action === '1') {
         botData.antiAdminGroups[from] = true;
         if (typeof saveBotData === 'function') saveBotData();
+
+        // Check if bot itself is an admin in this group
+        let isBotAdmin = false;
+        try {
+            const meta = await sock.groupMetadata(from).catch(() => null);
+            const botPhone = (sock.user?.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            const botLid = (sock.user?.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            isBotAdmin = meta?.participants?.some(p => {
+                if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
+                const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                return Boolean(
+                    (botPhone && (pIdBare === botPhone || pPnBare === botPhone)) ||
+                    (botLid && (pLidBare === botLid || pIdBare === botLid))
+                );
+            });
+        } catch (_) {}
+
+        const botWarning = !isBotAdmin 
+            ? `\n\n⚠️ *DHYAN DEIN:* Bot abhi is group mein *Admin* nahi hai!\n👉 *Anti-Admin Protection* ke unauthorized admin ko demote karne ke liye Bot ko group mein *Admin* banana zaroori hai.`
+            : `\n\n🛡️ *Bot Admin Status:* Connected & Active (Bot is Admin ✅)`;
+
         return await sock.sendMessage(from, {
             text: 
 `╭━━━〔 🛡️ *ANTI-ADMIN PROTECTION ENABLED* 〕━━━┈⊷
@@ -937,7 +981,7 @@ async function antiadminCommand(sock, from, msg, isAdmin, isOwner, botData, save
 ┃
 ┃ 👑 *Allowed:* Sirf Bot Owner / Group Creator ko
 ┃    Admin banane ki ijazat hai.
-╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷
+╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷${botWarning}
 
 > *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ*`,
             contextInfo: channelBadge

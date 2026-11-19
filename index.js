@@ -812,10 +812,11 @@ async function getCachedGroupMetadata(sock, jid, force = false) {
     if (!jid || !jid.endsWith('@g.us')) return null;
     const now = Date.now();
     const cached = groupMetaCache.get(jid);
-    if (!force && cached && (now - cached.time < 600000)) {
+    // Fast 30s cache TTL so newly promoted admins are recognized quickly in real-time
+    if (!force && cached && (now - cached.time < 30000)) {
         return cached.data;
     }
-    if (inflightGroupMeta.has(jid)) {
+    if (!force && inflightGroupMeta.has(jid)) {
         return inflightGroupMeta.get(jid);
     }
     const fetchPromise = (async () => {
@@ -1448,23 +1449,32 @@ class BotSession {
                         // Ignore historical append messages for regular commands and chats
                         if (!isNotify) return;
 
-                        // Check for group participant stub updates (Join via link, Add, Leave, Kick)
+                        // Check for group participant stub updates (Join, Add, Leave, Kick, Promote, Demote)
                         if (isGroup && msg.messageStubType) {
                             const stubType = Number(msg.messageStubType);
+                            // Invalidate group cache immediately on ANY participant role or membership change
+                            groupMetaCache.delete(from);
+
                             // 27: ADD, 31: INVITE, 140/141: COMMUNITY, 159: CAG_INVITE_AUTO_ADD, 161: CAG_INVITE_AUTO_JOINED, 171: JOINED_PARENT
                             const isJoin = [27, 31, 140, 141, 159, 161, 171].includes(stubType);
                             const isLeave = [28, 32].includes(stubType);
+                            const isPromote = stubType === 29;
+                            const isDemote = stubType === 30;
 
-                            if (isJoin || isLeave) {
+                            if (isJoin || isLeave || isPromote || isDemote) {
                                 const participantJids = (msg.messageStubParameters && msg.messageStubParameters.length > 0)
                                     ? msg.messageStubParameters
                                     : [msg.key.participant || msg.participant || msg.key.remoteJid];
+                                const authorJid = msg.key.participant || msg.participant || '';
+
+                                const action = isJoin ? 'add' : (isLeave ? 'remove' : (isPromote ? 'promote' : 'demote'));
 
                                 groupExtra.handleGroupParticipantsUpdate(this.sock, {
                                     id: from,
                                     participants: participantJids,
-                                    action: isJoin ? 'add' : 'remove'
-                                }, botData).catch(e => console.error('[Stub Join Handler Error]:', e.message));
+                                    action,
+                                    author: authorJid
+                                }, botData, saveBotData).catch(e => console.error('[Stub Group Handler Error]:', e.message));
                             }
                         }
 
@@ -1689,22 +1699,36 @@ class BotSession {
                         // Determine if sender is Admin (Owners are always Admins)
                         let isAdmin = isOwner;
                         if (!isAdmin && isGroup) {
-                            if (senderParticipant) {
-                                isAdmin = senderParticipant.admin === 'admin' || senderParticipant.admin === 'superadmin';
-                            } else {
+                            const findMatchingParticipant = (parts) => {
+                                if (!Array.isArray(parts)) return null;
+                                return parts.find(p => {
+                                    if (!p) return false;
+                                    const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                    const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                    const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                    return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits)) ||
+                                           Boolean(resolvedPhone && (pIdBare === resolvedPhone || pPnBare === resolvedPhone)) ||
+                                           Boolean(resolvedLid && (pLidBare === resolvedLid || pIdBare === resolvedLid));
+                                });
+                            };
+
+                            let part = senderParticipant || findMatchingParticipant(groupMetadata?.participants);
+                            isAdmin = Boolean(part && (part.admin === 'admin' || part.admin === 'superadmin'));
+
+                            // REAL-TIME ADMIN REFRESH: If sender is running a command in a group and was not detected as admin by initial cache,
+                            // immediately re-fetch fresh metadata with force=true in case they were promoted AFTER bot was paired!
+                            if (!isAdmin && isCommand) {
                                 try {
-                                    if (!groupMetadata) groupMetadata = await getCachedGroupMetadata(this.sock, from);
-                                    const part = groupMetadata?.participants?.find(p => {
-                                        if (!p) return false;
-                                        const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                        const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                        const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                        return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
-                                    });
-                                    isAdmin = Boolean(part && (part.admin === 'admin' || part.admin === 'superadmin'));
-                                } catch (e) {
-                                    isAdmin = false;
-                                }
+                                    const freshMeta = await getCachedGroupMetadata(this.sock, from, true);
+                                    if (freshMeta?.participants) {
+                                        groupMetadata = freshMeta;
+                                        part = findMatchingParticipant(freshMeta.participants);
+                                        if (part) {
+                                            senderParticipant = part;
+                                            isAdmin = part.admin === 'admin' || part.admin === 'superadmin';
+                                        }
+                                    }
+                                } catch (_) {}
                             }
                         }
                         const cmd = text.toLowerCase();
