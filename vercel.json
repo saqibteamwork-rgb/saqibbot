@@ -12,11 +12,11 @@
     },
     {
       "source": "/api/:match*",
-      "destination": "https://saqib-bot-s2-1cceb03e9698.herokuapp.com/api/:match*"
+      "destination": "https://web-production-08da5300.up.railway.app/api/:match*"
     },
     {
       "source": "/socket.io/:match*",
-      "destination": "https://saqib-bot-s2-1cceb03e9698.herokuapp.com/socket.io/:match*"
+      "destination": "https://web-production-08da5300.up.railway.app/socket.io/:match*"
     },
     {
       "source": "/(.*)",

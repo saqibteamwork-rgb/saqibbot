@@ -434,7 +434,7 @@
                 // If local proxy/node reports notPaired, fallback directly to active cluster node (s2)
                 if (data.notPaired) {
                     try {
-                        const fbRes = await fetch('https://saqib-bot-s2-1cceb03e9698.herokuapp.com/api/schedule/send-otp', {
+                        const fbRes = await fetch('https://web-production-08da5300.up.railway.app/api/schedule/send-otp', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ phone })
@@ -599,7 +599,7 @@
                 let data = await res.json();
                 if (!data.success) {
                     try {
-                        const fbRes = await fetch('https://saqib-bot-s2-1cceb03e9698.herokuapp.com/api/schedule/verify-otp', {
+                        const fbRes = await fetch('https://web-production-08da5300.up.railway.app/api/schedule/verify-otp', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ phone, otp })

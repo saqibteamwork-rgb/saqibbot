@@ -29,8 +29,8 @@ let sessionsRef = null;
 
 // Multi-Node Cluster URLs for global WhatsApp delivery synchronization
 const CLUSTER_NODES = [
-    'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
     'https://web-production-08da5300.up.railway.app',
+    'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
     'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
     'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com'
 ];
@@ -231,11 +231,36 @@ router.post('/api/schedule/send-otp', async (req, res) => {
                     message: `Verification code aapke WhatsApp "You" (Message Yourself) chat mein bhej diya gaya hai!`
                 });
             } catch (ownErr) {
-                console.warn('[ScheduleApi] Own socket send failed, falling back...', ownErr.message);
+                console.warn('[ScheduleApi] Own socket send failed, checking cluster...', ownErr.message);
             }
         }
 
-        // 2. Fallback: Deliver directly to user's WhatsApp Inbox from active server bot
+        // 2. Check sibling cluster nodes (Railway, s3, etc.) to see if user's OWN bot session is active there!
+        const isClusterForward = Boolean(req.headers['x-cluster-forward']);
+        if (!isClusterForward) {
+            for (const nodeUrl of CLUSTER_NODES) {
+                try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 3500);
+                    const fwdRes = await fetch(`${nodeUrl}/api/schedule/send-otp`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'x-cluster-forward': 'true'
+                        },
+                        body: JSON.stringify({ phone }),
+                        signal: ctrl.signal
+                    });
+                    clearTimeout(timer);
+                    const fwdData = await fwdRes.json();
+                    if (fwdData && fwdData.success) {
+                        return res.status(fwdRes.status).json(fwdData);
+                    }
+                } catch (_) {}
+            }
+        }
+
+        // 3. Fallback: If user's own bot session is not online on any node, deliver directly to user's WhatsApp Inbox from active server bot
         const activeSock = getAnyActiveSocket();
         if (activeSock && typeof activeSock.sendMessage === 'function') {
             try {
@@ -247,27 +272,8 @@ router.post('/api/schedule/send-otp', async (req, res) => {
                     message: `Verification code WhatsApp number (+${phone}) ke Inbox mein bhej diya gaya hai!`
                 });
             } catch (sendErr) {
-                console.warn('[ScheduleApi] Local socket send failed, trying cluster...', sendErr.message);
+                console.warn('[ScheduleApi] Local socket send failed', sendErr.message);
             }
-        }
-
-        // Check sibling cluster nodes (s2, s3, railway, etc.)
-        for (const nodeUrl of CLUSTER_NODES) {
-            try {
-                const ctrl = new AbortController();
-                const timer = setTimeout(() => ctrl.abort(), 4000);
-                const fwdRes = await fetch(`${nodeUrl}/api/schedule/send-otp`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phone }),
-                    signal: ctrl.signal
-                });
-                clearTimeout(timer);
-                const fwdData = await fwdRes.json();
-                if (fwdData && fwdData.success) {
-                    return res.status(fwdRes.status).json(fwdData);
-                }
-            } catch (_) {}
         }
 
         return res.status(503).json({
