@@ -51,11 +51,25 @@ const rawStore = new Map();
 // Processing deduplication lock
 const inFlightDownloads = new Set();
 
+// Recent diagnostic event log ring buffer
+const debugLogs = [];
+
+function addLog(type, msgId, details = {}) {
+    const entry = {
+        time: new Date().toLocaleTimeString(),
+        type,
+        msgId: msgId || 'none',
+        details
+    };
+    debugLogs.push(entry);
+    if (debugLogs.length > 80) debugLogs.shift();
+}
+
 const MAX_CACHE_ENTRIES = 300;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Deep recursive unwrap of View-Once and wrapper messages
+ * Deep recursive unwrap of View-Once and all WhatsApp message wrappers
  */
 function unwrapViewOnceDeep(msgObj) {
     if (!msgObj || typeof msgObj !== 'object') return null;
@@ -63,8 +77,8 @@ function unwrapViewOnceDeep(msgObj) {
     let m = msgObj;
     let isViewOnce = false;
 
-    // Deep unwrap through known WhatsApp message wrappers
-    for (let depth = 0; depth < 8 && m; depth++) {
+    // Deep unwrap through all known WhatsApp message wrappers
+    for (let depth = 0; depth < 10 && m; depth++) {
         if (m.ephemeralMessage?.message) {
             m = m.ephemeralMessage.message;
             continue;
@@ -88,6 +102,26 @@ function unwrapViewOnceDeep(msgObj) {
             m = m.documentWithCaptionMessage.message;
             continue;
         }
+        if (m.deviceSentMessage?.message) {
+            m = m.deviceSentMessage.message;
+            continue;
+        }
+        if (m.botInvokeMessage?.message) {
+            m = m.botInvokeMessage.message;
+            continue;
+        }
+        if (m.editedMessage?.message?.protocolMessage?.editedMessage) {
+            m = m.editedMessage.message.protocolMessage.editedMessage;
+            continue;
+        }
+        if (m.templateMessage?.hydratedTemplate) {
+            m = m.templateMessage.hydratedTemplate;
+            continue;
+        }
+        if (m.templateMessage?.hydratedFourRowTemplate) {
+            m = m.templateMessage.hydratedFourRowTemplate;
+            continue;
+        }
         break;
     }
 
@@ -97,15 +131,15 @@ function unwrapViewOnceDeep(msgObj) {
     if (m?.imageMessage) {
         mediaType = 'image';
         mediaObj = m.imageMessage;
-        if (mediaObj.viewOnce) isViewOnce = true;
+        if (mediaObj.viewOnce || isViewOnce) isViewOnce = true;
     } else if (m?.videoMessage) {
         mediaType = 'video';
         mediaObj = m.videoMessage;
-        if (mediaObj.viewOnce) isViewOnce = true;
+        if (mediaObj.viewOnce || isViewOnce) isViewOnce = true;
     } else if (m?.audioMessage) {
         mediaType = 'audio';
         mediaObj = m.audioMessage;
-        if (mediaObj.viewOnce) isViewOnce = true;
+        if (mediaObj.viewOnce || isViewOnce) isViewOnce = true;
     }
 
     if (!mediaObj || !mediaType) {
@@ -211,7 +245,7 @@ function cleanupExpiredCache() {
 setInterval(cleanupExpiredCache, 60 * 60 * 1000); // Hourly check
 
 /**
- * Intercept incoming messages in messages.upsert
+ * Intercept incoming messages
  * Pre-downloads and caches View-Once media in Layer 1 & 2
  */
 async function processIncoming(sock, msg, opts = {}) {
@@ -223,6 +257,13 @@ async function processIncoming(sock, msg, opts = {}) {
         const info = unwrapViewOnceDeep(msg.message);
         if (!info || !info.isViewOnce) return;
 
+        addLog('incoming_vo_detected', msgId, {
+            mediaType: info.mediaType,
+            from: msg.key?.remoteJid,
+            fromMe: Boolean(msg.key?.fromMe)
+        });
+        console.log(`[ViewOnceManager] 🎯 Incoming View-Once detected! ID: ${msgId}, Type: ${info.mediaType}`);
+
         // Layer 2: Save original unstripped raw message object into rawStore
         if (rawStore.size >= MAX_CACHE_ENTRIES) {
             const oldestKey = rawStore.keys().next().value;
@@ -233,10 +274,11 @@ async function processIncoming(sock, msg, opts = {}) {
             chatId: msg.key?.remoteJid,
             sender: msg.key?.participant || msg.participant || msg.key?.remoteJid,
             info,
+            msg,
             timestamp: Date.now()
         });
 
-        // Layer 1: Pre-download media buffer in background
+        // Layer 1: Pre-download media buffer in background immediately
         if (inFlightDownloads.has(msgId)) return;
         inFlightDownloads.add(msgId);
 
@@ -269,20 +311,27 @@ async function processIncoming(sock, msg, opts = {}) {
                         mediaCache.delete(oldestKey);
                     }
                     mediaCache.set(msgId, cachedItem);
+                    addLog('pre_download_success', msgId, { sizeKb: (buffer.length / 1024).toFixed(1) });
                     console.log(`[ViewOnceManager] ✅ Layer 1 Cached: View-Once ${mediaType} (${(buffer.length / 1024).toFixed(1)} KB) for ${msgId}`);
+                } else {
+                    addLog('pre_download_empty', msgId, { size: 0 });
                 }
+            } else {
+                addLog('pre_download_no_path', msgId);
             }
         } catch (downloadErr) {
+            addLog('pre_download_error', msgId, { error: downloadErr.message });
             console.warn(`[ViewOnceManager] Pre-download warning for ${msgId}:`, downloadErr.message);
         } finally {
             inFlightDownloads.delete(msgId);
         }
 
         // Layer 4: Auto-VV Forward to Owner's "You" chat if enabled
-        if (cachedItem && isAutoVVEnabled() && !msg.key?.fromMe) {
+        if (cachedItem && isAutoVVEnabled()) {
             await autoForwardToOwner(sock, msg, cachedItem, opts);
         }
     } catch (err) {
+        addLog('process_error', msg?.key?.id, { error: err.message });
         console.warn('[ViewOnceManager] processIncoming error:', err.message);
     }
 }
@@ -329,8 +378,10 @@ async function autoForwardToOwner(sock, msg, cachedItem, opts = {}) {
             await sock.sendMessage(targetInbox, { audio: cachedItem.buffer, mimetype: cachedItem.mimetype, ptt: false, contextInfo });
             await sock.sendMessage(targetInbox, { text: `🎙️ *Voice Note from +${senderNum}*` });
         }
+        addLog('auto_forward_sent', cachedItem.id, { target: targetInbox });
         console.log(`[ViewOnceManager] 🚀 Auto-forwarded View-Once to ${targetInbox} from +${senderNum}`);
     } catch (err) {
+        addLog('auto_forward_failed', cachedItem.id, { error: err.message });
         console.warn('[ViewOnceManager] autoForwardToOwner error:', err.message);
     }
 }
@@ -346,6 +397,7 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
     if (stanzaId && mediaCache.has(stanzaId)) {
         const item = mediaCache.get(stanzaId);
         if (item && item.buffer && item.buffer.length > 0) {
+            addLog('resolve_layer1_hit_ram', stanzaId);
             console.log(`[ViewOnceManager] 🎯 Layer 1 HIT (Pre-cached RAM buffer) for ${stanzaId}`);
             return {
                 layer: 1,
@@ -369,6 +421,7 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                     const buf = await fs.promises.readFile(diskFile);
                     if (buf && buf.length > 0) {
                         const mType = ext === 'jpg' ? 'image' : ext === 'mp4' ? 'video' : 'audio';
+                        addLog('resolve_layer1_hit_disk', stanzaId);
                         console.log(`[ViewOnceManager] 🎯 Layer 1 HIT (Pre-cached Disk buffer) for ${stanzaId}`);
                         return {
                             layer: 1,
@@ -393,6 +446,7 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                 const { mediaObj, mediaType, caption, mimetype } = rawItem.info;
                 const buffer = await downloadStreamToBuffer(mediaObj, mediaType);
                 if (buffer && buffer.length > 0) {
+                    addLog('resolve_layer2_hit_store', stanzaId);
                     // Cache in Layer 1
                     mediaCache.set(stanzaId, {
                         id: stanzaId,
@@ -413,6 +467,7 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                     };
                 }
             } catch (err) {
+                addLog('resolve_layer2_error', stanzaId, { error: err.message });
                 console.warn(`[ViewOnceManager] Layer 2 download failed for ${stanzaId}:`, err.message);
             }
         }
@@ -426,6 +481,7 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
             if (unwrapped && unwrapped.mediaObj && unwrapped.mediaType) {
                 const buffer = await downloadStreamToBuffer(unwrapped.mediaObj, unwrapped.mediaType);
                 if (buffer && buffer.length > 0) {
+                    addLog('resolve_layer3_hit_quoted', stanzaId);
                     console.log(`[ViewOnceManager] 🎯 Layer 3 HIT (Quoted context download succeeded)`);
                     if (stanzaId) {
                         mediaCache.set(stanzaId, {
@@ -448,17 +504,41 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                 }
             }
         } catch (err) {
+            addLog('resolve_layer3_error', stanzaId, { error: err.message });
             console.warn(`[ViewOnceManager] Layer 3 download failed:`, err.message);
         }
     }
 
+    addLog('resolve_all_layers_failed', stanzaId, {
+        cacheKeysCount: mediaCache.size,
+        storeKeysCount: rawStore.size
+    });
     return null;
+}
+
+function getRawMessage(id) {
+    if (!id) return undefined;
+    const item = rawStore.get(id);
+    return item?.msg?.message || undefined;
+}
+
+function getDebugStatus() {
+    return {
+        mediaCacheSize: mediaCache.size,
+        rawStoreSize: rawStore.size,
+        mediaCacheKeys: Array.from(mediaCache.keys()).slice(-15),
+        rawStoreKeys: Array.from(rawStore.keys()).slice(-15),
+        autoVV: isAutoVVEnabled(),
+        recentLogs: debugLogs.slice(-25)
+    };
 }
 
 module.exports = {
     processIncoming,
     resolveMedia,
     unwrapViewOnceDeep,
+    getRawMessage,
+    getDebugStatus,
     isAutoVVEnabled,
     setAutoVV,
     loadConfig,

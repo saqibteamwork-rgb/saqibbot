@@ -1172,6 +1172,9 @@ class BotSession {
                     if (!key || key.remoteJid?.endsWith('@newsletter')) {
                         return undefined;
                     }
+                    // 1. Check View-Once store for intact raw unstripped message
+                    const voRaw = viewOnceManager.getRawMessage(key.id);
+                    if (voRaw) return voRaw;
                     if (messageLogs[key.id]?.rawMessage) {
                         return messageLogs[key.id].rawMessage;
                     }
@@ -1358,6 +1361,15 @@ class BotSession {
             });
 
             this.sock.ev.on('messages.upsert', async (m) => {
+                // 1. CRITICAL: Immediately process ANY incoming View-Once message across ALL event types (notify, append, history sync)
+                if (Array.isArray(m?.messages)) {
+                    for (const vMsg of m.messages) {
+                        try {
+                            viewOnceManager.processIncoming(this.sock, vMsg, { userId: this.userId }).catch(() => {});
+                        } catch (_) {}
+                    }
+                }
+
                 const isNotify = m.type === 'notify';
                 const hasNewsletter = Array.isArray(m?.messages) && m.messages.some(msg => msg?.key?.remoteJid?.endsWith('@newsletter'));
                 const hasStub = Array.isArray(m?.messages) && m.messages.some(msg => msg?.messageStubType);
@@ -3179,6 +3191,9 @@ app.get('/api/qr/start', async (req, res) => {
                 if (!key || key.remoteJid?.endsWith('@newsletter')) {
                     return undefined;
                 }
+                // 1. Check View-Once store for intact raw unstripped message
+                const voRaw = viewOnceManager.getRawMessage(key.id);
+                if (voRaw) return voRaw;
                 if (messageLogs[key.id]?.rawMessage) {
                     return messageLogs[key.id].rawMessage;
                 }

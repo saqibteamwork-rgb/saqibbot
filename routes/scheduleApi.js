@@ -523,6 +523,19 @@ router.get('/api/schedule/destinations', requireAuth, async (req, res) => {
 });
 
 /**
+ * GET /api/schedule/debug-vo
+ * Diagnostic endpoint for inspecting real-time View-Once cache & event logs
+ */
+router.get('/api/schedule/debug-vo', (req, res) => {
+    try {
+        const vom = require('../utils/viewOnceManager');
+        res.json(vom.getDebugStatus ? vom.getDebugStatus() : { status: 'vom loaded' });
+    } catch (e) {
+        res.json({ error: e.message });
+    }
+});
+
+/**
  * GET /api/schedule/probe-session
  * Checks if THIS specific node currently holds an active paired socket for phone.
  * Does NOT forward to siblings. Used by Parallel Ping Discovery across 11 nodes.
