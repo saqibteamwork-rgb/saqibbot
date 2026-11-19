@@ -25,9 +25,14 @@ const config = require('../config');
 const otpStore = new Map();
 const authTokens = new Map();
 let currentSock = null;
+let sessionsRef = null;
 
 function setSocket(sock) {
     currentSock = sock;
+}
+
+function setSessions(sessions) {
+    sessionsRef = sessions;
 }
 
 /**
@@ -43,6 +48,45 @@ function cleanPhone(raw) {
         digits = '92' + digits.slice(1);
     }
     return digits;
+}
+
+/**
+ * Find active connected socket for a given phone number.
+ * Ensures the bot is actually paired and connected on this number
+ * so the OTP is delivered directly to the user's "You" (Message Yourself) chat.
+ */
+function getSocketForPhone(phone) {
+    const clean = cleanPhone(phone);
+    const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
+
+    // 1. Direct match: session with this phone number
+    if (sessions[clean] && sessions[clean].isConnected && sessions[clean].sock) {
+        return { sock: sessions[clean].sock, isOwnSession: true, session: sessions[clean] };
+    }
+
+    // 2. Check if any session has this phone in sock.user.id
+    for (const [sId, sess] of Object.entries(sessions)) {
+        if (!sess || !sess.sock || !sess.isConnected) continue;
+        const sockUserPhone = cleanPhone(sess.sock?.user?.id || sId);
+        if (sockUserPhone === clean) {
+            return { sock: sess.sock, isOwnSession: true, session: sess };
+        }
+    }
+
+    // 3. Fallback to currentSock if set directly and matches
+    if (currentSock && currentSock.user) {
+        const currentClean = cleanPhone(currentSock.user.id);
+        if (currentClean === clean) {
+            return { sock: currentSock, isOwnSession: true, session: null };
+        }
+    }
+
+    // 4. In test / dev environments with explicit mockSocket without matching user:
+    if (currentSock && typeof currentSock.sendMessage === 'function' && process.env.NODE_ENV === 'test') {
+        return { sock: currentSock, isOwnSession: true, session: null };
+    }
+
+    return null;
 }
 
 /**
@@ -129,18 +173,38 @@ router.post('/api/schedule/send-otp', async (req, res) => {
 
 > *⚡ Powered By MR SAQIB MD Security*`;
 
-        if (currentSock && typeof currentSock.sendMessage === 'function') {
-            await currentSock.sendMessage(targetJid, { text: otpMessage }).catch(e => {
-                console.warn('[ScheduleApi] Failed to send WhatsApp OTP:', e.message);
+        // Ensure bot is paired and connected with this phone number
+        const socketInfo = getSocketForPhone(phone);
+        if (!socketInfo || !socketInfo.sock) {
+            const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
+            const sess = sessions[phone];
+            const pairingCode = sess?.pairingCode || null;
+
+            return res.status(400).json({
+                success: false,
+                notPaired: true,
+                phone: phone,
+                pairingCode: pairingCode,
+                pairUrl: `/?number=${phone}`,
+                codeUrl: `/api/pair?number=${phone}`,
+                error: 'Bot is not paired with this number! Pehle bot ko pair karein.',
+                message: 'Aapka WhatsApp number bot ke sath pair nahi hai. Pehle bot ko pair karein taake OTP aapke WhatsApp "You" (Message Yourself) chat mein aa sake!'
             });
-        } else {
-            console.log(`[ScheduleApi Mock Mode] OTP for ${phone}: ${otpCode}`);
         }
 
-        return res.json({
-            success: true,
-            message: `Verification code WhatsApp number +${phone} par bhej diya gaya hai!`
-        });
+        try {
+            await socketInfo.sock.sendMessage(targetJid, { text: otpMessage });
+            return res.json({
+                success: true,
+                message: `Verification code aapke WhatsApp number (+${phone}) ke "You" (Message Yourself) chat mein bhej diya gaya hai!`
+            });
+        } catch (sendErr) {
+            console.warn('[ScheduleApi] Failed to send WhatsApp OTP:', sendErr.message);
+            return res.status(500).json({
+                success: false,
+                error: `WhatsApp message deliver nahi ho saka: ${sendErr.message}`
+            });
+        }
     } catch (err) {
         console.error('[ScheduleApi send-otp Error]:', err.message);
         return res.status(500).json({ success: false, error: 'Server error sending OTP.' });
@@ -361,9 +425,34 @@ router.get('/api/schedule/destinations', requireAuth, async (req, res) => {
     }
 });
 
+/**
+ * GET /api/schedule/pair-status
+ * Checks if a number is paired & connected, or returns active pairing code
+ */
+router.get('/api/schedule/pair-status', (req, res) => {
+    const phone = cleanPhone(req.query.phone || req.query.number);
+    if (!phone) {
+        return res.status(400).json({ success: false, error: 'Phone number required.' });
+    }
+
+    const sockInfo = getSocketForPhone(phone);
+    const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
+    const sess = sessions[phone];
+
+    return res.json({
+        success: true,
+        phone,
+        isConnected: Boolean(sockInfo && sockInfo.sock),
+        pairingCode: sess?.pairingCode || null,
+        isInitializing: Boolean(sess?.isInitializing)
+    });
+});
+
 module.exports = {
     router,
     setSocket,
+    setSessions,
+    getSocketForPhone,
     cleanPhone,
     isOwnerPhone,
     otpStore,

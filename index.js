@@ -882,6 +882,7 @@ global.ProBoySessionManager = {
     getActiveSocks: () => Object.values(sessions).filter(s => s && s.sock && s.isConnected && channelHub.isOpen(s.sock)).map(s => s.sock),
     getSessions: () => sessions
 };
+scheduleApi.setSessions(sessions);
 
 // ═══════════════════════════════════════
 // Shared logout logic, reused by both the Telegram /logout command
