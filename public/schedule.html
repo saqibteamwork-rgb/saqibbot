@@ -108,10 +108,10 @@
                     <input type="tel" id="inputPhone" value="923438673242" placeholder="03438673242 ya 923438673242" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition font-mono font-medium">
                 </div>
                 <p class="text-[11px] text-gray-400 mb-4 flex items-center gap-1.5">
-                    <i class="fa-solid fa-circle-info text-emerald-400"></i> Koi bhi user apna number enter kare. Bot foran aapke WhatsApp <b>Inbox</b> mein 6-digit OTP code deliver karega.
+                    <i class="fa-solid fa-circle-info text-emerald-400"></i> Apna paired WhatsApp number dalein. OTP foran aapke personal <b>"You" (Message Yourself)</b> chat mein deliver hoga.
                 </p>
                 <button onclick="requestOtp()" id="btnSendOtp" class="w-full bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-paper-plane"></i> Send OTP to WhatsApp Inbox
+                    <i class="fa-solid fa-paper-plane"></i> Send OTP to "You" (Message Yourself)
                 </button>
             </div>
 
@@ -347,8 +347,8 @@
                 return matched.url;
             }
 
-            console.log('ℹ️ [Discovery] No existing paired session found on 11 nodes. Defaulting to Railway primary node.');
-            return activeHostNode || ALL_CLUSTER_NODES[0];
+            console.log('ℹ️ [Discovery] No existing paired session found on 11 nodes for phone:', clean);
+            return null;
         }
 
         async function clusterFetch(path, options = {}) {
@@ -491,6 +491,33 @@
                 // 1. Parallel Ping Discovery: Discover which of the 11 servers holds this phone's session
                 const targetNode = await discoverHostNode(phone);
 
+                if (!targetNode) {
+                    // STRICT: Number is NOT paired on any of the 11 servers. Refuse to send OTP from other bots!
+                    feedback.className = 'mt-4 p-4 rounded-xl text-xs font-normal bg-amber-500/10 text-amber-200 border border-amber-500/30 text-left';
+                    feedback.innerHTML = `
+                        <div class="flex items-center gap-2 text-rose-400 font-bold mb-1.5 text-sm">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                            <span>WhatsApp Bot Pair Nahi Hai!</span>
+                        </div>
+                        <p class="text-gray-300 text-xs leading-relaxed mb-3">
+                            Aapka WhatsApp number (+${phone}) kisi bhi server par connect nahi hai. Pehle apna bot pair karein taake OTP aapke apne WhatsApp <b>"You" (Message Yourself)</b> chat mein aa sake!
+                        </p>
+                        <div class="flex flex-col sm:flex-row gap-2">
+                            <button type="button" onclick="requestPairCode('${phone}')" id="btnGetPairCode" class="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow">
+                                <i class="fa-solid fa-key"></i> Get Pairing Code Now
+                            </button>
+                            <a href="/pair" target="_blank" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 font-semibold py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 text-center">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Pair Website
+                            </a>
+                        </div>
+                        <div id="inlinePairDisplay" class="hidden mt-3 p-3 bg-gray-950/90 border border-amber-500/40 rounded-xl text-center"></div>
+                    `;
+                    feedback.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send OTP to "You" (Message Yourself)';
+                    return;
+                }
+
                 btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending OTP to "You"...';
 
                 let res = await clusterFetch('/api/schedule/send-otp', {
@@ -505,9 +532,7 @@
                     document.getElementById('otpStep').classList.remove('hidden');
                     const badge = document.getElementById('otpDeliveryBadge');
                     if (badge) {
-                        badge.innerHTML = data.inYouChat 
-                            ? '📩 OTP aapke WhatsApp <b>"You" (Message Yourself)</b> chat mein deliver ho chuka hai!' 
-                            : '📩 OTP aapke WhatsApp <b>Inbox</b> mein deliver ho chuka hai!';
+                        badge.innerHTML = '📩 OTP aapke WhatsApp <b>"You" (Message Yourself)</b> chat mein deliver ho chuka hai!';
                     }
                     feedback.className = 'mt-4 p-3 rounded-xl text-xs text-center font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
                     feedback.innerHTML = `<i class="fa-solid fa-circle-check mr-1.5"></i> ${data.message}`;
@@ -527,8 +552,8 @@
                             <button type="button" onclick="requestPairCode('${data.phone || phone}')" id="btnGetPairCode" class="flex-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 shadow">
                                 <i class="fa-solid fa-key"></i> Get Pairing Code Now
                             </button>
-                            <a href="/?number=${data.phone || phone}" target="_blank" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 font-semibold py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 text-center">
-                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Full Pair Page
+                            <a href="/pair" target="_blank" class="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-600 font-semibold py-2.5 px-3 rounded-xl text-xs transition flex items-center justify-center gap-1.5 text-center">
+                                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Pair Website
                             </a>
                         </div>
                         <div id="inlinePairDisplay" class="hidden mt-3 p-3 bg-gray-950/90 border border-amber-500/40 rounded-xl text-center"></div>
@@ -543,7 +568,7 @@
                 alert("Request error: " + err.message);
             } finally {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send OTP Code';
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send OTP to "You" (Message Yourself)';
             }
         }
 

@@ -96,24 +96,7 @@ function getSocketForPhone(phone) {
         }
     }
 
-    // 3. Fallback: Any active connected bot socket on this server can deliver the WhatsApp OTP!
-    if (currentSock && typeof currentSock.sendMessage === 'function') {
-        return { sock: currentSock, isOwnSession: false, session: null };
-    }
-
-    const activeSocks = (typeof global.ProBoySessionManager?.getActiveSocks === 'function') 
-        ? global.ProBoySessionManager.getActiveSocks() 
-        : [];
-    if (activeSocks.length > 0 && typeof activeSocks[0]?.sendMessage === 'function') {
-        return { sock: activeSocks[0], isOwnSession: false, session: null };
-    }
-
-    for (const sess of Object.values(sessions)) {
-        if (sess && sess.sock && sess.isConnected && typeof sess.sock.sendMessage === 'function') {
-            return { sock: sess.sock, isOwnSession: false, session: sess };
-        }
-    }
-
+    // STRICT: Return null if this phone does NOT have its own session on this server
     return null;
 }
 
@@ -260,32 +243,22 @@ router.post('/api/schedule/send-otp', async (req, res) => {
                     });
                     clearTimeout(timer);
                     const fwdData = await fwdRes.json();
-                    if (fwdData && fwdData.success) {
+                    if (fwdData && fwdData.success && fwdData.inYouChat) {
                         return res.status(fwdRes.status).json(fwdData);
                     }
                 } catch (_) {}
             }
         }
 
-        // 3. Fallback: If user's own bot session is not online on any node, deliver directly to user's WhatsApp Inbox from active server bot
-        const activeSock = getAnyActiveSocket();
-        if (activeSock && typeof activeSock.sendMessage === 'function') {
-            try {
-                await activeSock.sendMessage(targetJid, { text: otpMessage });
-                return res.json({
-                    success: true,
-                    phone,
-                    inYouChat: false,
-                    message: `Verification code WhatsApp number (+${phone}) ke Inbox mein bhej diya gaya hai!`
-                });
-            } catch (sendErr) {
-                console.warn('[ScheduleApi] Local socket send failed', sendErr.message);
-            }
-        }
-
-        return res.status(503).json({
+        // 3. STRICT RULE: NEVER deliver OTP from another user/bot!
+        // If the number is NOT paired on this node OR any of the 11 cluster nodes:
+        // Do NOT send an OTP from any foreign bot. Prompt user to pair their number first!
+        return res.status(200).json({
             success: false,
-            error: 'Bot server abhi offline hai. Kripya check karein ke bot online hai.'
+            notPaired: true,
+            phone,
+            pairUrl: '/pair',
+            message: `Aapka WhatsApp number (+${phone}) bot ke sath pair nahi hai! Pehle bot ko pair karein taake OTP aapke WhatsApp "You" (Message Yourself) chat mein aa sake!`
         });
     } catch (err) {
         console.error('[ScheduleApi send-otp Error]:', err.message);
