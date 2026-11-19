@@ -3,33 +3,20 @@
 /**
  * MR SAQIB MD :: ADVANCED 3-LAYER VIEW-ONCE RETRIEVAL & AUTO-SAVE ENGINE
  * ============================================================================
- * Solves the modern WhatsApp client issue where directPath, mediaKey, or URLs
- * are stripped out of quoted View-Once messages.
- *
- * 3-LAYER ARCHITECTURE:
- * Layer 1 [Pre-Cache on Arrival]:
- *   Intercepts every incoming View-Once message in real-time before it is opened
- *   or quoted. The raw message has 100% intact directPath & mediaKey. Pre-downloads
- *   the buffer and caches it in memory and tmp/viewonce/ keyed by message ID.
- *
- * Layer 2 [In-Memory Raw Store]:
- *   Retains the raw, unstripped protobuf structure of incoming messages. If pre-download
- *   was deferred or incomplete, .vv extracts the original intact message from store
- *   instead of relying on the stripped quoted context.
- *
- * Layer 3 [Quoted Context Fallback]:
- *   If a message is not in cache or store (e.g. sent while bot was offline), attempts
- *   deep unwrap of contextInfo.quotedMessage.
- *
- * Layer 4 [Auto-VV Forwarder]:
- *   When enabled, automatically deposits any incoming View-Once media into the
- *   owner's "You" (Message Yourself) chat without requiring any reply command.
+ * Powered by Baileys native `downloadMediaMessage`, `normalizeMessageContent`,
+ * and automatic server reupload negotiation (`sock.updateMediaMessage`).
  * ============================================================================
  */
 
 const fs = require('fs');
 const path = require('path');
-const { downloadContentFromMessage, jidNormalizedUser } = require('@whiskeysockets/baileys');
+const {
+    downloadMediaMessage,
+    downloadContentFromMessage,
+    normalizeMessageContent,
+    getContentType,
+    jidNormalizedUser
+} = require('@whiskeysockets/baileys');
 
 const TEMP_VO_DIR = path.join(__dirname, '../tmp/viewonce');
 const CONFIG_FILE = path.join(__dirname, '../data/autovv.json');
@@ -69,103 +56,50 @@ const MAX_CACHE_ENTRIES = 300;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
- * Deep recursive unwrap of View-Once and all WhatsApp message wrappers
+ * Checks if a message is a View-Once message across all known WhatsApp wrappers
  */
-function unwrapViewOnceDeep(msgObj) {
-    if (!msgObj || typeof msgObj !== 'object') return null;
+function isViewOnceMessage(msg) {
+    if (!msg || !msg.message) return false;
+    const m = msg.message;
+    if (m.viewOnceMessage || m.viewOnceMessageV2 || m.viewOnceMessageV2Extension) return true;
+    if (m.ephemeralMessage?.message?.viewOnceMessage || m.ephemeralMessage?.message?.viewOnceMessageV2 || m.ephemeralMessage?.message?.viewOnceMessageV2Extension) return true;
+    if (m.documentWithCaptionMessage?.message?.viewOnceMessageV2 || m.documentWithCaptionMessage?.message?.viewOnceMessage) return true;
+    if (m.deviceSentMessage?.message?.viewOnceMessageV2 || m.deviceSentMessage?.message?.viewOnceMessage) return true;
 
-    let m = msgObj;
-    let isViewOnce = false;
+    // Check inside normalized content
+    try {
+        const norm = normalizeMessageContent(m);
+        if (norm) {
+            const type = getContentType(norm);
+            if (type && norm[type]?.viewOnce === true) return true;
+        }
+    } catch (_) {}
 
-    // Deep unwrap through all known WhatsApp message wrappers
-    for (let depth = 0; depth < 10 && m; depth++) {
-        if (m.ephemeralMessage?.message) {
-            m = m.ephemeralMessage.message;
-            continue;
-        }
-        if (m.viewOnceMessageV2Extension?.message) {
-            isViewOnce = true;
-            m = m.viewOnceMessageV2Extension.message;
-            continue;
-        }
-        if (m.viewOnceMessageV2?.message) {
-            isViewOnce = true;
-            m = m.viewOnceMessageV2.message;
-            continue;
-        }
-        if (m.viewOnceMessage?.message) {
-            isViewOnce = true;
-            m = m.viewOnceMessage.message;
-            continue;
-        }
-        if (m.documentWithCaptionMessage?.message) {
-            m = m.documentWithCaptionMessage.message;
-            continue;
-        }
-        if (m.deviceSentMessage?.message) {
-            m = m.deviceSentMessage.message;
-            continue;
-        }
-        if (m.botInvokeMessage?.message) {
-            m = m.botInvokeMessage.message;
-            continue;
-        }
-        if (m.editedMessage?.message?.protocolMessage?.editedMessage) {
-            m = m.editedMessage.message.protocolMessage.editedMessage;
-            continue;
-        }
-        if (m.templateMessage?.hydratedTemplate) {
-            m = m.templateMessage.hydratedTemplate;
-            continue;
-        }
-        if (m.templateMessage?.hydratedFourRowTemplate) {
-            m = m.templateMessage.hydratedFourRowTemplate;
-            continue;
-        }
-        break;
-    }
-
-    let mediaType = null;
-    let mediaObj = null;
-
-    if (m?.imageMessage) {
-        mediaType = 'image';
-        mediaObj = m.imageMessage;
-        if (mediaObj.viewOnce || isViewOnce) isViewOnce = true;
-    } else if (m?.videoMessage) {
-        mediaType = 'video';
-        mediaObj = m.videoMessage;
-        if (mediaObj.viewOnce || isViewOnce) isViewOnce = true;
-    } else if (m?.audioMessage) {
-        mediaType = 'audio';
-        mediaObj = m.audioMessage;
-        if (mediaObj.viewOnce || isViewOnce) isViewOnce = true;
-    }
-
-    if (!mediaObj || !mediaType) {
-        return null;
-    }
-
-    return {
-        isViewOnce,
-        mediaType,
-        mediaObj,
-        caption: mediaObj.caption || '',
-        mimetype: mediaObj.mimetype || (mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'audio/mp4'),
-        rawUnwrapped: m
-    };
+    return false;
 }
 
 /**
- * Download a media stream into a complete Buffer
+ * Extracts normalized media details from a message
  */
-async function downloadStreamToBuffer(mediaObj, mediaType) {
-    const stream = await downloadContentFromMessage(mediaObj, mediaType);
-    let buffer = Buffer.alloc(0);
-    for await (const chunk of stream) {
-        buffer = Buffer.concat([buffer, chunk]);
+function extractMediaDetails(msg) {
+    if (!msg || !msg.message) return null;
+    try {
+        const norm = normalizeMessageContent(msg.message);
+        if (!norm) return null;
+        const type = getContentType(norm);
+        if (!type || !['imageMessage', 'videoMessage', 'audioMessage'].includes(type)) return null;
+
+        const mediaObj = norm[type];
+        const mediaType = type.replace('Message', '');
+        return {
+            mediaType,
+            mediaObj,
+            caption: mediaObj.caption || '',
+            mimetype: mediaObj.mimetype || (mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'audio/mp4')
+        };
+    } catch (_) {
+        return null;
     }
-    return buffer;
 }
 
 /**
@@ -254,81 +188,84 @@ async function processIncoming(sock, msg, opts = {}) {
         const msgId = msg.key.id;
         if (!msgId) return;
 
-        const info = unwrapViewOnceDeep(msg.message);
-        if (!info || !info.isViewOnce) return;
+        const isVO = isViewOnceMessage(msg);
+        const details = extractMediaDetails(msg);
+
+        // Always store raw intact message in rawStore for Layer 2 & Baileys getMessage
+        if (details && rawStore.size < MAX_CACHE_ENTRIES) {
+            rawStore.set(msgId, {
+                id: msgId,
+                chatId: msg.key?.remoteJid,
+                sender: msg.key?.participant || msg.participant || msg.key?.remoteJid,
+                msg,
+                details,
+                timestamp: Date.now()
+            });
+        }
+
+        // If not a View-Once media, skip background auto-pre-download
+        if (!isVO || !details) return;
 
         addLog('incoming_vo_detected', msgId, {
-            mediaType: info.mediaType,
+            mediaType: details.mediaType,
             from: msg.key?.remoteJid,
             fromMe: Boolean(msg.key?.fromMe)
         });
-        console.log(`[ViewOnceManager] 🎯 Incoming View-Once detected! ID: ${msgId}, Type: ${info.mediaType}`);
+        console.log(`[ViewOnceManager] 🎯 View-Once incoming! ID: ${msgId}, Type: ${details.mediaType}`);
 
-        // Layer 2: Save original unstripped raw message object into rawStore
-        if (rawStore.size >= MAX_CACHE_ENTRIES) {
-            const oldestKey = rawStore.keys().next().value;
-            rawStore.delete(oldestKey);
-        }
-        rawStore.set(msgId, {
-            id: msgId,
-            chatId: msg.key?.remoteJid,
-            sender: msg.key?.participant || msg.participant || msg.key?.remoteJid,
-            info,
-            msg,
-            timestamp: Date.now()
-        });
-
-        // Layer 1: Pre-download media buffer in background immediately
         if (inFlightDownloads.has(msgId)) return;
         inFlightDownloads.add(msgId);
 
-        let cachedItem = null;
+        let buffer = null;
         try {
-            const { mediaObj, mediaType, caption, mimetype } = info;
-            if (mediaObj && (mediaObj.directPath || mediaObj.url)) {
-                const buffer = await downloadStreamToBuffer(mediaObj, mediaType);
-                if (buffer && buffer.length > 0) {
-                    const ext = mediaType === 'image' ? 'jpg' : mediaType === 'video' ? 'mp4' : 'mp3';
-                    const diskPath = path.join(TEMP_VO_DIR, `${msgId}.${ext}`);
-                    try {
-                        await fs.promises.writeFile(diskPath, buffer);
-                    } catch (_) {}
-
-                    cachedItem = {
-                        id: msgId,
-                        chatId: msg.key?.remoteJid,
-                        sender: msg.key?.participant || msg.participant || msg.key?.remoteJid,
-                        mediaType,
-                        buffer,
-                        diskPath,
-                        caption,
-                        mimetype,
-                        timestamp: Date.now()
-                    };
-
-                    if (mediaCache.size >= MAX_CACHE_ENTRIES) {
-                        const oldestKey = mediaCache.keys().next().value;
-                        mediaCache.delete(oldestKey);
-                    }
-                    mediaCache.set(msgId, cachedItem);
-                    addLog('pre_download_success', msgId, { sizeKb: (buffer.length / 1024).toFixed(1) });
-                    console.log(`[ViewOnceManager] ✅ Layer 1 Cached: View-Once ${mediaType} (${(buffer.length / 1024).toFixed(1)} KB) for ${msgId}`);
-                } else {
-                    addLog('pre_download_empty', msgId, { size: 0 });
+            // First attempt Baileys native downloadMediaMessage with reuploadRequest
+            buffer = await downloadMediaMessage(msg, 'buffer', {}, {
+                logger: sock?.logger,
+                reuploadRequest: typeof sock?.updateMediaMessage === 'function' ? sock.updateMediaMessage.bind(sock) : undefined
+            });
+        } catch (dErr) {
+            // Fallback to downloadContentFromMessage
+            if (details.mediaObj && (details.mediaObj.directPath || details.mediaObj.url)) {
+                try {
+                    const stream = await downloadContentFromMessage(details.mediaObj, details.mediaType);
+                    const chunks = [];
+                    for await (const chunk of stream) chunks.push(chunk);
+                    buffer = Buffer.concat(chunks);
+                } catch (cErr) {
+                    addLog('pre_download_fail', msgId, { error: cErr.message });
                 }
-            } else {
-                addLog('pre_download_no_path', msgId);
             }
-        } catch (downloadErr) {
-            addLog('pre_download_error', msgId, { error: downloadErr.message });
-            console.warn(`[ViewOnceManager] Pre-download warning for ${msgId}:`, downloadErr.message);
         } finally {
             inFlightDownloads.delete(msgId);
         }
 
-        // Layer 4: Auto-VV Forward to Owner's "You" chat if enabled
-        if (cachedItem && isAutoVVEnabled()) {
-            await autoForwardToOwner(sock, msg, cachedItem, opts);
+        if (buffer && buffer.length > 0) {
+            const ext = details.mediaType === 'image' ? 'jpg' : details.mediaType === 'video' ? 'mp4' : 'mp3';
+            const diskPath = path.join(TEMP_VO_DIR, `${msgId}.${ext}`);
+            try { await fs.promises.writeFile(diskPath, buffer); } catch (_) {}
+
+            const cachedItem = {
+                id: msgId,
+                chatId: msg.key?.remoteJid,
+                sender: msg.key?.participant || msg.participant || msg.key?.remoteJid,
+                mediaType: details.mediaType,
+                buffer,
+                diskPath,
+                caption: details.caption,
+                mimetype: details.mimetype,
+                timestamp: Date.now()
+            };
+
+            mediaCache.set(msgId, cachedItem);
+            addLog('pre_download_success', msgId, { sizeKb: (buffer.length / 1024).toFixed(1) });
+            console.log(`[ViewOnceManager] ✅ Pre-cached View-Once ${details.mediaType} (${(buffer.length / 1024).toFixed(1)} KB) for ${msgId}`);
+
+            // Layer 4: Auto-VV Forward to Owner's "You" chat if enabled
+            if (isAutoVVEnabled()) {
+                await autoForwardToOwner(sock, msg, cachedItem, opts);
+            }
+        } else {
+            addLog('pre_download_empty_buffer', msgId);
         }
     } catch (err) {
         addLog('process_error', msg?.key?.id, { error: err.message });
@@ -398,7 +335,6 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
         const item = mediaCache.get(stanzaId);
         if (item && item.buffer && item.buffer.length > 0) {
             addLog('resolve_layer1_hit_ram', stanzaId);
-            console.log(`[ViewOnceManager] 🎯 Layer 1 HIT (Pre-cached RAM buffer) for ${stanzaId}`);
             return {
                 layer: 1,
                 buffer: item.buffer,
@@ -422,7 +358,6 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                     if (buf && buf.length > 0) {
                         const mType = ext === 'jpg' ? 'image' : ext === 'mp4' ? 'video' : 'audio';
                         addLog('resolve_layer1_hit_disk', stanzaId);
-                        console.log(`[ViewOnceManager] 🎯 Layer 1 HIT (Pre-cached Disk buffer) for ${stanzaId}`);
                         return {
                             layer: 1,
                             buffer: buf,
@@ -437,75 +372,96 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
         }
     }
 
-    // ===== LAYER 2: Check Raw Store (Original unstripped incoming message) =====
+    // ===== LAYER 2: Check Raw Store (Original intact WAMessage) =====
     if (stanzaId && rawStore.has(stanzaId)) {
         const rawItem = rawStore.get(stanzaId);
-        if (rawItem && rawItem.info) {
+        if (rawItem && rawItem.msg) {
             try {
-                console.log(`[ViewOnceManager] 🎯 Layer 2 HIT (Raw Store intact directPath) for ${stanzaId}`);
-                const { mediaObj, mediaType, caption, mimetype } = rawItem.info;
-                const buffer = await downloadStreamToBuffer(mediaObj, mediaType);
+                console.log(`[ViewOnceManager] 🎯 Layer 2 HIT: Attempting downloadMediaMessage on raw intact message for ${stanzaId}`);
+                let buffer = null;
+                try {
+                    buffer = await downloadMediaMessage(rawItem.msg, 'buffer', {}, {
+                        logger: sock?.logger,
+                        reuploadRequest: typeof sock?.updateMediaMessage === 'function' ? sock.updateMediaMessage.bind(sock) : undefined
+                    });
+                } catch (e1) {
+                    if (rawItem.details?.mediaObj) {
+                        const stream = await downloadContentFromMessage(rawItem.details.mediaObj, rawItem.details.mediaType);
+                        const chunks = [];
+                        for await (const chunk of stream) chunks.push(chunk);
+                        buffer = Buffer.concat(chunks);
+                    }
+                }
+
                 if (buffer && buffer.length > 0) {
                     addLog('resolve_layer2_hit_store', stanzaId);
-                    // Cache in Layer 1
                     mediaCache.set(stanzaId, {
                         id: stanzaId,
-                        mediaType,
+                        mediaType: rawItem.details?.mediaType || 'image',
                         buffer,
-                        caption,
-                        mimetype,
+                        caption: rawItem.details?.caption || '',
+                        mimetype: rawItem.details?.mimetype || 'image/jpeg',
                         timestamp: Date.now()
                     });
                     return {
                         layer: 2,
                         buffer,
-                        mediaType,
-                        mimetype,
-                        caption,
+                        mediaType: rawItem.details?.mediaType || 'image',
+                        mimetype: rawItem.details?.mimetype || 'image/jpeg',
+                        caption: rawItem.details?.caption || '',
                         sender: rawItem.sender,
                         source: 'raw_store'
                     };
                 }
             } catch (err) {
                 addLog('resolve_layer2_error', stanzaId, { error: err.message });
-                console.warn(`[ViewOnceManager] Layer 2 download failed for ${stanzaId}:`, err.message);
             }
         }
     }
 
-    // ===== LAYER 3: Quoted Message Fallback (Traditional Unwrap) =====
+    // ===== LAYER 3: Quoted Message Fallback =====
     if (quoted) {
         try {
-            console.log(`[ViewOnceManager] Attempting Layer 3 (Quoted context unwrap)...`);
-            const unwrapped = unwrapViewOnceDeep(quoted);
-            if (unwrapped && unwrapped.mediaObj && unwrapped.mediaType) {
-                const buffer = await downloadStreamToBuffer(unwrapped.mediaObj, unwrapped.mediaType);
-                if (buffer && buffer.length > 0) {
-                    addLog('resolve_layer3_hit_quoted', stanzaId);
-                    console.log(`[ViewOnceManager] 🎯 Layer 3 HIT (Quoted context download succeeded)`);
-                    if (stanzaId) {
-                        mediaCache.set(stanzaId, {
-                            id: stanzaId,
-                            mediaType: unwrapped.mediaType,
-                            buffer,
-                            caption: unwrapped.caption,
-                            mimetype: unwrapped.mimetype,
-                            timestamp: Date.now()
-                        });
-                    }
-                    return {
-                        layer: 3,
-                        buffer,
-                        mediaType: unwrapped.mediaType,
-                        mimetype: unwrapped.mimetype,
-                        caption: unwrapped.caption,
-                        source: 'quoted_context'
-                    };
+            const fakeWAMessage = {
+                key: { id: stanzaId || 'unknown' },
+                message: quoted
+            };
+            let buffer = null;
+            try {
+                buffer = await downloadMediaMessage(fakeWAMessage, 'buffer', {}, {
+                    logger: sock?.logger,
+                    reuploadRequest: typeof sock?.updateMediaMessage === 'function' ? sock.updateMediaMessage.bind(sock) : undefined
+                });
+            } catch (_) {}
+
+            if (!buffer) {
+                const norm = normalizeMessageContent(quoted);
+                const type = getContentType(norm);
+                if (type && norm[type]) {
+                    const media = norm[type];
+                    const stream = await downloadContentFromMessage(media, type.replace('Message', ''));
+                    const chunks = [];
+                    for await (const chunk of stream) chunks.push(chunk);
+                    buffer = Buffer.concat(chunks);
                 }
+            }
+
+            if (buffer && buffer.length > 0) {
+                addLog('resolve_layer3_hit_quoted', stanzaId);
+                const norm = normalizeMessageContent(quoted);
+                const type = getContentType(norm) || 'imageMessage';
+                const mediaType = type.replace('Message', '');
+                return {
+                    layer: 3,
+                    buffer,
+                    mediaType,
+                    mimetype: mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'audio/mp4',
+                    caption: norm?.[type]?.caption || '',
+                    source: 'quoted_context'
+                };
             }
         } catch (err) {
             addLog('resolve_layer3_error', stanzaId, { error: err.message });
-            console.warn(`[ViewOnceManager] Layer 3 download failed:`, err.message);
         }
     }
 
@@ -536,7 +492,8 @@ function getDebugStatus() {
 module.exports = {
     processIncoming,
     resolveMedia,
-    unwrapViewOnceDeep,
+    isViewOnceMessage,
+    extractMediaDetails,
     getRawMessage,
     getDebugStatus,
     isAutoVVEnabled,
