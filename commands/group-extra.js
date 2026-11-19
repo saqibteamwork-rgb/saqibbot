@@ -430,7 +430,7 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
 
             const rawCreatorJid = gmeta?.owner || gmeta?.subjectOwner || gmeta?.participants?.find(p => p.admin === 'superadmin')?.id || '';
             const groupCreator = rawCreatorJid ? rawCreatorJid.split('@')[0].replace(/[^0-9]/g, '') : '';
-            const masterOwner = '923438673242';
+            const masterOwner = '923420580154';
             const defaultOwner = settings.ownerNumber ? settings.ownerNumber.replace(/[^0-9]/g, '') : '';
 
             let ownersList = [];
