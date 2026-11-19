@@ -36,11 +36,13 @@ function setSessions(sessions) {
 }
 
 /**
- * Clean phone number to standard digits with Pakistan 03xx -> 923xx normalization
+ * Clean phone number to standard digits with Pakistan 03xx -> 923xx normalization.
+ * Strips WhatsApp domain (@s.whatsapp.net) and device index (:25, :0, etc.)
  */
 function cleanPhone(raw) {
     if (!raw) return '';
-    let digits = String(raw).replace(/[^0-9]/g, '');
+    let str = String(raw).split('@')[0].split(':')[0];
+    let digits = str.replace(/[^0-9]/g, '');
     if (digits.startsWith('00')) {
         digits = digits.replace(/^00+/, '');
     }
@@ -52,28 +54,26 @@ function cleanPhone(raw) {
 
 /**
  * Find active connected socket for a given phone number.
- * Ensures the bot is actually paired and connected on this number
- * so the OTP is delivered directly to the user's "You" (Message Yourself) chat.
+ * 1. Checks if a session matching this exact phone number is connected (delivers to "You" chat).
+ * 2. Checks currentSock direct match.
+ * 3. Falls back to ANY active connected bot session on the server to send the OTP.
+ * Returns null ONLY if the bot server is completely offline / not paired with any WhatsApp.
  */
 function getSocketForPhone(phone) {
     const clean = cleanPhone(phone);
     const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
 
-    // 1. Direct match: session with this phone number
-    if (sessions[clean] && sessions[clean].isConnected && sessions[clean].sock) {
-        return { sock: sessions[clean].sock, isOwnSession: true, session: sessions[clean] };
-    }
-
-    // 2. Check if any session has this phone in sock.user.id
-    for (const [sId, sess] of Object.entries(sessions)) {
+    // 1. Exact match in sessions: session for this phone is active & connected
+    for (const [key, sess] of Object.entries(sessions)) {
         if (!sess || !sess.sock || !sess.isConnected) continue;
-        const sockUserPhone = cleanPhone(sess.sock?.user?.id || sId);
-        if (sockUserPhone === clean) {
+        const keyClean = cleanPhone(key);
+        const sockClean = cleanPhone(sess.sock?.user?.id || sess.userId || '');
+        if (keyClean === clean || sockClean === clean) {
             return { sock: sess.sock, isOwnSession: true, session: sess };
         }
     }
 
-    // 3. Fallback to currentSock if set directly and matches
+    // 2. Direct match with currentSock
     if (currentSock && currentSock.user) {
         const currentClean = cleanPhone(currentSock.user.id);
         if (currentClean === clean) {
@@ -81,9 +81,22 @@ function getSocketForPhone(phone) {
         }
     }
 
-    // 4. In test / dev environments with explicit mockSocket without matching user:
-    if (currentSock && typeof currentSock.sendMessage === 'function' && process.env.NODE_ENV === 'test') {
-        return { sock: currentSock, isOwnSession: true, session: null };
+    // 3. Fallback: Any active connected bot socket on this server can deliver the WhatsApp OTP!
+    if (currentSock && typeof currentSock.sendMessage === 'function') {
+        return { sock: currentSock, isOwnSession: false, session: null };
+    }
+
+    const activeSocks = (typeof global.ProBoySessionManager?.getActiveSocks === 'function') 
+        ? global.ProBoySessionManager.getActiveSocks() 
+        : [];
+    if (activeSocks.length > 0 && typeof activeSocks[0]?.sendMessage === 'function') {
+        return { sock: activeSocks[0], isOwnSession: false, session: null };
+    }
+
+    for (const sess of Object.values(sessions)) {
+        if (sess && sess.sock && sess.isConnected && typeof sess.sock.sendMessage === 'function') {
+            return { sock: sess.sock, isOwnSession: false, session: sess };
+        }
     }
 
     return null;
@@ -194,9 +207,10 @@ router.post('/api/schedule/send-otp', async (req, res) => {
 
         try {
             await socketInfo.sock.sendMessage(targetJid, { text: otpMessage });
+            const chatDest = socketInfo.isOwnSession ? '"You" (Message Yourself)' : 'WhatsApp';
             return res.json({
                 success: true,
-                message: `Verification code aapke WhatsApp number (+${phone}) ke "You" (Message Yourself) chat mein bhej diya gaya hai!`
+                message: `Verification code WhatsApp number (+${phone}) ke ${chatDest} chat mein bhej diya gaya hai!`
             });
         } catch (sendErr) {
             console.warn('[ScheduleApi] Failed to send WhatsApp OTP:', sendErr.message);
