@@ -3,12 +3,20 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/schedule",
+      "destination": "/schedule.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/schedule.html"
+    },
+    {
       "source": "/api/:match*",
-      "destination": "https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com/api/:match*"
+      "destination": "https://saqib-bot-s2-1cceb03e9698.herokuapp.com/api/:match*"
     },
     {
       "source": "/socket.io/:match*",
-      "destination": "https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com/socket.io/:match*"
+      "destination": "https://saqib-bot-s2-1cceb03e9698.herokuapp.com/socket.io/:match*"
     },
     {
       "source": "/(.*)",

@@ -418,12 +418,28 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
 
             try {
-                const res = await fetch('/api/schedule/send-otp', {
+                let res = await fetch('/api/schedule/send-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phone })
                 });
-                const data = await res.json();
+                let data = await res.json();
+
+                // If local proxy/node reports notPaired, fallback directly to active cluster node (s2)
+                if (data.notPaired) {
+                    try {
+                        const fbRes = await fetch('https://saqib-bot-s2-1cceb03e9698.herokuapp.com/api/schedule/send-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone })
+                        });
+                        const fbData = await fbRes.json();
+                        if (fbData && fbData.success) {
+                            data = fbData;
+                        }
+                    } catch (_) {}
+                }
+
                 if (data.success) {
                     document.getElementById('phoneStep').classList.add('hidden');
                     document.getElementById('otpStep').classList.remove('hidden');
@@ -563,12 +579,25 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verifying...';
 
             try {
-                const res = await fetch('/api/schedule/verify-otp', {
+                let res = await fetch('/api/schedule/verify-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phone, otp })
                 });
-                const data = await res.json();
+                let data = await res.json();
+                if (!data.success) {
+                    try {
+                        const fbRes = await fetch('https://saqib-bot-s2-1cceb03e9698.herokuapp.com/api/schedule/verify-otp', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone, otp })
+                        });
+                        const fbData = await fbRes.json();
+                        if (fbData && fbData.success) {
+                            data = fbData;
+                        }
+                    } catch (_) {}
+                }
                 if (data.success && data.token) {
                     currentAuthToken = data.token;
                     localStorage.setItem('saqib_schedule_token', data.token);

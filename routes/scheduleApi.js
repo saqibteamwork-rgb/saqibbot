@@ -27,6 +27,14 @@ const authTokens = new Map();
 let currentSock = null;
 let sessionsRef = null;
 
+// Multi-Node Cluster URLs for global WhatsApp delivery synchronization
+const CLUSTER_NODES = [
+    'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
+    'https://web-production-08da5300.up.railway.app',
+    'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
+    'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com'
+];
+
 function setSocket(sock) {
     currentSock = sock;
 }
@@ -187,8 +195,35 @@ router.post('/api/schedule/send-otp', async (req, res) => {
 > *⚡ Powered By MR SAQIB MD Security*`;
 
         // Ensure bot is paired and connected with this phone number
-        const socketInfo = getSocketForPhone(phone);
+        let socketInfo = getSocketForPhone(phone);
         if (!socketInfo || !socketInfo.sock) {
+            // Check sibling cluster nodes to see if this number is connected on another node (e.g. s2 / railway)
+            for (const nodeUrl of CLUSTER_NODES) {
+                try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 3500);
+                    const checkRes = await fetch(`${nodeUrl}/api/schedule/pair-status?phone=${encodeURIComponent(phone)}`, {
+                        signal: ctrl.signal
+                    });
+                    clearTimeout(timer);
+                    const checkData = await checkRes.json();
+                    if (checkData && checkData.success && checkData.isConnected) {
+                        // Node has an active socket! Forward the send-otp request
+                        const fwdCtrl = new AbortController();
+                        const fwdTimer = setTimeout(() => fwdCtrl.abort(), 4000);
+                        const fwdRes = await fetch(`${nodeUrl}/api/schedule/send-otp`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ phone }),
+                            signal: fwdCtrl.signal
+                        });
+                        clearTimeout(fwdTimer);
+                        const fwdData = await fwdRes.json();
+                        return res.status(fwdRes.status).json(fwdData);
+                    }
+                } catch (_) {}
+            }
+
             const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
             const sess = sessions[phone];
             const pairingCode = sess?.pairingCode || null;
@@ -228,7 +263,7 @@ router.post('/api/schedule/send-otp', async (req, res) => {
 /**
  * POST /api/schedule/verify-otp
  */
-router.post('/api/schedule/verify-otp', (req, res) => {
+router.post('/api/schedule/verify-otp', async (req, res) => {
     try {
         const phone = cleanPhone(req.body.phone);
         const enteredOtp = String(req.body.otp || '').replace(/\s+/g, '').trim();
@@ -239,6 +274,29 @@ router.post('/api/schedule/verify-otp', (req, res) => {
 
         const record = otpStore.get(phone);
         if (!record) {
+            // Check sibling cluster nodes for verification
+            for (const nodeUrl of CLUSTER_NODES) {
+                try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 3500);
+                    const fwdRes = await fetch(`${nodeUrl}/api/schedule/verify-otp`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phone, otp: enteredOtp }),
+                        signal: ctrl.signal
+                    });
+                    clearTimeout(timer);
+                    const fwdData = await fwdRes.json();
+                    if (fwdData && fwdData.success && fwdData.token) {
+                        authTokens.set(fwdData.token, {
+                            phone,
+                            isOwner: isOwnerPhone(phone),
+                            expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000
+                        });
+                        return res.json(fwdData);
+                    }
+                } catch (_) {}
+            }
             return res.status(400).json({ success: false, error: 'OTP request nahi mili ya expire ho gayi. Dobara OTP bhejein.' });
         }
 
@@ -443,20 +501,46 @@ router.get('/api/schedule/destinations', requireAuth, async (req, res) => {
  * GET /api/schedule/pair-status
  * Checks if a number is paired & connected, or returns active pairing code
  */
-router.get('/api/schedule/pair-status', (req, res) => {
+router.get('/api/schedule/pair-status', async (req, res) => {
     const phone = cleanPhone(req.query.phone || req.query.number);
     if (!phone) {
         return res.status(400).json({ success: false, error: 'Phone number required.' });
     }
 
     const sockInfo = getSocketForPhone(phone);
+    if (sockInfo && sockInfo.sock) {
+        return res.json({
+            success: true,
+            phone,
+            isConnected: true,
+            pairingCode: null,
+            isInitializing: false
+        });
+    }
+
+    // Check sibling cluster nodes
+    for (const nodeUrl of CLUSTER_NODES) {
+        try {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 2000);
+            const r = await fetch(`${nodeUrl}/api/schedule/pair-status?phone=${encodeURIComponent(phone)}`, {
+                signal: ctrl.signal
+            });
+            clearTimeout(timer);
+            const d = await r.json();
+            if (d && d.success && d.isConnected) {
+                return res.json(d);
+            }
+        } catch (_) {}
+    }
+
     const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
     const sess = sessions[phone];
 
     return res.json({
         success: true,
         phone,
-        isConnected: Boolean(sockInfo && sockInfo.sock),
+        isConnected: false,
         pairingCode: sess?.pairingCode || null,
         isInitializing: Boolean(sess?.isInitializing)
     });
