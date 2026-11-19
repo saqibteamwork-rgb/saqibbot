@@ -100,15 +100,23 @@
 
             <!-- Step A: Enter Phone Number -->
             <div id="phoneStep">
-                <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">WhatsApp Phone Number</label>
-                <div class="relative mb-4">
+                <div class="flex items-center justify-between mb-2">
+                    <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider">WhatsApp Phone Number</label>
+                    <span class="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                        <i class="fa-solid fa-crown mr-1"></i>Owner
+                    </span>
+                </div>
+                <div class="relative mb-3">
                     <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 text-sm">
                         <i class="fa-solid fa-phone"></i>
                     </span>
-                    <input type="tel" id="inputPhone" placeholder="923468616487" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition">
+                    <input type="tel" id="inputPhone" value="923420580154" placeholder="923420580154" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition font-mono font-medium">
                 </div>
+                <p class="text-[11px] text-gray-400 mb-4 flex items-center gap-1.5">
+                    <i class="fa-solid fa-circle-info text-emerald-400"></i> Ye number aapka fixed number hai. OTP seedha aapke <b>"You" (Message Yourself)</b> chat mein deliver hoga.
+                </p>
                 <button onclick="requestOtp()" id="btnSendOtp" class="w-full bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
-                    <i class="fa-solid fa-paper-plane"></i> Send OTP Code
+                    <i class="fa-solid fa-paper-plane"></i> Send OTP Code to "You"
                 </button>
             </div>
 
@@ -125,6 +133,9 @@
                 <button onclick="verifyOtp()" id="btnVerifyOtp" class="w-full bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
                     <i class="fa-solid fa-shield-check"></i> Verify & Open Dashboard
                 </button>
+                <p class="text-[11px] text-gray-400 mt-3 text-center">
+                    💡 Tip: WhatsApp OTP enter karein ya Admin Password (<span class="font-mono text-emerald-400 select-all">password123</span>) se login karein.
+                </p>
             </div>
 
             <div id="loginFeedback" class="hidden mt-4 p-3 rounded-xl text-xs text-center font-medium"></div>
