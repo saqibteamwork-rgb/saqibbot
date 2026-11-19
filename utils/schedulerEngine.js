@@ -201,6 +201,7 @@ function addSchedule(scheduleObj) {
         id,
         type: scheduleObj.type, // 'timed_post' | 'group_mute_unmute' | 'daily_drop'
         targetJid: scheduleObj.targetJid,
+        destinations: Array.isArray(scheduleObj.destinations) ? scheduleObj.destinations : (scheduleObj.targetJid ? [scheduleObj.targetJid] : []),
         targetName: scheduleObj.targetName || 'Target',
         time24: scheduleObj.time24,
         openTime24: scheduleObj.openTime24 || null,
@@ -303,20 +304,29 @@ async function executeSchedule(sock, schedule) {
             const footer = `\n\n╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n> *⚡ Powered By MR SAQIB MD*`;
             const postText = schedule.message ? `${header}${schedule.message}${footer}` : `╭━━━〔 📢 *MR SAQIB MD BROADCAST* 〕━━━┈⊷\n\n> *⚡ Powered By MR SAQIB MD*`;
 
-            // Resolve target destinations
+            // Resolve target destinations (supports single target or array of 10-20 channels/groups)
             let targetJids = [];
-            if (schedule.targetJid === 'all' || schedule.targetJid === 'all_groups') {
-                try {
-                    const groups = await sock.groupFetchAllParticipating();
-                    targetJids = Object.keys(groups);
-                } catch (e) {
-                    console.warn('[SchedulerEngine] Failed to fetch participating groups:', e.message);
+            const rawDests = (Array.isArray(schedule.destinations) && schedule.destinations.length > 0)
+                ? schedule.destinations
+                : [schedule.targetJid];
+
+            for (const d of rawDests) {
+                if (!d) continue;
+                if (d === 'all' || d === 'all_groups') {
+                    try {
+                        const groups = await sock.groupFetchAllParticipating();
+                        targetJids.push(...Object.keys(groups));
+                    } catch (e) {
+                        console.warn('[SchedulerEngine] Failed to fetch participating groups:', e.message);
+                    }
+                } else if (d === 'channel') {
+                    targetJids.push(settings.newsletterJid || config.newsletterJid || '120363431913895899@newsletter');
+                } else {
+                    targetJids.push(d);
                 }
-            } else if (schedule.targetJid === 'channel') {
-                targetJids = [settings.newsletterJid || config.newsletterJid || '120363431913895899@newsletter'];
-            } else {
-                targetJids = [schedule.targetJid];
             }
+            // De-duplicate targets
+            targetJids = [...new Set(targetJids.filter(Boolean))];
 
             for (const jid of targetJids) {
                 try {
@@ -334,7 +344,14 @@ async function executeSchedule(sock, schedule) {
                             msgPayload = { document: buffer, fileName: schedule.fileName || 'Scheduled_Doc.pdf', caption: postText, contextInfo: channelBadge };
                         }
                     } else if (schedule.mediaUrl) {
-                        msgPayload = { image: { url: schedule.mediaUrl }, caption: postText, contextInfo: channelBadge };
+                        let imgSource = { url: schedule.mediaUrl };
+                        if (String(schedule.mediaUrl).startsWith('/')) {
+                            const localStatic = path.join(__dirname, '..', 'public', String(schedule.mediaUrl).replace(/^\/+/, ''));
+                            if (fs.existsSync(localStatic)) {
+                                imgSource = fs.readFileSync(localStatic);
+                            }
+                        }
+                        msgPayload = { image: imgSource, caption: postText, contextInfo: channelBadge };
                     } else {
                         msgPayload = { text: postText, contextInfo: channelBadge };
                     }

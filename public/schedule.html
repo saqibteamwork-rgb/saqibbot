@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MR SAQIB MD - Advanced Schedule & Multi-Channel Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 6 CDN -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#ecfdf5',
+                            500: '#10b981',
+                            600: '#059669',
+                            700: '#047857',
+                            900: '#064e3b'
+                        },
+                        darkbg: '#0b0f17',
+                        cardbg: '#111827',
+                        borderbg: '#1f2937'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: #0b0f17;
+            color: #f3f4f6;
+        }
+        .glass-card {
+            background: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glow-brand {
+            box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between antialiased selection:bg-brand-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-50 glass-card border-b border-borderbg px-4 lg:px-8 py-3.5">
+        <div class="max-w-7xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white text-lg font-bold shadow-lg">
+                    ⚡
+                </div>
+                <div>
+                    <h1 class="text-lg font-extrabold tracking-tight text-white flex items-center gap-2">
+                        MR SAQIB MD <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 border border-brand-500/30">Auto Scheduler</span>
+                    </h1>
+                    <p class="text-xs text-gray-400 hidden sm:block">Multi-Channel & Multi-Group Automation Manager</p>
+                </div>
+            </div>
+
+            <!-- Header Right Stats / User -->
+            <div class="flex items-center gap-3 sm:gap-6">
+                <!-- Live PKT Clock -->
+                <div class="hidden md:flex items-center gap-2 bg-gray-800/60 px-3 py-1.5 rounded-lg border border-gray-700/50">
+                    <i class="fa-regular fa-clock text-brand-400"></i>
+                    <span id="livePktTime" class="text-xs font-mono font-medium text-gray-200">--:--:-- PKT</span>
+                </div>
+
+                <!-- Logged In User Pill -->
+                <div id="userProfilePill" class="hidden flex items-center gap-2 bg-gray-800/80 px-3 py-1.5 rounded-lg border border-gray-700">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <span id="userPhoneLabel" class="text-xs font-semibold text-gray-200">Owner</span>
+                    <button onclick="logout()" title="Logout" class="text-gray-400 hover:text-red-400 ml-1 transition">
+                        <i class="fa-solid fa-right-from-bracket text-xs"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto w-full px-4 lg:px-8 py-6 flex-grow">
+
+        <!-- ========================================== -->
+        <!-- SCREEN 1: WHATSAPP OTP LOGIN VIEW -->
+        <!-- ========================================== -->
+        <div id="loginSection" class="max-w-md mx-auto my-12 glass-card rounded-2xl p-6 sm:p-8 glow-brand">
+            <div class="text-center mb-6">
+                <div class="w-16 h-16 rounded-2xl bg-brand-500/10 border border-brand-500/20 text-brand-400 text-2xl flex items-center justify-center mx-auto mb-3">
+                    <i class="fa-brands fa-whatsapp"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-white">WhatsApp Web Login</h2>
+                <p class="text-xs text-gray-400 mt-1">Apna WhatsApp number dalein, bot aapke WhatsApp par foran 6-digit OTP code bhejega.</p>
+            </div>
+
+            <!-- Step A: Enter Phone Number -->
+            <div id="phoneStep">
+                <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">WhatsApp Phone Number</label>
+                <div class="relative mb-4">
+                    <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-gray-400 text-sm">
+                        <i class="fa-solid fa-phone"></i>
+                    </span>
+                    <input type="tel" id="inputPhone" placeholder="923468616487" class="w-full bg-gray-900/80 border border-gray-700 rounded-xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition">
+                </div>
+                <button onclick="requestOtp()" id="btnSendOtp" class="w-full bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-paper-plane"></i> Send OTP Code
+                </button>
+            </div>
+
+            <!-- Step B: Enter 6-Digit OTP -->
+            <div id="otpStep" class="hidden">
+                <div class="bg-brand-500/10 border border-brand-500/20 rounded-xl p-3 mb-4 text-xs text-brand-300 flex items-center justify-between">
+                    <span>📩 OTP aapke WhatsApp par bhej diya gaya hai!</span>
+                    <button onclick="resetLoginStep()" class="text-gray-400 hover:text-white underline text-[10px]">Change #</button>
+                </div>
+                <label class="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">6-Digit Verification Code</label>
+                <div class="relative mb-4">
+                    <input type="text" id="inputOtp" maxlength="6" placeholder="839201" class="w-full tracking-widest text-center text-xl font-mono font-bold bg-gray-900 border border-gray-700 rounded-xl py-3 text-white focus:outline-none focus:border-brand-500 transition">
+                </div>
+                <button onclick="verifyOtp()" id="btnVerifyOtp" class="w-full bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-semibold py-2.5 rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-shield-check"></i> Verify & Open Dashboard
+                </button>
+            </div>
+
+            <div id="loginFeedback" class="hidden mt-4 p-3 rounded-xl text-xs text-center font-medium"></div>
+        </div>
+
+        <!-- ========================================== -->
+        <!-- SCREEN 2: MAIN VISUAL SCHEDULE DASHBOARD -->
+        <!-- ========================================== -->
+        <div id="dashboardSection" class="hidden space-y-6">
+
+            <!-- Stats Bar -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="glass-card rounded-xl p-4 border border-borderbg">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-gray-400">Total Schedules</span>
+                        <i class="fa-solid fa-calendar-check text-brand-400"></i>
+                    </div>
+                    <p id="statTotal" class="text-2xl font-bold text-white mt-1">0</p>
+                </div>
+                <div class="glass-card rounded-xl p-4 border border-borderbg">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-gray-400">Active Running</span>
+                        <i class="fa-solid fa-circle-play text-emerald-400"></i>
+                    </div>
+                    <p id="statActive" class="text-2xl font-bold text-emerald-400 mt-1">0</p>
+                </div>
+                <div class="glass-card rounded-xl p-4 border border-borderbg">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-gray-400">Paused</span>
+                        <i class="fa-solid fa-circle-pause text-amber-400"></i>
+                    </div>
+                    <p id="statPaused" class="text-2xl font-bold text-amber-400 mt-1">0</p>
+                </div>
+                <div class="glass-card rounded-xl p-4 border border-borderbg">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-medium text-gray-400">Server Time (PKT)</span>
+                        <i class="fa-solid fa-earth-asia text-blue-400"></i>
+                    </div>
+                    <p id="statPktClock" class="text-lg font-mono font-bold text-white mt-1">--:--</p>
+                </div>
+            </div>
+
+            <!-- Two-Column Layout: Creator Form (Left) & Active Visual Cards (Right) -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+                <!-- Left Column: Create New Schedule -->
+                <div class="lg:col-span-5 glass-card rounded-2xl p-5 sm:p-6 border border-borderbg">
+                    <div class="flex items-center justify-between pb-4 border-b border-borderbg mb-4">
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-plus-circle text-brand-400"></i> Naya Schedule Banayein
+                        </h3>
+                        <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-brand-500/10 text-brand-400 border border-brand-500/20">PKT (UTC+5)</span>
+                    </div>
+
+                    <form id="createScheduleForm" onsubmit="createSchedule(event)" class="space-y-4">
+                        <!-- 1. Time Input -->
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1.5">⏰ Schedule Time (Pakistan Time)</label>
+                            <input type="text" id="schedTime" placeholder="e.g. 09:30 PM ya 21:00" required class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-brand-500 transition">
+                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                <button type="button" onclick="setTimePreset('08:00 AM')" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700">08:00 AM</button>
+                                <button type="button" onclick="setTimePreset('01:30 PM')" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700">01:30 PM</button>
+                                <button type="button" onclick="setTimePreset('06:00 PM')" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700">06:00 PM</button>
+                                <button type="button" onclick="setTimePreset('09:30 PM')" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700">09:30 PM</button>
+                                <button type="button" onclick="setTimePreset('11:00 PM')" class="text-[11px] bg-gray-800 hover:bg-gray-700 text-gray-300 px-2 py-0.5 rounded border border-gray-700">11:00 PM</button>
+                            </div>
+                        </div>
+
+                        <!-- 2. Target Destinations (Single or 10-20 Channels) -->
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-300 mb-1.5">🎯 Destination (Kahan Post Karein?)</label>
+                            <div class="grid grid-cols-3 gap-2 mb-2">
+                                <button type="button" onclick="setDestMode('all')" id="btnDestAll" class="text-xs py-1.5 px-2 rounded-lg border border-brand-500 bg-brand-500/20 text-brand-300 font-semibold text-center transition">
+                                    🌐 All Groups
+                                </button>
+                                <button type="button" onclick="setDestMode('channel')" id="btnDestChannel" class="text-xs py-1.5 px-2 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white text-center transition">
+                                    📢 Channel
+                                </button>
+                                <button type="button" onclick="setDestMode('custom')" id="btnDestCustom" class="text-xs py-1.5 px-2 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white text-center transition">
+                                    📑 10-20 Targets
+                                </button>
+                            </div>
+
+                            <!-- Custom Multi-Destination Textarea (Hidden by default) -->
+                            <div id="customDestArea" class="hidden">
+                                <textarea id="customDestinationsInput" rows="3" placeholder="10 se 20 Channels ya Group links yahan comma ya newline ke sath dalein:&#10;120363431913895899@newsletter&#10;https://chat.whatsapp.com/...&#10;120363150265582047@newsletter" class="w-full bg-gray-900 border border-gray-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-brand-500 font-mono"></textarea>
+                                <p class="text-[10px] text-gray-400 mt-1">Har channel JID ya link alag line ya comma mein dalein.</p>
+                            </div>
+                        </div>
+
+                        <!-- 3. Message / Caption -->
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="text-xs font-semibold text-gray-300">📝 Post Message / Text</label>
+                                <button type="button" onclick="draftWithAi()" id="btnAiDraft" class="text-[11px] text-emerald-400 hover:text-emerald-300 flex items-center gap-1 font-semibold">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> AI Post Draft
+                                </button>
+                            </div>
+                            <textarea id="schedMessage" rows="4" placeholder="Apna post text ya caption yahan likhein..." class="w-full bg-gray-900 border border-gray-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-brand-500 transition"></textarea>
+                        </div>
+
+                        <!-- 4. Photo Link / Banner with Live Preview -->
+                        <div>
+                            <div class="flex items-center justify-between mb-1.5">
+                                <label class="block text-xs font-semibold text-gray-300">🖼️ Photo Link (Optional Image URL)</label>
+                                <button type="button" onclick="setPresetBanner('/banner.jpg')" class="text-[11px] text-emerald-400 hover:text-emerald-300 font-medium transition flex items-center gap-1">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Use Ninja Banner
+                                </button>
+                            </div>
+                            <input type="url" id="schedMediaUrl" oninput="updateImagePreview(this.value)" placeholder="https://ik.imagekit.io/.../image.jpg ya /banner.jpg" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-brand-500 transition">
+
+                            <!-- Live Image Preview Box -->
+                            <div id="imgPreviewContainer" class="hidden mt-2 rounded-xl overflow-hidden border border-gray-700/80 bg-gray-900/50 max-h-48 flex items-center justify-center">
+                                <img id="imgPreview" src="" alt="Thumbnail preview" class="max-h-48 w-full object-cover">
+                            </div>
+                        </div>
+
+                        <!-- 5. Repeat Setting -->
+                        <div class="flex items-center justify-between pt-1">
+                            <span class="text-xs font-semibold text-gray-300">🔁 Rozana Repeat Karein (Daily)</span>
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" id="schedRecurring" checked class="sr-only peer">
+                                <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-500"></div>
+                            </label>
+                        </div>
+
+                        <!-- Submit Button -->
+                        <button type="submit" id="btnCreateSchedule" class="w-full bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold py-3 rounded-xl text-sm transition shadow-lg flex items-center justify-center gap-2 glow-brand">
+                            <i class="fa-solid fa-rocket"></i> Create & Activate Schedule
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Right Column: Visual Schedules Grid -->
+                <div class="lg:col-span-7 space-y-4">
+                    <div class="flex items-center justify-between pb-2 border-b border-borderbg">
+                        <h3 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-list-check text-brand-400"></i> Active Schedules
+                        </h3>
+                        <button onclick="fetchSchedules()" class="text-xs text-gray-400 hover:text-white flex items-center gap-1 transition">
+                            <i class="fa-solid fa-rotate-right"></i> Refresh
+                        </button>
+                    </div>
+
+                    <!-- Cards Container -->
+                    <div id="schedulesGrid" class="space-y-3.5">
+                        <div class="text-center py-12 text-gray-500 text-sm">
+                            <i class="fa-solid fa-spinner fa-spin text-2xl mb-2 text-brand-400"></i>
+                            <p>Schedules load ho rahe hain...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-borderbg py-4 px-4 text-center text-xs text-gray-500">
+        <p>⚡ MR SAQIB MD Automation Suite • Powered by <span class="text-gray-300 font-semibold">MR SAQIB</span></p>
+    </footer>
+
+    <!-- App Logic -->
+    <script>
+        let currentAuthToken = localStorage.getItem('saqib_schedule_token') || null;
+        let selectedDestMode = 'all';
+
+        // Check login on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            startClock();
+            if (currentAuthToken) {
+                showDashboard();
+            } else {
+                showLogin();
+            }
+        });
+
+        // Live Clock (PKT: UTC+5)
+        function startClock() {
+            setInterval(() => {
+                const now = new Date();
+                const pkt = new Date(now.getTime() + (5 * 60 + now.getTimezoneOffset()) * 60000);
+                const timeStr = pkt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+                document.getElementById('livePktTime').textContent = `${timeStr} PKT`;
+                const clockMini = document.getElementById('statPktClock');
+                if (clockMini) clockMini.textContent = timeStr;
+            }, 1000);
+        }
+
+        function showLogin() {
+            document.getElementById('loginSection').classList.remove('hidden');
+            document.getElementById('dashboardSection').classList.add('hidden');
+            document.getElementById('userProfilePill').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            document.getElementById('userProfilePill').classList.remove('hidden');
+            const savedPhone = localStorage.getItem('saqib_user_phone') || 'Owner';
+            document.getElementById('userPhoneLabel').textContent = `+${savedPhone}`;
+            fetchSchedules();
+        }
+
+        function logout() {
+            localStorage.removeItem('saqib_schedule_token');
+            localStorage.removeItem('saqib_user_phone');
+            currentAuthToken = null;
+            showLogin();
+        }
+
+        function setTimePreset(timeStr) {
+            document.getElementById('schedTime').value = timeStr;
+        }
+
+        function setDestMode(mode) {
+            selectedDestMode = mode;
+            const btnAll = document.getElementById('btnDestAll');
+            const btnCh = document.getElementById('btnDestChannel');
+            const btnCustom = document.getElementById('btnDestCustom');
+            const customArea = document.getElementById('customDestArea');
+
+            [btnAll, btnCh, btnCustom].forEach(b => {
+                b.className = 'text-xs py-1.5 px-2 rounded-lg border border-gray-700 bg-gray-800 text-gray-300 hover:text-white text-center transition';
+            });
+
+            if (mode === 'all') {
+                btnAll.className = 'text-xs py-1.5 px-2 rounded-lg border border-brand-500 bg-brand-500/20 text-brand-300 font-semibold text-center transition';
+                customArea.classList.add('hidden');
+            } else if (mode === 'channel') {
+                btnCh.className = 'text-xs py-1.5 px-2 rounded-lg border border-brand-500 bg-brand-500/20 text-brand-300 font-semibold text-center transition';
+                customArea.classList.add('hidden');
+            } else if (mode === 'custom') {
+                btnCustom.className = 'text-xs py-1.5 px-2 rounded-lg border border-brand-500 bg-brand-500/20 text-brand-300 font-semibold text-center transition';
+                customArea.classList.remove('hidden');
+            }
+        }
+
+        function setPresetBanner(url) {
+            const input = document.getElementById('schedMediaUrl');
+            input.value = url;
+            updateImagePreview(url);
+        }
+
+        function updateImagePreview(url) {
+            const container = document.getElementById('imgPreviewContainer');
+            const img = document.getElementById('imgPreview');
+            if (url && (url.startsWith('http') || url.startsWith('/'))) {
+                img.src = url;
+                container.classList.remove('hidden');
+                img.onerror = () => container.classList.add('hidden');
+            } else {
+                container.classList.add('hidden');
+            }
+        }
+
+        // AI Post Drafter in Browser
+        async function draftWithAi() {
+            const btn = document.getElementById('btnAiDraft');
+            const textarea = document.getElementById('schedMessage');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Generating...';
+            try {
+                const topic = prompt("AI se kis topic par post banwani hai? (e.g. Jummah Mubarak, Tech Tips, Motivation, Group Notice)", "Daily Motivational Quote for students");
+                if (!topic) {
+                    btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> AI Post Draft';
+                    return;
+                }
+                const promptText = `Generate a high quality, attractive WhatsApp post in Roman Urdu and English about: "${topic}". Include emojis, nice headers, and good format.`;
+                const res = await fetch(`https://text.pollinations.ai/${encodeURIComponent(promptText)}`);
+                const text = await res.text();
+                textarea.value = text.trim();
+            } catch (err) {
+                alert("AI drafting failed: " + err.message);
+            } finally {
+                btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> AI Post Draft';
+            }
+        }
+
+        // OTP Request
+        async function requestOtp() {
+            const phone = document.getElementById('inputPhone').value.trim();
+            const feedback = document.getElementById('loginFeedback');
+            const btn = document.getElementById('btnSendOtp');
+
+            if (!phone) {
+                alert("Please enter your WhatsApp phone number.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+
+            try {
+                const res = await fetch('/api/schedule/send-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('phoneStep').classList.add('hidden');
+                    document.getElementById('otpStep').classList.remove('hidden');
+                    feedback.className = 'mt-4 p-3 rounded-xl text-xs text-center font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+                    feedback.textContent = data.message;
+                    feedback.classList.remove('hidden');
+                    document.getElementById('inputOtp').focus();
+                } else {
+                    feedback.className = 'mt-4 p-3 rounded-xl text-xs text-center font-medium bg-red-500/10 text-red-400 border border-red-500/20';
+                    feedback.textContent = data.error || 'OTP send failed.';
+                    feedback.classList.remove('hidden');
+                }
+            } catch (err) {
+                alert("Request error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Send OTP Code';
+            }
+        }
+
+        function resetLoginStep() {
+            document.getElementById('phoneStep').classList.remove('hidden');
+            document.getElementById('otpStep').classList.add('hidden');
+            document.getElementById('loginFeedback').classList.add('hidden');
+        }
+
+        // OTP Verification
+        async function verifyOtp() {
+            const phone = document.getElementById('inputPhone').value.trim();
+            const otp = document.getElementById('inputOtp').value.trim();
+            const btn = document.getElementById('btnVerifyOtp');
+            const feedback = document.getElementById('loginFeedback');
+
+            if (!otp) {
+                alert("Please enter the 6-digit OTP code.");
+                return;
+            }
+
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verifying...';
+
+            try {
+                const res = await fetch('/api/schedule/verify-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone, otp })
+                });
+                const data = await res.json();
+                if (data.success && data.token) {
+                    currentAuthToken = data.token;
+                    localStorage.setItem('saqib_schedule_token', data.token);
+                    localStorage.setItem('saqib_user_phone', phone);
+                    showDashboard();
+                } else {
+                    feedback.className = 'mt-4 p-3 rounded-xl text-xs text-center font-medium bg-red-500/10 text-red-400 border border-red-500/20';
+                    feedback.textContent = data.error || 'Verification failed.';
+                    feedback.classList.remove('hidden');
+                }
+            } catch (err) {
+                alert("Verification error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-shield-check"></i> Verify & Open Dashboard';
+            }
+        }
+
+        // Fetch & Render Schedules
+        async function fetchSchedules() {
+            if (!currentAuthToken) return;
+            const grid = document.getElementById('schedulesGrid');
+
+            try {
+                const res = await fetch('/api/schedule/list', {
+                    headers: { 'Authorization': `Bearer ${currentAuthToken}` }
+                });
+                if (res.status === 401) {
+                    logout();
+                    return;
+                }
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('statTotal').textContent = data.stats.total;
+                    document.getElementById('statActive').textContent = data.stats.active;
+                    document.getElementById('statPaused').textContent = data.stats.paused;
+                    renderSchedules(data.schedules);
+                }
+            } catch (err) {
+                grid.innerHTML = `<div class="text-center py-8 text-red-400 text-xs">Failed to load schedules: ${err.message}</div>`;
+            }
+        }
+
+        function renderSchedules(list) {
+            const grid = document.getElementById('schedulesGrid');
+            if (!list || !list.length) {
+                grid.innerHTML = `
+                    <div class="glass-card rounded-xl p-8 text-center text-gray-400">
+                        <i class="fa-regular fa-calendar-xmark text-3xl mb-2 text-gray-500"></i>
+                        <p class="text-sm font-semibold">Koi bhi active schedule nahi mila.</p>
+                        <p class="text-xs text-gray-500 mt-1">Left side form se naya schedule create karein!</p>
+                    </div>`;
+                return;
+            }
+
+            grid.innerHTML = list.map((s, idx) => {
+                const statusBadge = s.enabled
+                    ? '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🟢 Active</span>'
+                    : '<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">⏸️ Paused</span>';
+
+                const destCount = Array.isArray(s.destinations) && s.destinations.length > 0 ? s.destinations.length : 1;
+                const destBadge = s.targetJid === 'all'
+                    ? '<span class="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded">🌐 All Groups</span>'
+                    : (s.targetJid === 'channel'
+                        ? '<span class="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded">📢 Official Channel</span>'
+                        : `<span class="text-[10px] bg-gray-800 text-gray-300 border border-gray-700 px-2 py-0.5 rounded">📑 ${destCount} Destination(s)</span>`);
+
+                const imageHtml = s.mediaUrl
+                    ? `<div class="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 border border-gray-700 bg-gray-900"><img src="${s.mediaUrl}" alt="Media" class="w-full h-full object-cover"></div>`
+                    : '';
+
+                return `
+                <div class="glass-card rounded-xl p-4 border border-borderbg hover:border-gray-600 transition flex flex-col justify-between gap-3">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex items-start gap-3">
+                            ${imageHtml}
+                            <div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <span class="text-sm font-bold text-white font-mono">${s.time24} PKT</span>
+                                    ${statusBadge}
+                                    ${destBadge}
+                                </div>
+                                <p class="text-xs text-gray-300 line-clamp-2">${s.message || '<i class="text-gray-500">No text caption</i>'}</p>
+                                <p class="text-[10px] text-gray-500 mt-1">ID: <code class="text-gray-400">${s.id}</code> • Repeat: ${s.recurring ? 'Daily' : 'Once'}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+                        <button onclick="toggleSchedule('${s.id}')" class="text-xs px-2.5 py-1 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300 transition">
+                            ${s.enabled ? '<i class="fa-solid fa-pause"></i> Pause' : '<i class="fa-solid fa-play"></i> Resume'}
+                        </button>
+                        <button onclick="deleteSchedule('${s.id}')" class="text-xs px-2.5 py-1 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 transition">
+                            <i class="fa-solid fa-trash"></i> Delete
+                        </button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        // Create Schedule API Call
+        async function createSchedule(e) {
+            e.preventDefault();
+            const time = document.getElementById('schedTime').value.trim();
+            const message = document.getElementById('schedMessage').value.trim();
+            const mediaUrl = document.getElementById('schedMediaUrl').value.trim();
+            const recurring = document.getElementById('schedRecurring').checked;
+
+            let destinations = [];
+            if (selectedDestMode === 'all') {
+                destinations = ['all'];
+            } else if (selectedDestMode === 'channel') {
+                destinations = ['channel'];
+            } else if (selectedDestMode === 'custom') {
+                const text = document.getElementById('customDestinationsInput').value.trim();
+                destinations = text.split(/[,\n]+/).map(p => p.trim()).filter(Boolean);
+                if (!destinations.length) {
+                    alert("Please enter at least 1 channel or group link.");
+                    return;
+                }
+            }
+
+            const btn = document.getElementById('btnCreateSchedule');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+
+            try {
+                const res = await fetch('/api/schedule/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAuthToken}`
+                    },
+                    body: JSON.stringify({ time, destinations, message, mediaUrl, recurring })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('schedMessage').value = '';
+                    document.getElementById('schedMediaUrl').value = '';
+                    document.getElementById('imgPreviewContainer').classList.add('hidden');
+                    fetchSchedules();
+                    alert(`✅ Schedule ${data.formattedTime} PKT ke liye activate ho gaya hai!`);
+                } else {
+                    alert("Error: " + (data.error || "Failed to add schedule"));
+                }
+            } catch (err) {
+                alert("Creation error: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fa-solid fa-rocket"></i> Create & Activate Schedule';
+            }
+        }
+
+        // Toggle Schedule
+        async function toggleSchedule(id) {
+            try {
+                const res = await fetch('/api/schedule/toggle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAuthToken}`
+                    },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fetchSchedules();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (err) {
+                alert("Toggle error: " + err.message);
+            }
+        }
+
+        // Delete Schedule
+        async function deleteSchedule(id) {
+            if (!confirm("Kya aap waqai is schedule ko delete karna chahte hain?")) return;
+            try {
+                const res = await fetch('/api/schedule/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentAuthToken}`
+                    },
+                    body: JSON.stringify({ id })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fetchSchedules();
+                } else {
+                    alert("Error: " + data.error);
+                }
+            } catch (err) {
+                alert("Delete error: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

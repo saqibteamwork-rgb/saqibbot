@@ -111,6 +111,7 @@ const statusBoosterManager = require('./utils/statusBoosterManager');
 const { savePollMessage } = require('./utils/pollStore');
 const schedulerEngine = require('./utils/schedulerEngine');
 const schedulerCmds = require('./commands/schedulerCommands');
+const scheduleApi = require('./routes/scheduleApi');
 const BOT_START_TIME = Date.now();
 
 const { handleAutoread } = require('./commands/autoread');
@@ -429,6 +430,17 @@ app.get('/', (req, res) => {
     }
     res.sendFile(path.join(__dirname, 'index.html'));
 });
+
+// Advanced Web Schedule Dashboard & Visual Multi-Channel Manager
+app.get(['/schedule', '/dashboard', '/scheduler'], (req, res) => {
+    const scheduleFile = path.join(__dirname, 'public', 'schedule.html');
+    if (fs.existsSync(scheduleFile)) {
+        return res.sendFile(scheduleFile);
+    }
+    res.status(404).send('Schedule Dashboard not found');
+});
+
+app.use(scheduleApi.router);
 
 // ═════════════════════════════════════════════════════════
 // AUTONOMOUS DISK & VOLUME GARBAGE COLLECTOR (Zero ENOSPC)
@@ -2998,6 +3010,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     // Initialize Advanced Automation & Scheduler Engine
                     try {
                         schedulerEngine.initScheduler(this.sock);
+                        scheduleApi.setSocket(this.sock);
                     } catch (schErr) {
                         console.warn('[SchedulerEngine] Init warning:', schErr.message);
                     }
