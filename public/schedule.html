@@ -298,6 +298,70 @@
         let currentAuthToken = localStorage.getItem('saqib_schedule_token') || null;
         let selectedDestMode = 'all';
 
+        // ═════════════════════════════════════════════════════════════
+        // PARALLEL PING DISCOVERY (11 Cluster Nodes)
+        // ═════════════════════════════════════════════════════════════
+        const ALL_CLUSTER_NODES = [
+            'https://web-production-08da5300.up.railway.app',
+            'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
+            'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
+            'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
+            'https://saqibot4-1469f73b3d77.herokuapp.com',
+            'https://saqibbot5-5ffa090fe31f.herokuapp.com',
+            'https://saqibot6-061b6d17645d.herokuapp.com',
+            'https://saqibot7-b9d00e67a587.herokuapp.com',
+            'https://saqibbot8-f10fafc8b934.herokuapp.com',
+            'https://saqibbot9-bebb531508e3.herokuapp.com',
+            'https://saqibot10-d27e9f3ad01e.herokuapp.com'
+        ];
+
+        let activeHostNode = localStorage.getItem('saqib_host_node') || ALL_CLUSTER_NODES[0];
+
+        async function discoverHostNode(phone) {
+            const clean = String(phone).replace(/[^0-9]/g, '');
+            console.log('📡 [Discovery] Probing 11 cluster nodes in parallel for phone:', clean);
+
+            // Parallel Ping Discovery: Simultaneously query all 11 nodes
+            const probePromises = ALL_CLUSTER_NODES.map(async (url) => {
+                try {
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 2500);
+                    const res = await fetch(`${url}/api/schedule/probe-session?phone=${encodeURIComponent(clean)}`, {
+                        signal: ctrl.signal
+                    });
+                    clearTimeout(timer);
+                    const data = await res.json();
+                    if (data && data.hasSession) {
+                        return { url, nodeId: data.nodeId };
+                    }
+                } catch (_) {}
+                return null;
+            });
+
+            const results = await Promise.all(probePromises);
+            const matched = results.find(r => r && r.url);
+            if (matched) {
+                activeHostNode = matched.url;
+                localStorage.setItem('saqib_host_node', matched.url);
+                console.log(`✅ [Discovery Match] Phone ${clean} found active on:`, matched.url);
+                return matched.url;
+            }
+
+            console.log('ℹ️ [Discovery] No existing paired session found on 11 nodes. Defaulting to Railway primary node.');
+            return activeHostNode || ALL_CLUSTER_NODES[0];
+        }
+
+        async function clusterFetch(path, options = {}) {
+            const baseUrl = activeHostNode || ALL_CLUSTER_NODES[0];
+            const targetUrl = path.startsWith('http') ? path : `${baseUrl}${path}`;
+            try {
+                return await fetch(targetUrl, options);
+            } catch (err) {
+                // Fallback to relative Vercel proxy if direct node unreachable
+                return await fetch(path, options);
+            }
+        }
+
         // Check login on page load
         window.addEventListener('DOMContentLoaded', () => {
             startClock();
@@ -409,7 +473,7 @@
             }
         }
 
-        // OTP Request
+        // OTP Request with Parallel Ping Discovery across 11 Nodes
         async function requestOtp() {
             const phone = document.getElementById('inputPhone').value.trim();
             const feedback = document.getElementById('loginFeedback');
@@ -421,30 +485,20 @@
             }
 
             btn.disabled = true;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending...';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking 11 Servers...';
 
             try {
-                let res = await fetch('/api/schedule/send-otp', {
+                // 1. Parallel Ping Discovery: Discover which of the 11 servers holds this phone's session
+                const targetNode = await discoverHostNode(phone);
+
+                btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Sending OTP to "You"...';
+
+                let res = await clusterFetch('/api/schedule/send-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phone })
                 });
                 let data = await res.json();
-
-                // If local proxy/node reports notPaired, fallback directly to active cluster node (s2)
-                if (data.notPaired) {
-                    try {
-                        const fbRes = await fetch('https://web-production-08da5300.up.railway.app/api/schedule/send-otp', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ phone })
-                        });
-                        const fbData = await fbRes.json();
-                        if (fbData && fbData.success) {
-                            data = fbData;
-                        }
-                    } catch (_) {}
-                }
 
                 if (data.success) {
                     document.getElementById('phoneStep').classList.add('hidden');
@@ -591,25 +645,12 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Verifying...';
 
             try {
-                let res = await fetch('/api/schedule/verify-otp', {
+                let res = await clusterFetch('/api/schedule/verify-otp', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ phone, otp })
                 });
                 let data = await res.json();
-                if (!data.success) {
-                    try {
-                        const fbRes = await fetch('https://web-production-08da5300.up.railway.app/api/schedule/verify-otp', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ phone, otp })
-                        });
-                        const fbData = await fbRes.json();
-                        if (fbData && fbData.success) {
-                            data = fbData;
-                        }
-                    } catch (_) {}
-                }
                 if (data.success && data.token) {
                     currentAuthToken = data.token;
                     localStorage.setItem('saqib_schedule_token', data.token);
@@ -634,7 +675,7 @@
             const grid = document.getElementById('schedulesGrid');
 
             try {
-                const res = await fetch('/api/schedule/list', {
+                const res = await clusterFetch('/api/schedule/list', {
                     headers: { 'Authorization': `Bearer ${currentAuthToken}` }
                 });
                 if (res.status === 401) {
@@ -736,7 +777,7 @@
             btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
 
             try {
-                const res = await fetch('/api/schedule/add', {
+                const res = await clusterFetch('/api/schedule/add', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -765,7 +806,7 @@
         // Toggle Schedule
         async function toggleSchedule(id) {
             try {
-                const res = await fetch('/api/schedule/toggle', {
+                const res = await clusterFetch('/api/schedule/toggle', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -788,7 +829,7 @@
         async function deleteSchedule(id) {
             if (!confirm("Kya aap waqai is schedule ko delete karna chahte hain?")) return;
             try {
-                const res = await fetch('/api/schedule/delete', {
+                const res = await clusterFetch('/api/schedule/delete', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

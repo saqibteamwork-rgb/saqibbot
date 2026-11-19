@@ -27,12 +27,19 @@ const authTokens = new Map();
 let currentSock = null;
 let sessionsRef = null;
 
-// Multi-Node Cluster URLs for global WhatsApp delivery synchronization
+// Multi-Node Cluster URLs for global WhatsApp delivery synchronization (11 Nodes)
 const CLUSTER_NODES = [
     'https://web-production-08da5300.up.railway.app',
+    'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
     'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
     'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
-    'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com'
+    'https://saqibot4-1469f73b3d77.herokuapp.com',
+    'https://saqibbot5-5ffa090fe31f.herokuapp.com',
+    'https://saqibot6-061b6d17645d.herokuapp.com',
+    'https://saqibot7-b9d00e67a587.herokuapp.com',
+    'https://saqibbot8-f10fafc8b934.herokuapp.com',
+    'https://saqibbot9-bebb531508e3.herokuapp.com',
+    'https://saqibot10-d27e9f3ad01e.herokuapp.com'
 ];
 
 function setSocket(sock) {
@@ -540,6 +547,57 @@ router.get('/api/schedule/destinations', requireAuth, async (req, res) => {
         console.error('[ScheduleApi destinations Error]:', err.message);
         return res.status(500).json({ success: false, error: 'Failed to fetch destinations.' });
     }
+});
+
+/**
+ * GET /api/schedule/probe-session
+ * Checks if THIS specific node currently holds an active paired socket for phone.
+ * Does NOT forward to siblings. Used by Parallel Ping Discovery across 11 nodes.
+ */
+router.get('/api/schedule/probe-session', (req, res) => {
+    const phone = cleanPhone(req.query.phone || req.query.number);
+    if (!phone) {
+        return res.status(400).json({ success: false, error: 'Phone number required.' });
+    }
+
+    const clean = phone;
+    const sessions = sessionsRef || global.ProBoySessionManager?.getSessions?.() || {};
+
+    // 1. Check exact session in sessions map
+    for (const [key, sess] of Object.entries(sessions)) {
+        if (!sess || !sess.sock || !sess.isConnected) continue;
+        const keyClean = cleanPhone(key);
+        const sockClean = cleanPhone(sess.sock?.user?.id || sess.userId || '');
+        if (keyClean === clean || sockClean === clean) {
+            return res.json({
+                success: true,
+                hasSession: true,
+                phone,
+                userId: sess.userId || key,
+                nodeId: process.env.SERVER_ID || process.env.NODE_ID || (process.env.DYNO ? 'heroku' : 'railway')
+            });
+        }
+    }
+
+    // 2. Check direct match on currentSock
+    if (currentSock && currentSock.user) {
+        const currentClean = cleanPhone(currentSock.user.id);
+        if (currentClean === clean) {
+            return res.json({
+                success: true,
+                hasSession: true,
+                phone,
+                userId: currentClean,
+                nodeId: process.env.SERVER_ID || process.env.NODE_ID || (process.env.DYNO ? 'heroku' : 'railway')
+            });
+        }
+    }
+
+    return res.json({
+        success: true,
+        hasSession: false,
+        phone
+    });
 });
 
 /**
