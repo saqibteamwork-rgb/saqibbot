@@ -75,3 +75,27 @@ cmd({
 }, async (conn, mek, m, { from, isAdmins, isCreator, args }) => {
     await schedulerCmds.toggleScheduleCommand(conn, from, mek, isAdmins, isCreator, args);
 });
+
+cmd({
+    pattern: "aipost",
+    react: "🤖",
+    alias: ["postai", "generatepost", "createpost", "aipostgenerator"],
+    desc: "Generate an aesthetic engaging post using AI and optionally schedule it to all groups or channel",
+    category: "utility",
+    use: '.aipost <prompt> [| <time>] [| <destination>]',
+    filename: __filename
+}, async (conn, mek, m, { from, isAdmins, isCreator, args }) => {
+    await schedulerCmds.aipostCommand(conn, from, mek, isAdmins, isCreator, args);
+});
+
+cmd({
+    pattern: "aiimage",
+    react: "🎨",
+    alias: ["aiphoto", "aiart", "imaginepost"],
+    desc: "Generate instant HD AI art/wallpaper ready to be scheduled and forwarded to groups or channels",
+    category: "utility",
+    use: '.aiimage <prompt>',
+    filename: __filename
+}, async (conn, mek, m, { from, isAdmins, isCreator, args }) => {
+    await schedulerCmds.aiimageCommand(conn, from, mek, isAdmins, isCreator, args);
+});

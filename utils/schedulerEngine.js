@@ -208,6 +208,9 @@ function addSchedule(scheduleObj) {
         category: scheduleObj.category || 'islamic',
         mediaUrl: scheduleObj.mediaUrl || null,
         mediaType: scheduleObj.mediaType || null,
+        mediaPath: scheduleObj.mediaPath || null,
+        fileName: scheduleObj.fileName || null,
+        isPtt: Boolean(scheduleObj.isPtt),
         recurring: scheduleObj.recurring !== false, // default true (daily)
         enabled: scheduleObj.enabled !== false,
         createdBy: scheduleObj.createdBy || 'Owner',
@@ -298,19 +301,55 @@ async function executeSchedule(sock, schedule) {
         if (schedule.type === 'timed_post') {
             const header = `╭━━━〔 📢 *MR SAQIB MD SCHEDULED POST* 〕━━━┈⊷\n\n`;
             const footer = `\n\n╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n> *⚡ Powered By MR SAQIB MD*`;
-            const postText = `${header}${schedule.message}${footer}`;
+            const postText = schedule.message ? `${header}${schedule.message}${footer}` : `╭━━━〔 📢 *MR SAQIB MD BROADCAST* 〕━━━┈⊷\n\n> *⚡ Powered By MR SAQIB MD*`;
 
-            if (schedule.mediaUrl) {
-                await sock.sendMessage(schedule.targetJid, {
-                    image: { url: schedule.mediaUrl },
-                    caption: postText,
-                    contextInfo: channelBadge
-                });
+            // Resolve target destinations
+            let targetJids = [];
+            if (schedule.targetJid === 'all' || schedule.targetJid === 'all_groups') {
+                try {
+                    const groups = await sock.groupFetchAllParticipating();
+                    targetJids = Object.keys(groups);
+                } catch (e) {
+                    console.warn('[SchedulerEngine] Failed to fetch participating groups:', e.message);
+                }
+            } else if (schedule.targetJid === 'channel') {
+                targetJids = [settings.newsletterJid || config.newsletterJid || '120363431913895899@newsletter'];
             } else {
-                await sock.sendMessage(schedule.targetJid, {
-                    text: postText,
-                    contextInfo: channelBadge
-                });
+                targetJids = [schedule.targetJid];
+            }
+
+            for (const jid of targetJids) {
+                try {
+                    let msgPayload = null;
+
+                    if (schedule.mediaPath && fs.existsSync(schedule.mediaPath)) {
+                        const buffer = fs.readFileSync(schedule.mediaPath);
+                        if (schedule.mediaType === 'video') {
+                            msgPayload = { video: buffer, caption: postText, mimetype: 'video/mp4', contextInfo: channelBadge };
+                        } else if (schedule.mediaType === 'image') {
+                            msgPayload = { image: buffer, caption: postText, contextInfo: channelBadge };
+                        } else if (schedule.mediaType === 'audio') {
+                            msgPayload = { audio: buffer, mimetype: 'audio/mp4', ptt: Boolean(schedule.isPtt), contextInfo: channelBadge };
+                        } else if (schedule.mediaType === 'document') {
+                            msgPayload = { document: buffer, fileName: schedule.fileName || 'Scheduled_Doc.pdf', caption: postText, contextInfo: channelBadge };
+                        }
+                    } else if (schedule.mediaUrl) {
+                        msgPayload = { image: { url: schedule.mediaUrl }, caption: postText, contextInfo: channelBadge };
+                    } else {
+                        msgPayload = { text: postText, contextInfo: channelBadge };
+                    }
+
+                    if (msgPayload) {
+                        await sock.sendMessage(jid, msgPayload);
+                    }
+                } catch (sendErr) {
+                    console.warn(`[SchedulerEngine] Delivery failed to ${jid}:`, sendErr.message);
+                }
+
+                // Anti-ban delay if broadcasting to multiple groups
+                if (targetJids.length > 1) {
+                    await new Promise(r => setTimeout(r, 1500));
+                }
             }
 
             // If one-time, remove it
@@ -318,7 +357,7 @@ async function executeSchedule(sock, schedule) {
                 activeSchedules = activeSchedules.filter(s => s.id !== schedule.id);
                 saveSchedules();
             }
-            console.log(`[SchedulerEngine] Executed timed_post (${schedule.id}) to ${schedule.targetJid}`);
+            console.log(`[SchedulerEngine] Executed timed_post (${schedule.id}) to ${targetJids.length} destination(s)`);
         }
 
         // --- 2. Smart Group Mute / Unmute ---

@@ -2615,6 +2615,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'toggleschedule': case 'pauseschedule': case 'resumeschedule':
                                             await schedulerCmds.toggleScheduleCommand(this.sock, from, msg, isAdmin, isOwner, args);
                                             break;
+                                        case 'aipost': case 'postai': case 'generatepost': case 'createpost':
+                                            await schedulerCmds.aipostCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
+                                        case 'aiimage': case 'aiphoto': case 'aiart':
+                                            await schedulerCmds.aiimageCommand(this.sock, from, msg, isAdmin, isOwner, args);
+                                            break;
 
                                         // ===== NEW UPGRADE: Fun / Games =====
                                         case 'truth': await funCmds.truthCommand(this.sock, from, msg); break;
