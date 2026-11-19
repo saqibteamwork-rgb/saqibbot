@@ -194,8 +194,7 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
     }
 
     bodyText +=
-        `📚 *Use ${cleanPrefix}allmenu to browse all commands.*\n` +
-        `🔥 *Powered by ${ownerName}*`;
+        `📚 *Use ${cleanPrefix}allmenu to browse all commands.*`;
 
     const metaAiQuote = buildMetaAiQuote(botName, config.OWNER_NUMBER || '923468616487');
 

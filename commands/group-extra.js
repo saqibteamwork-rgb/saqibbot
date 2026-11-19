@@ -3,6 +3,40 @@
 const settings = require('../settings');
 const ownerManager = require('../utils/ownerManager');
 
+// Deduplication map to prevent double-firing of participant updates (stub vs listener)
+const recentParticipantEvents = new Map();
+function isDuplicateParticipantEvent(from, action, participants) {
+    const key = `${from}:${action}:${(participants || []).slice().sort().join(',')}`;
+    const now = Date.now();
+    const last = recentParticipantEvents.get(key);
+    if (last && (now - last) < 4000) {
+        return true;
+    }
+    recentParticipantEvents.set(key, now);
+    if (recentParticipantEvents.size > 200) {
+        for (const [k, v] of recentParticipantEvents.entries()) {
+            if (now - v > 10000) recentParticipantEvents.delete(k);
+        }
+    }
+    return false;
+}
+
+function normalizeJid(jid) {
+    if (!jid) return null;
+    const str = String(jid).trim();
+    if (!str) return null;
+    if (str.includes('@s.whatsapp.net') || str.includes('@lid') || str.includes('@g.us')) {
+        const parts = str.split('@');
+        const user = parts[0].split(':')[0];
+        return `${user}@${parts[1]}`;
+    }
+    const digits = str.replace(/[^0-9]/g, '');
+    if (digits.length >= 7) {
+        return `${digits}@s.whatsapp.net`;
+    }
+    return null;
+}
+
 function getTarget(msg, args) {
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
@@ -375,6 +409,9 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
 
         // ========== PROMOTE & DEMOTE EVENTS (Anti-Admin & Admin Inform) ==========
         if (action === 'promote' || action === 'demote') {
+            // Deduplicate promote/demote events that can fire concurrently from socket listener and stub message
+            if (isDuplicateParticipantEvent(from, action, participants)) return;
+
             const authorJid = author || '';
             const authorDigits = authorJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
 
@@ -488,7 +525,9 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                         const targetNum = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
                         const targetTag = `@${targetNum}`;
                         const authorTag = authorDigits ? `@${authorDigits}` : 'Group Admin';
-                        const mentionJids = [authorJid, p].filter(Boolean);
+                        const targetJid = normalizeJid(p) || (targetNum ? `${targetNum}@s.whatsapp.net` : null);
+                        const normAuthorJid = normalizeJid(authorJid) || (authorDigits ? `${authorDigits}@s.whatsapp.net` : null);
+                        const mentionJids = [normAuthorJid, targetJid].filter(Boolean);
 
                         const text = 
 `╭━━━〔 👑 *ADMIN PROMOTION ALERT* 〕━━━┈⊷
@@ -518,7 +557,9 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                     const isBotDemoted = (targetNum === botPhone || targetNum === botLid || (sock.user?.id && p === sock.user.id));
 
                     const authorTag = authorDigits ? `@${authorDigits}` : 'Admin';
-                    const mentionJids = [authorJid, p].filter(Boolean);
+                    const targetJid = normalizeJid(p) || (targetNum ? `${targetNum}@s.whatsapp.net` : null);
+                    const normAuthorJid = normalizeJid(authorJid) || (authorDigits ? `${authorDigits}@s.whatsapp.net` : null);
+                    const mentionJids = [normAuthorJid, targetJid].filter(Boolean);
 
                     if (isBotDemoted) {
                         // Special Bot Demote Self-Defense Notice
@@ -1026,6 +1067,26 @@ async function admininformCommand(sock, from, msg, isAdmin, isOwner, botData, sa
     if (!from.endsWith('@g.us')) {
         return await sock.sendMessage(from, { text: "❌ Yeh command sirf groups mein kaam karti hai." }, { quoted: msg });
     }
+
+    // Dynamic real-time admin detection fallback (ensures newly promoted admins are recognized instantly)
+    if (!isAdmin && !isOwner && sock && typeof sock.groupMetadata === 'function') {
+        try {
+            const meta = await sock.groupMetadata(from).catch(() => null);
+            const senderJid = msg.key.participant || msg.participant || (msg.key.fromMe ? sock.user?.id : '');
+            const senderDigits = String(senderJid).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+            const isNowAdmin = meta?.participants?.some(p => {
+                if (p.admin !== 'admin' && p.admin !== 'superadmin') return false;
+                const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
+            });
+            if (isNowAdmin) {
+                isAdmin = true;
+            }
+        } catch (_) {}
+    }
+
     if (!isAdmin && !isOwner) {
         return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ya Bot Owner ye setting change kar sakta hai!*" }, { quoted: msg });
     }

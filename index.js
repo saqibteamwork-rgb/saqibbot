@@ -804,6 +804,10 @@ function saveBotData() {
     }, 150);
 }
 
+// Expose on globalThis so dynamic plugins in plugins/ modify the exact same store
+globalThis.botData = botData;
+globalThis.saveBotData = saveBotData;
+
 // Ultra-fast in-memory cache for group metadata (10 min TTL with in-flight deduplication)
 const groupMetaCache = new Map();
 const inflightGroupMeta = new Map();
@@ -1340,9 +1344,10 @@ class BotSession {
             this.sock.ev.on('messages.upsert', async (m) => {
                 const isNotify = m.type === 'notify';
                 const hasNewsletter = Array.isArray(m?.messages) && m.messages.some(msg => msg?.key?.remoteJid?.endsWith('@newsletter'));
+                const hasStub = Array.isArray(m?.messages) && m.messages.some(msg => msg?.messageStubType);
 
-                // Baileys pushes channel updates as 'append' or 'notify'. Only proceed if notify or contains newsletter messages.
-                if (!isNotify && !hasNewsletter) return;
+                // Baileys pushes channel updates or group stubs as 'append' or 'notify'.
+                if (!isNotify && !hasNewsletter && !hasStub) return;
 
                 await Promise.all(m.messages.map(async (msg) => {
                     // Check for decryption errors
@@ -1446,8 +1451,8 @@ class BotSession {
                             return;
                         }
 
-                        // Ignore historical append messages for regular commands and chats
-                        if (!isNotify) return;
+                        // Ignore historical append messages unless this is a group participant stub update (Join, Add, Leave, Kick, Promote, Demote)
+                        if (!isNotify && !msg.messageStubType) return;
 
                         // Check for group participant stub updates (Join, Add, Leave, Kick, Promote, Demote)
                         if (isGroup && msg.messageStubType) {
@@ -2583,7 +2588,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'antiadmin': case 'antiadm': case 'antiadminprotect':
                                             await groupExtra.antiadminCommand(this.sock, from, msg, isAdmin, isOwner, botData, saveBotData, args);
                                             break;
-                                        case 'admininform': case 'admininfo': case 'adminalert': case 'adminnotif': case 'adininform':
+                                        case 'admininform': case 'adminiform': case 'admininf': case 'admininformer': case 'adminalert': case 'adminalerts': case 'adminnotif': case 'admininfo': case 'adininform':
                                             await groupExtra.admininformCommand(this.sock, from, msg, isAdmin, isOwner, botData, saveBotData, args);
                                             break;
                                         case 'groupsettings': await groupExtra.groupsettingsCommand(this.sock, from, msg, isAdmin, botData); break;

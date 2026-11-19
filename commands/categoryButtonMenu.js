@@ -37,9 +37,11 @@ const BUTTON_CATEGORIES = [
     { name: 'GROUP', icon: '👥', filter: 'group', count: 94 },
     { name: 'DOWNLOAD', icon: '📥', filter: 'download', count: 41 },
     { name: 'TOOLS', icon: '🧰', filter: 'tools', count: 206 },
+    { name: 'UTILITY', icon: '🛠️', filter: 'utility', count: 96 },
     { name: 'AI & MEDIA', icon: '🤖', filter: 'ai', count: 60 },
     { name: 'FUN', icon: '🎮', filter: 'fun', count: 203 },
     { name: 'ISLAMIC', icon: '🕌', filter: 'islamic', count: 69 },
+    { name: 'COURSES', icon: '🎓', filter: 'courses', count: 11 },
     { name: 'ANIME', icon: '🎌', filter: 'anime', count: 39 }
 ];
 

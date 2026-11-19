@@ -22,7 +22,7 @@ async (conn, mek, m, { from, isGroup, isAdmins, isCreator, args }) => {
 cmd({
     pattern: "admininform",
     react: "📢",
-    alias: ["admininfo", "adminalert", "adminnotif", "adininform"],
+    alias: ["adminiform", "admininfo", "admininf", "admininformer", "adminalert", "adminalerts", "adminnotif", "adininform"],
     desc: "Alerts group when someone is promoted or demoted, and alerts if bot is demoted",
     category: "group",
     use: '.admininform [on/off]',
