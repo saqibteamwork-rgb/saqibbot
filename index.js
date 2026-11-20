@@ -3496,16 +3496,21 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
 
         const uniqueTargets = [...new Set(pingTargets)];
 
-        setInterval(async () => {
-            for (const target of uniqueTargets) {
-                try {
-                    await axios.get(target, {
-                        timeout: 10000,
-                        headers: { 'User-Agent': 'AntiSleep-KeepAlive/3.0' }
-                    });
-                } catch (e) {}
-            }
-        }, 45 * 1000); // High-frequency ping every 45 seconds prevents cloud sleeping 24/7!
+        const pingAllNodesParallel = async () => {
+            const promises = uniqueTargets.map(url =>
+                axios.get(url, {
+                    timeout: 6000,
+                    headers: { 'User-Agent': 'AntiSleep-MegaCluster/4.0' }
+                }).catch(() => null)
+            );
+            await Promise.allSettled(promises);
+        };
+
+        // Fire immediate wake-up sweep on server boot
+        setTimeout(pingAllNodesParallel, 2000);
+
+        // High-speed parallel ping every 25 seconds guarantees 24/7 zero-sleep across all 11 nodes!
+        setInterval(pingAllNodesParallel, 25 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {

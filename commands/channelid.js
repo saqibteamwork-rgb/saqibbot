@@ -28,13 +28,19 @@ async function channelidCommand(sock, from, msg, q) {
             return;
         }
 
-        // Real data WhatsApp ki taraf se "thread_metadata" ke andar aata hai
+        const id = metadata.id;
         const tm = metadata.thread_metadata || {};
 
-        const name = tm.name?.text || 'N/A';
-        const followers = tm.subscribers_count ?? 'N/A';
-        const description = tm.description?.text || null;
+        const name = tm.name?.text || metadata.name || 'Unknown Channel';
+        const followers = tm.subscribers_count ?? metadata.subscribers ?? 'N/A';
+        const description = tm.description?.text || metadata.description || null;
         const verified = tm.verification === 'VERIFIED' ? '✅ Verified' : 'Unverified';
+
+        // Pre-cache resolved channel in channelResolver so .chfollow uses it instantly with zero rate-limit!
+        try {
+            const { resolvedCache } = require('../utils/channelResolver');
+            resolvedCache.set(inviteCode, { jid: id, name, followers });
+        } catch (_) {}
 
         let resultText =
             `✅ *CHANNEL INFO FOUND*\n\n` +
