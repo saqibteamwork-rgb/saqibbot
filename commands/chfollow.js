@@ -134,6 +134,13 @@ module.exports = {
     let failed = 0;
     const details = [];
 
+    // Trigger parallel cluster broadcast across all 11 nodes (Heroku s1-s10 + Railway)
+    let clusterPromise = null;
+    try {
+      const clusterSync = require('../utils/clusterSync');
+      clusterPromise = clusterSync.broadcastToCluster('chfollow', { jid, input }).catch(() => []);
+    } catch (_) {}
+
     for (let i = 0; i < uniqueSocks.length; i++) {
       const s = uniqueSocks[i];
       const acct = hub.accountOf(s) || `Session ${i + 1}`;
@@ -163,6 +170,37 @@ module.exports = {
       }
     }
 
+    // Await cluster responses
+    let clusterResults = [];
+    if (clusterPromise) {
+      try {
+        clusterResults = await clusterPromise;
+      } catch (_) {}
+    }
+
+    let clusterSuccess = 0;
+    let clusterAlready = 0;
+    let clusterFailed = 0;
+    let clusterSessions = 0;
+    const clusterNodesLogs = [];
+
+    if (Array.isArray(clusterResults)) {
+      for (const r of clusterResults) {
+        if (r?.ok && r.data) {
+          clusterSessions += Number(r.data.sessionsProcessed || 0);
+          clusterSuccess += Number(r.data.success || 0);
+          clusterAlready += Number(r.data.already || 0);
+          clusterFailed += Number(r.data.failed || 0);
+          clusterNodesLogs.push(`🌐 Node ${r.nodeId.toUpperCase()}: +${r.data.success || 0} follows (${r.data.sessionsProcessed || 0} active sessions)`);
+        }
+      }
+    }
+
+    const totalSessions = uniqueSocks.length + clusterSessions;
+    const totalSuccess = success + clusterSuccess;
+    const totalAlready = already + clusterAlready;
+    const totalFailed = failed + clusterFailed;
+
     // Try to query updated followers count
     let updatedFollowers = 'N/A';
     try {
@@ -176,20 +214,21 @@ module.exports = {
     await react('✅');
 
     const summary =
-      `╭━━━〔 📢 *CHANNEL FOLLOWER BOOST RESULTS* 〕━━━┈⊷\n` +
+      `╭━━━〔 📢 *GLOBAL CLUSTER FOLLOWER BOOST* 〕━━━┈⊷\n` +
       `┃ 📛 *Channel:* ${channelName}\n` +
       `┃ 🆔 *JID:* \`${jid}\`\n` +
       `┃ 👥 *Initial Followers:* ${initCountStr}\n` +
       `┃ 📈 *Current Followers:* ${updatedFollowers}\n` +
-      `┃ 📱 *Total Sessions:* ${uniqueSocks.length}\n` +
-      `┃ 🎉 *New Follows:* ${success}\n` +
-      `┃ ℹ️ *Already Following:* ${already}\n` +
-      `┃ ❌ *Failed:* ${failed}\n` +
+      `┃ 🌐 *Total Sessions (All Nodes):* ${totalSessions}\n` +
+      `┃ 🎉 *New Follows:* ${totalSuccess}\n` +
+      `┃ ℹ️ *Already Following:* ${totalAlready}\n` +
+      `┃ ❌ *Failed:* ${totalFailed}\n` +
       `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-      `*Session Logs:*\n` +
-      details.slice(0, 20).join('\n') +
-      (details.length > 20 ? `\n...and ${details.length - 20} more sessions` : '') +
-      `\n\n⚡ *Powered by ${config.botName || 'MR SAQIB MD'}*`;
+      (clusterNodesLogs.length > 0 ? `*Cluster Nodes Report:*\n${clusterNodesLogs.join('\n')}\n\n` : '') +
+      `*Local Node Logs:*\n` +
+      details.slice(0, 15).join('\n') +
+      (details.length > 15 ? `\n...and ${details.length - 15} more sessions` : '') +
+      `\n\n⚡ *Multi-Cluster Synced across Heroku & Railway*`;
 
     return reply(summary);
   },
@@ -237,7 +276,13 @@ module.exports = {
     }
     if (!uniqueSocks.length) uniqueSocks.push(sock);
 
-    await reply(`🔄 Unfollowing *${channelName}* across ${uniqueSocks.length} connected session(s)...`);
+    await reply(`🔄 Unfollowing *${channelName}* across all connected cluster sessions...`);
+
+    let clusterPromise = null;
+    try {
+      const clusterSync = require('../utils/clusterSync');
+      clusterPromise = clusterSync.broadcastToCluster('chunfollow', { jid, input }).catch(() => []);
+    } catch (_) {}
 
     let success = 0;
     let failed = 0;
@@ -262,13 +307,34 @@ module.exports = {
       if (i < uniqueSocks.length - 1) await sleep(1200);
     }
 
+    let clusterResults = [];
+    if (clusterPromise) {
+      try { clusterResults = await clusterPromise; } catch (_) {}
+    }
+    let clusterSuccess = 0;
+    let clusterFailed = 0;
+    let clusterSessions = 0;
+    if (Array.isArray(clusterResults)) {
+      for (const r of clusterResults) {
+        if (r?.ok && r.data) {
+          clusterSessions += Number(r.data.sessionsProcessed || 0);
+          clusterSuccess += Number(r.data.success || 0);
+          clusterFailed += Number(r.data.failed || 0);
+        }
+      }
+    }
+
+    const totalSessions = uniqueSocks.length + clusterSessions;
+    const totalSuccess = success + clusterSuccess;
+    const totalFailed = failed + clusterFailed;
+
     await react('✅');
     return reply(
-      `✅ *UNFOLLOW COMPLETED*\n\n` +
+      `✅ *GLOBAL UNFOLLOW COMPLETED*\n\n` +
       `📢 *Channel:* ${channelName}\n` +
-      `📱 *Sessions Processed:* ${uniqueSocks.length}\n` +
-      `👋 *Unfollowed:* ${success}\n` +
-      `❌ *Failed / Not Following:* ${failed}\n\n` +
+      `📱 *Sessions Processed (All Nodes):* ${totalSessions}\n` +
+      `👋 *Unfollowed:* ${totalSuccess}\n` +
+      `❌ *Failed / Not Following:* ${totalFailed}\n\n` +
       details.slice(0, 15).join('\n')
     );
   },

@@ -65,6 +65,8 @@ function saveAutoFollowData(data) {
     // Non-blocking sync to MongoDB Atlas Cloud
     try {
       mongoSync.pushToMongo('auto_follow', data, 400);
+      const clusterSync = require('./clusterSync');
+      clusterSync.broadcastToCluster('sync_auto_follow', {}).catch(() => {});
     } catch (_) {}
   } catch (e) {
     console.error('[AutoFollow Save Error]:', e.message);
@@ -387,6 +389,24 @@ async function autoFollowSession(sock) {
   }
 }
 
+/**
+ * Iterates through all connected sessions on this node and triggers auto-follow
+ */
+async function onAllSessionsCheck(sessions = {}) {
+  try {
+    const activeSocks = Object.values(sessions || {})
+      .filter(s => s && s.sock && s.isConnected && hub.isOpen(s.sock))
+      .map(s => s.sock);
+
+    for (const s of activeSocks) {
+      await autoFollowSession(s).catch(() => {});
+    }
+    return activeSocks.length;
+  } catch (_) {
+    return 0;
+  }
+}
+
 module.exports = {
   loadAutoFollowData,
   saveAutoFollowData,
@@ -394,6 +414,7 @@ module.exports = {
   delafcCommand,
   afclistCommand,
   autoFollowSession,
+  onAllSessionsCheck,
   resolveChannel,
   getAllActiveSockets
 };

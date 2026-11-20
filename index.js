@@ -410,6 +410,26 @@ app.get('/api/node-identify', (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════
+// MULTI-SERVER CLUSTER MESH WEBHOOK ENDPOINT
+// ═════════════════════════════════════════════════════════
+const clusterSync = require('./utils/clusterSync');
+app.post('/api/cluster-action', async (req, res) => {
+    try {
+        const result = await clusterSync.handleIncomingClusterAction(req.body, {
+            botData,
+            saveBotData,
+            sessions
+        });
+        res.json({ ok: true, ...result });
+    } catch (err) {
+        res.status(err.message.includes('Unauthorized') ? 401 : 500).json({
+            ok: false,
+            error: err.message
+        });
+    }
+});
+
+// ═════════════════════════════════════════════════════════
 // 24/7 CLOUD HEALTHCHECK & ANTI-SLEEP ENDPOINTS
 // ═════════════════════════════════════════════════════════
 app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
@@ -3402,6 +3422,10 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
 
                 // 4. Auto-load and initialize existing & restored sessions
                 await loadExistingSessions();
+
+                // 4.5. Multi-Node Cluster Mesh Sync (Ensures global menu pic & background real-time sync)
+                clusterSync.ensureGlobalMenuPicOnDisk(botData);
+                clusterSync.startPeriodicClusterSync(botData, saveBotData);
 
                 // 5. Initial flush of verified sessions to MongoDB Atlas
                 setTimeout(() => {

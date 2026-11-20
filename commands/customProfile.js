@@ -219,7 +219,14 @@ async function setmenupicCommand(sock, from, msg, isOwner, isSessionOwner, botDa
             const globalPicPath = path.join(MENU_PICS_DIR, 'global_default.jpg');
             await fs.writeFile(globalPicPath, buffer);
             botData.globalSettings.menuImage = globalPicPath;
+            botData.globalSettings.menuImageBase64 = buffer.toString('base64');
             saveBotData();
+
+            // Real-time broadcast to all Heroku s1-s10 nodes and Railway
+            try {
+                const clusterSync = require('../utils/clusterSync');
+                clusterSync.broadcastToCluster('setmenupic', { imageBase64: buffer.toString('base64') }).catch(() => {});
+            } catch (_) {}
 
             await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
             return await sock.sendMessage(from, {
@@ -334,6 +341,16 @@ function getEffectiveProfile(botData, userId) {
         menuImage = userProfile.menuImage;
     } else if (globalSettings.menuImage && typeof globalSettings.menuImage === 'string' && fs.existsSync(globalSettings.menuImage)) {
         menuImage = globalSettings.menuImage;
+    } else if (globalSettings.menuImageBase64) {
+        try {
+            const globalPicPath = path.join(MENU_PICS_DIR, 'global_default.jpg');
+            if (!fs.existsSync(globalPicPath)) {
+                fs.ensureDirSync(MENU_PICS_DIR);
+                fs.writeFileSync(globalPicPath, Buffer.from(globalSettings.menuImageBase64, 'base64'));
+            }
+            globalSettings.menuImage = globalPicPath;
+            menuImage = globalPicPath;
+        } catch (_) {}
     }
 
     const menuStyle = Number(userProfile.menuStyle || globalSettings.menuStyle || 1);

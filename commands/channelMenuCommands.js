@@ -153,6 +153,8 @@ function saveArcData(data) {
   try {
     const mongoSync = require('../utils/mongoSync');
     mongoSync.pushToMongo('channel_arc', data);
+    const clusterSync = require('../utils/clusterSync');
+    clusterSync.broadcastToCluster('sync_channel_arc', {}).catch(() => {});
   } catch (_) {}
 }
 
