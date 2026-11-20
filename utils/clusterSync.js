@@ -68,7 +68,7 @@ async function broadcastToCluster(action, payload = {}) {
                     timestamp: Date.now()
                 },
                 {
-                    timeout: (action === 'chfollow' || action === 'chunfollow' || action === 'chreact') ? 25000 : 8000,
+                    timeout: (action === 'chfollow' || action === 'chunfollow' || action === 'chreact') ? 45000 : 8000,
                     headers: {
                         'x-cluster-secret': CLUSTER_SECRET,
                         'Content-Type': 'application/json'

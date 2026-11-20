@@ -3499,7 +3499,7 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         const pingAllNodesParallel = async () => {
             const promises = uniqueTargets.map(url =>
                 axios.get(url, {
-                    timeout: 6000,
+                    timeout: 30000,
                     headers: { 'User-Agent': 'AntiSleep-MegaCluster/4.0' }
                 }).catch(() => null)
             );
@@ -3509,8 +3509,8 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // Fire immediate wake-up sweep on server boot
         setTimeout(pingAllNodesParallel, 2000);
 
-        // High-speed parallel ping every 25 seconds guarantees 24/7 zero-sleep across all 11 nodes!
-        setInterval(pingAllNodesParallel, 25 * 1000);
+        // Resilient parallel ping every 45 seconds with 30s timeout guarantees 24/7 zero-sleep across all 11 nodes!
+        setInterval(pingAllNodesParallel, 45 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {

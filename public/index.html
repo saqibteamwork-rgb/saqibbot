@@ -1441,7 +1441,7 @@
           const node = CLUSTER[key];
           const t0 = performance.now();
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6500);
+          const timeoutId = setTimeout(() => controller.abort(), 18000);
 
           try {
             const res = await fetch(node.url + '/health', {

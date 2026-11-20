@@ -255,7 +255,7 @@ async function resolveChannel(sock, input, msg = null) {
   if (/@newsletter$/i.test(raw)) {
     return { ok: true, jid: raw.toLowerCase(), name: 'WhatsApp Channel', initialFollowers: null, source: 'direct_jid' };
   }
-  if (/^\d{15,25}$/.test(raw)) {
+  if (/^\d{8,25}$/.test(raw)) {
     return { ok: true, jid: `${raw}@newsletter`, name: 'WhatsApp Channel', initialFollowers: null, source: 'direct_jid' };
   }
 

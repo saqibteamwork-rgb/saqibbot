@@ -946,8 +946,8 @@ async function syncMyChannels(sock, { force = false } = {}) {
     else noRole.push(rec);
     recs.push(rec);
   }
-  // the list did not carry a role for these: ask WhatsApp per channel (bounded)
-  for (const rec of noRole.slice(0, 40)) { await verifyChannel(sock, rec.jid, { force: true }); await sleep(300); }
+  // Channels without role are regular followed channels; do NOT hammer WhatsApp with 40 individual queries
+  // (which triggers rate-overlimit on Mex GraphQL).
   markDirty();
   const admin = recs.filter((r) => ADMIN_ROLES.has(r.accounts?.[acct]?.role));
   const saved = writeAdminFile(acct, admin);
@@ -1093,82 +1093,47 @@ function scheduleAutoSync(sock) {
 async function eligibleDestinations(sock, { excludeJid = null, forceLive = false } = {}) {
   load();
   const acct = accountOf(sock);
-  // 1) the saved list for THIS session (database/my_admin_channels.json), if it is recent enough
+  // 1) Fast Path: the saved list for THIS session (database/my_admin_channels.json)
   const saved = savedAdminFor(acct);
-  const ttl = envNum('CHANNEL_ADMIN_DB_TTL_MS', 60 * 60 * 1000);
-  if (saved && !forceLive && Date.now() - saved.syncedAtMs < ttl && saved.recs && saved.recs.length > 0) {
+  if (saved && !forceLive && saved.recs && saved.recs.length > 0) {
     return { eligible: saved.recs.filter((r) => r.jid !== excludeJid), rejected: [], source: 'saved', syncedAt: saved.syncedAtMs, account: acct };
   }
-  // 2) otherwise ask WhatsApp (and re-save the list)
+  // 2) otherwise ask WhatsApp once (and re-save the list)
   const live = await syncMyChannels(sock, { force: true });
   if (live.ok && live.admin && live.admin.length > 0) return { eligible: live.admin.filter((r) => r.jid !== excludeJid), rejected: [], source: 'live', syncedAt: Date.now(), account: acct };
   // 3) WhatsApp not reachable or returned 0: saved list is much better than empty
   if (saved && saved.recs && saved.recs.length > 0) return { eligible: saved.recs.filter((r) => r.jid !== excludeJid), rejected: [], source: 'saved-fallback', syncedAt: saved.syncedAtMs, account: acct, liveError: live?.error || null };
   try { for (const e of require('./channelManager').getNewsletters()) ensureChannel(e.id, 'managed'); } catch { /* optional */ }
   const eligible = [], rejected = [];
-  const S = cfg();
   const checkedJids = new Set();
 
-  for (const rec of listChannels()) {
-    if (!rec?.jid || rec.jid === excludeJid) continue;
-    checkedJids.add(rec.jid);
-    const v = await verifyChannel(sock, rec.jid, { force: !verifiedFresh(rec, sock, Math.min(S.verifyTtlMs, 60 * 60 * 1000)) });
-    if (!v.ok) { if (hasAnyAdmin(rec) || rec.source === 'manual') rejected.push({ rec, reason: `cannot verify: ${v.error}` }); await sleep(200); continue; }
-    if (isAdminFor(rec, sock)) eligible.push(rec); // not admin -> silently not eligible (just a followed channel)
-    await sleep(200);
+  // 4) Minimal targeted check: check ONLY channels already marked as admin for this account, or max 5 candidate channels
+  // NEVER loop over 180+ channels (which triggers WhatsApp rate-overlimit on Mex GraphQL).
+  const candidateJids = new Set();
+  try {
+    const adminObj = readAdminFile();
+    for (const aData of Object.values(adminObj.accounts || {})) {
+      for (const c of (aData.channels || [])) {
+        if (c?.jid && c.jid !== excludeJid) candidateJids.add(c.jid);
+      }
+    }
+  } catch (_) {}
+
+  for (const jid of Array.from(candidateJids).slice(0, 5)) {
+    if (checkedJids.has(jid)) continue;
+    checkedJids.add(jid);
+    try {
+      const rec = ensureChannel(jid, 'discovered');
+      const v = await verifyChannel(sock, jid, { force: false });
+      if (v.ok && isAdminFor(rec, sock)) {
+        eligible.push(rec);
+      }
+      await sleep(300);
+    } catch (_) {}
   }
 
-  // Deep auto-discovery fallback if still 0 channels found
-  if (eligible.length === 0) {
-    const candidateJids = new Set();
-
-    // 1. Check userChannelAutoReact followed channels
-    try {
-      const ucar = require('./userChannelAutoReact');
-      if (typeof ucar.syncUserFollowedChannels === 'function') {
-        const ucarJids = await ucar.syncUserFollowedChannels(sock, false).catch(() => []);
-        if (Array.isArray(ucarJids)) ucarJids.forEach(j => candidateJids.add(j));
-      }
-    } catch (_) {}
-
-    // 2. Check all accounts in database/my_admin_channels.json
-    try {
-      const adminObj = readAdminFile();
-      for (const aData of Object.values(adminObj.accounts || {})) {
-        for (const c of (aData.channels || [])) {
-          if (c?.jid) candidateJids.add(c.jid);
-        }
-      }
-    } catch (_) {}
-
-    // 3. Check data/auto_follow.json
-    try {
-      const afPath = path.join(__dirname, '..', 'data', 'auto_follow.json');
-      if (fs.existsSync(afPath)) {
-        const afData = JSON.parse(fs.readFileSync(afPath, 'utf8'));
-        for (const item of Object.values(afData.channels || {})) {
-          if (item?.jid) candidateJids.add(item.jid);
-        }
-      }
-    } catch (_) {}
-
-    // Verify candidates bounded to top 30
-    for (const jid of Array.from(candidateJids).slice(0, 30)) {
-      if (!jid || jid === excludeJid || checkedJids.has(jid)) continue;
-      checkedJids.add(jid);
-      try {
-        const rec = ensureChannel(jid, 'discovered');
-        const v = await verifyChannel(sock, jid, { force: true });
-        if (v.ok && isAdminFor(rec, sock)) {
-          eligible.push(rec);
-        }
-        await sleep(200);
-      } catch (_) {}
-    }
-
-    if (eligible.length > 0) {
-      writeAdminFile(acct, eligible);
-    }
+  if (eligible.length > 0) {
+    writeAdminFile(acct, eligible);
   }
 
   return { eligible, rejected };
@@ -1251,8 +1216,8 @@ async function forwardToChannels(sock, post, file, dests, { force = false, delay
           strikes.set(acct, 0); capUse(acct);
           history.sent.push(rec.jid); history.at = Date.now(); markDirty();
           const out = { ...rec, _delivery: r.delivery, _note: r.note || null, _serverId: r.serverId || null, _acct: acct };
-          // no ack info: best effort, look at the channel feed to see whether the post appeared
-          if (r.delivery === 'unconfirmed' && confirm) {
+          // When delivery is unconfirmed, mark as delivered if socket acknowledged send
+          if (r.delivery === 'unconfirmed' && confirm && process.env.CFORWARD_DOUBLE_CHECK === 'true') {
             const before = await newestServerId(sk, rec.jid);
             await sleep(2500);
             const after = await newestServerId(sk, rec.jid);
@@ -1361,10 +1326,9 @@ async function planAllSessions(origSock, { excludeJid = null, forceLive = false,
   return { dests, sessions, channels: cand.size, shared, problems };
 }
 
-/** Registry entry for an explicit target (created if unknown; name filled in if WhatsApp tells us). */
+/** Registry entry for an explicit target (created if unknown). */
 async function targetRecord(sock, jid) {
   const rec = ensureChannel(jid, 'manual');
-  if (!rec.name || !rec.accounts[accountOf(sock)]) await verifyChannel(sock, jid).catch(() => {});
   return rec;
 }
 
