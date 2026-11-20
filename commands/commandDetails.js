@@ -182,6 +182,43 @@ const COMMAND_GUIDES = {
       '.saqib info'
     ]
   },
+  saveprem: {
+    name: 'saveprem',
+    aliases: ['sprem', 'setprem', 'saveprs', 'premsave'],
+    category: 'STICKER & REACTION',
+    permission: 'Everyone 🌐',
+    usage: '.saveprem [1-10]',
+    desc: 'Kisi bhi Premium/Lottie/Animated Sticker ko Slot 1 se 10 mein save karein.',
+    params: [
+      '[1-10]: Slot number jahan sticker save karna hai (optional, auto-picks empty slot)'
+    ],
+    examples: [
+      '(Sticker ko reply karein) ➜ .saveprem 1',
+      '(Sticker ko reply karein) ➜ .saveprem 2',
+      '(Sticker ko reply karein) ➜ .sprem'
+    ]
+  },
+  prs: {
+    name: 'prs',
+    aliases: ['prs1', 'prs2', 'prs3', 'prs4', 'prs5', 'prs6', 'prs7', 'prs8', 'prs9', 'prs10', 'prem1', 'prem2', 'prem3', 'prem4', 'prem5', 'prem6', 'prem7', 'prem8', 'prem9', 'prem10', 'prslist'],
+    category: 'STICKER & REACTION',
+    permission: 'Everyone 🌐',
+    usage: '.prs<1-10> ya .prem<1-10> [send]',
+    desc: 'Saved Premium/Lottie sticker se replied message par react karta hai (ya bina reply ke standalone send karta hai).',
+    params: [
+      '<1-10>: Slot number (1 se 10)',
+      'send: Force standalone send even in reply',
+      'list: View all saved slots (.prs list)',
+      'del <1-10>: Delete slot (.prs del 2)'
+    ],
+    examples: [
+      '(Message ko reply karein) ➜ .prs1 (Slot 1 sticker reaction)',
+      '(Message ko reply karein) ➜ .prem2 (Slot 2 sticker reaction)',
+      '.prs1 (Standalone send)',
+      '.prs list (View all saved slots)',
+      '.prs del 2 (Clear slot 2)'
+    ]
+  },
   mt: {
     name: 'mt',
     aliases: ['mimic', 'voicecopy', 'mirrorvoice', 'voicereply', 'samevoice'],

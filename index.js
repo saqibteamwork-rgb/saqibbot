@@ -156,6 +156,7 @@ const {
 // Newly integrated modules from D:\PDF-Base-main (1)
 const { lottieCommand } = require('./commands/lottie');
 const { saqibLottieCommand } = require('./commands/saqibLottie');
+const { savePremiumCommand, reactPremiumCommand } = require('./commands/premiumStickerManager');
 const { simdataCommand } = require('./commands/simdata');
 const { truecallerCommand } = require('./commands/truecaller');
 const { trackipCommand } = require('./commands/trackip');
@@ -2513,6 +2514,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'saqib': case 'saq': case 'saqibsticker': case 'saqsticker': case 'saqibreact': case 'saqreact': case 'saqibofc': case 'lottie2': case 'was2': case 'premiumsticker':
                                             await saqibLottieCommand(this.sock, from, msg, args, command);
                                             break;
+                                        // ===== PREMIUM STICKER VAULT & REACTION (.saveprem / .prs1 / .prem1) =====
+                                        case 'saveprem': case 'sprem': case 'setprem': case 'saveprs': case 'premsave':
+                                            await savePremiumCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'prs': case 'prs1': case 'prs2': case 'prs3': case 'prs4': case 'prs5':
+                                        case 'prs6': case 'prs7': case 'prs8': case 'prs9': case 'prs10': case 'prslist':
+                                        case 'prem1': case 'prem2': case 'prem3': case 'prem4': case 'prem5':
+                                        case 'prem6': case 'prem7': case 'prem8': case 'prem9': case 'prem10':
+                                            await reactPremiumCommand(this.sock, from, msg, args, command);
+                                            break;
                                         case 'sim': case 'simdata': case 'cnic':
                                             await simdataCommand(this.sock, from, msg, args);
                                             break;
@@ -2905,6 +2916,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await ownerManager.pmlistCommand(this.sock, from, msg, isOwner);
                                             break;
                                         case 'checkprem': case 'myprem': case 'preminfo': case 'pmcheck': case 'prem': case 'premium':
+                                            if (command === 'prem' && args.length > 0 && (/^\d+$/.test(args[0]) || ['list', 'del', 'delete', 'ls', 'all'].includes(args[0].toLowerCase()))) {
+                                                await reactPremiumCommand(this.sock, from, msg, args, command);
+                                                break;
+                                            }
                                             await ownerManager.checkpremCommand(this.sock, from, msg, isOwner, args, groupMetadata);
                                             break;
                                         case 'cs': case 'checksession': case 'checksessions': case 'sessions': case 'paired': case 'botsessions':
