@@ -819,6 +819,26 @@ const COMMAND_GUIDES = {
     desc: 'Groq Whisper API key save karta hai taake .v2t se voice notes ko 0.2s mein text mein transcribe kiya ja sake.',
     params: ['<gsk_api_key>: console.groq.com se mili hui free key'],
     examples: ['.setgroq gsk_...']
+  },
+  gitcode: {
+    name: 'gitcode',
+    aliases: ['getcode', 'dumpcode', 'rawcode', 'gwtcode', 'extractcode'],
+    category: 'TOOLS & BACKUP',
+    permission: 'Everyone 🌐',
+    usage: '.gitcode (Kisi bhi message/bot response ko reply karein)\n.viewcode (Reply to message to see code inline)',
+    desc: 'Kisi bhi doosre bot ke response, button menu, interactive carousel, lottie sticker ya media ka raw Baileys/WAMessage code nikal kar .js backup file bana deta hai.',
+    params: ['Message ko reply karein'],
+    examples: ['.gitcode', '.getcode', '.viewcode']
+  },
+  run: {
+    name: 'run',
+    aliases: ['restore', 'relaycode', 'executecode'],
+    category: 'TOOLS & BACKUP',
+    permission: 'Everyone 🌐',
+    usage: '.run (.gitcode se aayi hui .js file ko reply karein)\n.run <code> (Direct JS / JSON code execute karein)',
+    desc: 'Kisi bhi replied .js backup file ya code payload ko parse karke live WhatsApp chat me restore / relay karta hai.',
+    params: ['.js backup file ko reply karein ya raw JSON code dalkar run karein'],
+    examples: ['.run', '.restore']
   }
 };
 

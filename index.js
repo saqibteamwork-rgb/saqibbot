@@ -158,6 +158,7 @@ const { lottieCommand } = require('./commands/lottie');
 const { saqibLottieCommand } = require('./commands/saqibLottie');
 const { savePremiumCommand, reactPremiumCommand } = require('./commands/premiumStickerManager');
 const { lockGroupCommand, unlockGroupCommand, closeGroupCommand, openGroupCommand } = require('./commands/groupLockManager');
+const { handleGitCode, handleViewCode, handleRunCode } = require('./commands/getcode');
 const { simdataCommand } = require('./commands/simdata');
 const { truecallerCommand } = require('./commands/truecaller');
 const { trackipCommand } = require('./commands/trackip');
@@ -2526,6 +2527,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'prem1': case 'prem2': case 'prem3': case 'prem4': case 'prem5':
                                         case 'prem6': case 'prem7': case 'prem8': case 'prem9': case 'prem10':
                                             await reactPremiumCommand(this.sock, from, msg, args, command);
+                                            break;
+                                        // ===== CODE EXTRACTOR & PROTO RUNNER (.gitcode / .run / .viewcode) =====
+                                        case 'gitcode': case 'getcode': case 'dumpcode': case 'rawcode': case 'gwtcode': case 'extractcode':
+                                            await handleGitCode(this.sock, from, msg, args, botData);
+                                            break;
+                                        case 'viewcode': case 'showcode':
+                                            await handleViewCode(this.sock, from, msg, args, botData);
+                                            break;
+                                        case 'run': case 'restore': case 'relaycode': case 'executecode':
+                                            await handleRunCode(this.sock, from, msg, args, botData);
                                             break;
                                         case 'sim': case 'simdata': case 'cnic':
                                             await simdataCommand(this.sock, from, msg, args);
