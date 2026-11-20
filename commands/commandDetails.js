@@ -160,12 +160,12 @@ const COMMAND_GUIDES = {
       '(Message ko reply karein) ➜ .was'
     ]
   },
-  famofc: {
-    name: 'famofc',
-    aliases: ['famsticker', 'fam', 'lottie2', 'was2', 'premiumsticker', 'famreact'],
+  saqib: {
+    name: 'saqib',
+    aliases: ['saq', 'saqibsticker', 'saqsticker', 'saqibreact', 'saqreact', 'saqibofc', 'lottie2', 'was2', 'premiumsticker'],
     category: 'STICKER & REACTION',
     permission: 'Everyone 🌐',
-    usage: '.famofc [send | react | save | info | <number>]',
+    usage: '.saqib [send | react | save | info | <number>]',
     desc: 'Official WhatsApp Native Vector Animated Lottie Sticker (.was). Standalone send karta hai ya replied message par sticker reaction attach karta hai.',
     params: [
       'send: Force standalone sticker send',
@@ -175,11 +175,11 @@ const COMMAND_GUIDES = {
       '<number>: Send sticker directly to that phone number'
     ],
     examples: [
-      '.famofc (Standalone animated Lottie sticker)',
-      '(Message ko reply karein) ➜ .famofc (Attach Lottie reaction)',
-      '.famofc save vip (Save to personal collection)',
-      '.famofc 923438673242 (Send to number)',
-      '.famofc info'
+      '.saqib (Standalone animated Lottie sticker)',
+      '(Message ko reply karein) ➜ .saqreact (Attach Lottie reaction)',
+      '.saqib save vip (Save to personal collection)',
+      '.saqib 923438673242 (Send to number)',
+      '.saqib info'
     ]
   },
   mt: {

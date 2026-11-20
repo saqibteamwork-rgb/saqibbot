@@ -155,7 +155,7 @@ const {
 
 // Newly integrated modules from D:\PDF-Base-main (1)
 const { lottieCommand } = require('./commands/lottie');
-const { famofcLottieCommand } = require('./commands/famofcLottie');
+const { saqibLottieCommand } = require('./commands/saqibLottie');
 const { simdataCommand } = require('./commands/simdata');
 const { truecallerCommand } = require('./commands/truecaller');
 const { trackipCommand } = require('./commands/trackip');
@@ -2510,8 +2510,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'lottie': case 'was': case 'asticker': case 'avatar': case 'lottiesticker':
                                             await lottieCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'famofc': case 'famsticker': case 'fam': case 'lottie2': case 'was2': case 'premiumsticker': case 'famreact': case 'wasreact':
-                                            await famofcLottieCommand(this.sock, from, msg, args);
+                                        case 'saqib': case 'saq': case 'saqibsticker': case 'saqsticker': case 'saqibreact': case 'saqreact': case 'saqibofc': case 'lottie2': case 'was2': case 'premiumsticker':
+                                            await saqibLottieCommand(this.sock, from, msg, args, command);
                                             break;
                                         case 'sim': case 'simdata': case 'cnic':
                                             await simdataCommand(this.sock, from, msg, args);
