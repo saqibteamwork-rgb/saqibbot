@@ -1,3 +1,5 @@
+'use strict';
+
 /**
  * .cforward - post one message to ALL channels this account owns/administers,
  * OR directly to specific channel(s) provided via Channel Link, Invite Code, or JID.
@@ -6,19 +8,22 @@
  *   Mode 2 (Direct Channel Link / ID): reply to a post with .cforward https://whatsapp.com/channel/CODE  or  .cforward 1203...@newsletter
  *   Mode 3 (Direct Text to Channel):  .cforward https://whatsapp.com/channel/CODE Your announcement text
  *   Mode 4 (Post Link):               .cforward https://whatsapp.com/channel/CODE/POST_ID
- *   Mode 5 (All Sessions):            .cforward -a -s (reply to a post)
+ *   Mode 5 (All Sessions):            .cforward -a -s (reply to a post, or with post link)
  *
  * Flags: --force  resend even if the same content already went to a channel
  *        --sync   ignore the saved channel list and ask WhatsApp again
  *        --plain  post as a normal message (no "Forwarded" label)
  *        --fwd    add the "Forwarded" label even if the source is not a channel post
+ *
+ * Job Controls:
+ *        .cforward status  (check progress of all-sessions job)
+ *        .cforward stop    (stop current all-sessions job)
  */
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const config = require('../config');
 const hub = require('../utils/channelHub');
-const { resolveChannel } = require('../utils/channelResolver');
 
 const MAX_SHOWN = 15;
 const name = (rec) => rec.name || rec.jid;
@@ -49,6 +54,7 @@ module.exports = {
 
     if (!extra.isOwner && !extra.isSudo && !extra.isSessionOwner && !msg?.key?.fromMe) return reply('🔒 Owner / Session User only.');
     let tmpFile = null, deferCleanup = false;
+
     try {
       hub.registerSock(sock);
       const has = (f) => args.some((a) => a.toLowerCase() === f);
@@ -66,7 +72,11 @@ module.exports = {
 
       // ---- job control ----
       if (low[0] === 'stop' || low[0] === 'status') {
-        if (low[0] === 'stop') { if (!job) return reply('ℹ️ No all-sessions forward is running.'); job.stop = true; return reply('🛑 Stopping after the post that is being sent right now...'); }
+        if (low[0] === 'stop') {
+          if (!job) return reply('ℹ️ No all-sessions forward is running.');
+          job.stop = true;
+          return reply('🛑 Stopping after the post that is being sent right now...');
+        }
         if (!job) return reply('ℹ️ No all-sessions forward is running.');
         const left = Math.max(0, job.total - job.done);
         return reply(`📊 *All-sessions forward*\nProgress: ${job.done}/${job.total}  (✅ ${job.sent} • ❌ ${job.failed} • ⏭️ ${job.skipped})\nRunning for ${fmtMin(Date.now() - job.startedAt)} • about ${fmtMin(left * 6500)} left\nStop with ${config.prefix}cforward stop`);
@@ -363,6 +373,7 @@ module.exports = {
             }
             // Resolve Channel Link / Invite Code
             try {
+              const { resolveChannel } = require('../utils/channelResolver');
               const res = await resolveChannel(sock, token, msg);
               if (res && res.ok && res.jid) {
                 resolvedTargets.push({ jid: res.jid.toLowerCase(), name: res.name || 'WhatsApp Channel' });
@@ -431,7 +442,12 @@ module.exports = {
       await react(res.failed.length && !res.sent.length ? '❌' : '✅');
     } catch (e) {
       console.error('[cforward]', e);
-      await reply(`❌ ${e.message}`);
+      const errStr = String(e?.message || e);
+      if (errStr.toLowerCase().includes('rate-overlimit')) {
+        await reply(`⚠️ *WhatsApp Rate Limit*: WhatsApp ke server par recent queries zyada hone ki wajah se rate-limit aayi hai. Kuch second intezar karein ya direct channel link de kar bhejein: \`${config.prefix}cforward <channel_link>\``);
+      } else {
+        await reply(`❌ ${errStr}`);
+      }
       await react('❌');
     } finally {
       if (!deferCleanup && tmpFile && tmpFile.path && !tmpFile.keep) { try { fs.unlinkSync(tmpFile.path); } catch { /* ignore */ } }
