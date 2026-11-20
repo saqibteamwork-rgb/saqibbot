@@ -212,15 +212,94 @@ function parseChannelLink(input) {
   return { code: m[1], postId: m[2] || null };
 }
 
-/** Resolve an invite code to a channel (also registers it). */
+/** Resolve an invite code to a channel (cache-first, resilient, multi-socket, never crashes on rate-limit). */
 async function resolveInvite(sock, code) {
-  const meta = parseMeta(await sock.newsletterMetadata('invite', code));
-  if (!meta) throw new Error('Channel not found for that link');
-  const rec = ensureChannel(meta.jid, 'manual');
-  rec.name = meta.name || rec.name; rec.invite = meta.invite || code; rec.subscribers = meta.subscribers ?? rec.subscribers;
-  if (meta.role) rec.accounts[accountOf(sock)] = { role: meta.role, verifiedAt: Date.now(), error: null };
-  markDirty();
-  return { rec, meta };
+  load();
+  code = String(code || '').trim();
+  if (!code) throw new Error('Missing channel invite code');
+
+  // 1. Fast Cache Check in state.channels (channels_v1.json)
+  for (const rec of Object.values(state.channels || {})) {
+    if (rec && rec.invite === code && rec.jid) {
+      return { rec, meta: { jid: rec.jid, name: rec.name, invite: rec.invite, subscribers: rec.subscribers, role: rec.accounts?.[accountOf(sock)]?.role || null } };
+    }
+  }
+
+  // 2. Check data/auto_follow.json
+  try {
+    const afPath = path.join(__dirname, '..', 'data', 'auto_follow.json');
+    if (fs.existsSync(afPath)) {
+      const af = JSON.parse(fs.readFileSync(afPath, 'utf8') || '{}');
+      for (const item of Object.values(af.channels || {})) {
+        if (item?.inviteCode === code && item.jid) {
+          const rec = ensureChannel(item.jid, 'manual');
+          rec.name = item.name || rec.name;
+          rec.invite = code;
+          return { rec, meta: { jid: item.jid, name: item.name, invite: code } };
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 3. Check data/channel_arc.json
+  try {
+    const arcPath = path.join(__dirname, '..', 'data', 'channel_arc.json');
+    if (fs.existsSync(arcPath)) {
+      const arc = JSON.parse(fs.readFileSync(arcPath, 'utf8') || '{}');
+      for (const item of Object.values(arc.channels || {})) {
+        if (item?.invite === code && item.jid) {
+          const rec = ensureChannel(item.jid, 'manual');
+          rec.name = item.name || rec.name;
+          rec.invite = code;
+          return { rec, meta: { jid: item.jid, name: item.name, invite: code } };
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 4. Try channelResolver (which checks RAM cache and public web scraper WITHOUT touching WhatsApp API)
+  try {
+    const { resolveChannel } = require('./channelResolver');
+    const res = await resolveChannel(sock, `https://whatsapp.com/channel/${code}`);
+    if (res && res.ok && res.jid) {
+      const rec = ensureChannel(res.jid, 'manual');
+      rec.name = res.name || rec.name;
+      rec.invite = code;
+      if (res.initialFollowers != null) rec.subscribers = res.initialFollowers;
+      markDirty();
+      return { rec, meta: { jid: res.jid, name: res.name, invite: code, subscribers: res.initialFollowers } };
+    }
+  } catch (_) {}
+
+  // 5. Query WhatsApp directly with multi-session rotation
+  const socksToTry = [sock];
+  try {
+    for (const s of globalThis.ProBoySessionManager?.getActiveSocks?.() || []) {
+      if (s && s !== sock && isOpen(s)) socksToTry.push(s);
+    }
+  } catch (_) {}
+
+  let lastErr = null;
+  for (const s of socksToTry.slice(0, 3)) {
+    try {
+      if (typeof s?.newsletterMetadata === 'function') {
+        const meta = parseMeta(await s.newsletterMetadata('invite', code));
+        if (meta && meta.jid) {
+          const rec = ensureChannel(meta.jid, 'manual');
+          rec.name = meta.name || rec.name;
+          rec.invite = meta.invite || code;
+          rec.subscribers = meta.subscribers ?? rec.subscribers;
+          if (meta.role) rec.accounts[accountOf(s)] = { role: meta.role, verifiedAt: Date.now(), error: null };
+          markDirty();
+          return { rec, meta };
+        }
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+
+  throw lastErr || new Error('Channel not found for that link');
 }
 
 // ---------------------------------------------------------------------------
@@ -461,13 +540,25 @@ async function getPostById(sock, jid, serverId) {
   if (Number.isFinite(n) && n > 1) attempts.push({ count: 5, after: n - 1 });
   attempts.push({ count: cfg().fetchWindow, after: 0 });
   let lastErr = null, sawAny = false;
+
+  const socksToTry = [sock];
+  try {
+    for (const s of globalThis.ProBoySessionManager?.getActiveSocks?.() || []) {
+      if (s && s !== sock && isOpen(s)) socksToTry.push(s);
+    }
+  } catch (_) {}
+
   for (const a of attempts) {
-    try {
-      const msgs = await fetchRecent(sock, jid, a.count, a.after);
-      if (msgs.length) sawAny = true;
-      const hit = msgs.find((m) => m.serverId === serverId && m.message && !m.deleted);
-      if (hit) return { post: { serverId, jid, ts: hit.ts, message: hit.message }, source: 'fetch' };
-    } catch (e) { lastErr = e; }
+    for (const currentSock of socksToTry.slice(0, 3)) {
+      try {
+        const msgs = await fetchRecent(currentSock, jid, a.count, a.after);
+        if (msgs.length) sawAny = true;
+        const hit = msgs.find((m) => m.serverId === serverId && m.message && !m.deleted);
+        if (hit) return { post: { serverId, jid, ts: hit.ts, message: hit.message }, source: 'fetch' };
+      } catch (e) {
+        lastErr = e;
+      }
+    }
   }
   const why = lastErr ? `WhatsApp refused the request (${String(lastErr.message).slice(0, 100)})` : (sawAny ? 'the post is not in the range WhatsApp returned (too old, deleted, or not visible to this account)' : 'WhatsApp returned no messages for that channel (the bot may need to follow it first)');
   const err = new Error(why); err.limitation = true; throw err;

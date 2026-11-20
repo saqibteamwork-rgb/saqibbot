@@ -180,16 +180,32 @@ module.exports = {
         }
 
         await react('⏳');
-        let src;
-        try { src = await hub.resolveInvite(sock, parsed.code); }
-        catch (e) { await react('❌'); return reply(`❌ Could not resolve source channel: ${e.message}`); }
+        let src = null;
+        try {
+          src = await hub.resolveInvite(sock, parsed.code);
+        } catch (e) {
+          // Fallback to channelResolver
+          try {
+            const { resolveChannel } = require('../utils/channelResolver');
+            const res = await resolveChannel(sock, sourcePostLink);
+            if (res && res.ok && res.jid) {
+              src = { rec: hub.ensureChannel(res.jid, 'discovered'), meta: { jid: res.jid, name: res.name } };
+              src.rec.name = res.name || src.rec.name;
+            }
+          } catch (_) {}
+        }
+
+        if (!src || !src.rec?.jid) {
+          await react('❌');
+          return reply(`❌ Source channel resolve nahi ho saka (${parsed.code}). Please check channel link.`);
+        }
         sourceJid = src.rec.jid;
 
         let got;
         try { got = await hub.getPostById(sock, sourceJid, parsed.postId); }
         catch (e) {
           await react('❌');
-          return reply(`❌ Could not retrieve that post from its link (${e.message}).\n\n💡 Alternative: Reply to that post directly and send ${config.prefix}cforward`);
+          return reply(`❌ Channel post #${parsed.postId} retrieve nahi ho saki (${e.message}).\n\n💡 Tip: Post ko chat mein bhej kar us par reply karke '${config.prefix}cforward' bhejein.`);
         }
 
         if (got.source === 'cache') {
