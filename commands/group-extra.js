@@ -38,6 +38,91 @@ function normalizeJid(jid) {
     return null;
 }
 
+// In-memory cache of group metadata to resolve LIDs <-> Phone Numbers instantly even if socket query is throttled
+const lastKnownGroupMeta = new Map();
+
+/**
+ * Universal participant resolver: handles phone JID, LID, device suffixes, and objects.
+ * Matches against groupMetadata to ensure accurate phone number for text tagging (@92300...)
+ * and pairs both Phone JID and LID in mentionJids for 100% reliable WhatsApp mention notifications.
+ */
+function resolveParticipant(p, gmeta) {
+    if (!p) return { phoneNum: '', phoneJid: null, lidJid: null, mentionJids: [] };
+
+    let rawId = '';
+    let rawLid = '';
+    let rawDigits = '';
+
+    if (typeof p === 'string') {
+        const clean = p.trim();
+        if (clean.endsWith('@lid')) {
+            rawLid = clean.split('@')[0].split(':')[0] + '@lid';
+        } else if (clean.endsWith('@s.whatsapp.net')) {
+            rawId = clean.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+        } else {
+            rawDigits = clean.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        }
+    } else if (p && typeof p === 'object') {
+        if (p.id) {
+            const idStr = String(p.id).trim();
+            if (idStr.endsWith('@lid')) rawLid = idStr.split('@')[0].split(':')[0] + '@lid';
+            else rawId = idStr.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+        }
+        if (p.lid) {
+            rawLid = String(p.lid).split('@')[0].split(':')[0] + '@lid';
+        }
+        if (!rawId && !rawLid && p.jid) {
+            const jidStr = String(p.jid).trim();
+            if (jidStr.endsWith('@lid')) rawLid = jidStr.split('@')[0].split(':')[0] + '@lid';
+            else rawId = jidStr.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+        }
+    }
+
+    if (!rawDigits) {
+        if (rawId) rawDigits = rawId.split('@')[0].replace(/[^0-9]/g, '');
+        else if (rawLid) rawDigits = rawLid.split('@')[0].replace(/[^0-9]/g, '');
+    }
+
+    let phoneJid = rawId || null;
+    let lidJid = rawLid || null;
+
+    // Search in gmeta.participants to map Phone JID <-> LID
+    if (gmeta && Array.isArray(gmeta.participants) && gmeta.participants.length > 0) {
+        const found = gmeta.participants.find(m => {
+            const mId = m.id ? m.id.split('@')[0].split(':')[0] : '';
+            const mLid = m.lid ? m.lid.split('@')[0].split(':')[0] : '';
+            const tId = phoneJid ? phoneJid.split('@')[0] : '';
+            const tLid = lidJid ? lidJid.split('@')[0] : '';
+
+            if (tId && mId && tId === mId) return true;
+            if (tLid && mLid && tLid === mLid) return true;
+            if (rawDigits && (mId === rawDigits || mLid === rawDigits)) return true;
+            if (tId && mLid && tId === mLid) return true;
+            if (tLid && mId && tLid === mId) return true;
+            return false;
+        });
+
+        if (found) {
+            if (found.id) phoneJid = found.id.split('@')[0].split(':')[0] + '@s.whatsapp.net';
+            if (found.lid) lidJid = found.lid.split('@')[0].split(':')[0] + '@lid';
+        }
+    }
+
+    // Determine the phone number to display in text tag (@923001234567)
+    let phoneNum = phoneJid ? phoneJid.split('@')[0].replace(/[^0-9]/g, '') : '';
+    if (!phoneNum && rawDigits) phoneNum = rawDigits;
+    if (!phoneJid && phoneNum) phoneJid = `${phoneNum}@s.whatsapp.net`;
+
+    const mentionJids = [...new Set([phoneJid, lidJid])].filter(Boolean);
+
+    return {
+        phoneNum,
+        phoneJid,
+        lidJid,
+        mentionJids
+    };
+}
+
 function getTarget(msg, args) {
     const mentioned = msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.[0];
     const quoted = msg.message?.extendedTextMessage?.contextInfo?.participant;
@@ -399,12 +484,6 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
             // Deduplicate promote/demote events that can fire concurrently from socket listener and stub message
             if (isDuplicateParticipantEvent(from, action, participants)) return;
 
-            const authorJid = author || '';
-            const authorDigits = authorJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-
-            const botPhone = sock.user?.id ? sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
-            const botLid = sock.user?.lid ? sock.user.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
-
             // Group metadata
             let groupSubject = 'Our Group';
             let gmeta = null;
@@ -414,6 +493,21 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                 gmeta = await Promise.race([metaPromise, timeoutPromise]);
                 if (gmeta && gmeta.subject) groupSubject = gmeta.subject;
             } catch (_) {}
+
+            if (gmeta && Array.isArray(gmeta.participants) && gmeta.participants.length > 0) {
+                lastKnownGroupMeta.set(from, gmeta);
+            } else if (!gmeta && lastKnownGroupMeta.has(from)) {
+                gmeta = lastKnownGroupMeta.get(from);
+                if (gmeta && gmeta.subject) groupSubject = gmeta.subject;
+            }
+
+            const authorJid = author || '';
+            const authorRes = resolveParticipant(authorJid, gmeta);
+            const authorDigits = authorRes.phoneNum;
+            const authorTag = authorDigits ? `@${authorDigits}` : 'Group Admin';
+
+            const botPhone = sock.user?.id ? sock.user.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+            const botLid = sock.user?.lid ? sock.user.lid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
 
             const rawCreatorJid = gmeta?.owner || gmeta?.subjectOwner || gmeta?.participants?.find(p => p.admin === 'superadmin')?.id || '';
             const groupCreator = rawCreatorJid ? rawCreatorJid.split('@')[0].replace(/[^0-9]/g, '') : '';
@@ -461,28 +555,38 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                     // 1. Demote newly promoted members
                     for (const p of participants) {
                         try {
-                            await sock.groupParticipantsUpdate(from, [p], 'demote').catch(() => {});
+                            const pRes = resolveParticipant(p, gmeta);
+                            const demoteTargets = [pRes.phoneJid, pRes.lidJid, typeof p === 'string' ? p : p?.id].filter(Boolean);
+                            for (const dt of demoteTargets) {
+                                await sock.groupParticipantsUpdate(from, [dt], 'demote').catch(() => {});
+                            }
                         } catch (_) {}
                     }
 
                     // 2. Demote the rogue admin who promoted them
                     try {
-                        await sock.groupParticipantsUpdate(from, [authorJid], 'demote').catch(() => {});
+                        const authorTargets = [authorRes.phoneJid, authorRes.lidJid, authorJid].filter(Boolean);
+                        for (const at of authorTargets) {
+                            await sock.groupParticipantsUpdate(from, [at], 'demote').catch(() => {});
+                        }
                     } catch (_) {}
 
                     // 3. Send Security Notice
                     const promotedTags = participants.map(p => {
-                        const num = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                        return `@${num}`;
+                        const res = resolveParticipant(p, gmeta);
+                        return res.phoneNum ? `@${res.phoneNum}` : '@user';
                     }).join(', ');
 
-                    const mentionJids = [authorJid, ...participants].filter(Boolean);
+                    const allMentionJids = [...new Set([
+                        ...authorRes.mentionJids,
+                        ...participants.flatMap(p => resolveParticipant(p, gmeta).mentionJids)
+                    ])].filter(Boolean);
 
                     const alertText = 
 `╭━━━〔 🛡️ *ANTI-ADMIN PROTECTION TRIGGERED* 〕━━━┈⊷
 ┃ 🚨 *UNAUTHORIZED PROMOTION DETECTED & BLOCKED!*
 ┃
-┃ 🚫 *Admin Jisne Banaya:* @${authorDigits}
+┃ 🚫 *Admin Jisne Banaya:* ${authorTag}
 ┃    └ *Action:* Admin Se Hata Diya Gaya (Demoted ❌)
 ┃
 ┃ 👤 *Naya Banne Wala:* ${promotedTags}
@@ -498,8 +602,8 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
 
                     await sock.sendMessage(from, {
                         text: alertText,
-                        mentions: mentionJids,
-                        contextInfo: { ...channelBadge, mentions: mentionJids }
+                        mentions: allMentionJids,
+                        contextInfo: { ...channelBadge, mentions: allMentionJids }
                     }).catch(() => {});
 
                     return; // Prevent standard promote notification
@@ -509,17 +613,15 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                 const isAdminInformActive = botData.adminInformGroups?.[from] !== false; // Default ON
                 if (isAdminInformActive) {
                     for (const p of participants) {
-                        const targetNum = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                        const targetTag = `@${targetNum}`;
-                        const authorTag = authorDigits ? `@${authorDigits}` : 'Group Admin';
-                        const targetJid = normalizeJid(p) || (targetNum ? `${targetNum}@s.whatsapp.net` : null);
-                        const normAuthorJid = normalizeJid(authorJid) || (authorDigits ? `${authorDigits}@s.whatsapp.net` : null);
-                        const mentionJids = [normAuthorJid, targetJid].filter(Boolean);
+                        const targetRes = resolveParticipant(p, gmeta);
+                        const targetNum = targetRes.phoneNum;
+                        const targetTag = targetNum ? `@${targetNum}` : '@user';
+                        const mentionJids = [...new Set([...authorRes.mentionJids, ...targetRes.mentionJids])].filter(Boolean);
 
                         const text = 
 `╭━━━〔 👑 *ADMIN PROMOTION ALERT* 〕━━━┈⊷
 ┃ 🎖️ *New Admin:* ${targetTag}
-┃ 📱 *Number:* +${targetNum}
+┃ 📱 *Number:* +${targetNum || 'N/A'}
 ┃ 👑 *Promoted By:* ${authorTag}
 ┃ ⏰ *Time:* ${timeStr}
 ┃ 🏷️ *Group:* ${groupSubject}
@@ -540,13 +642,16 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
             // ========== ACTION: DEMOTE ==========
             if (action === 'demote') {
                 for (const p of participants) {
-                    const targetNum = String(p).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                    const isBotDemoted = (targetNum === botPhone || targetNum === botLid || (sock.user?.id && p === sock.user.id));
+                    const targetRes = resolveParticipant(p, gmeta);
+                    const targetNum = targetRes.phoneNum;
+                    const isBotDemoted = Boolean(
+                        (targetNum && (targetNum === botPhone || targetNum === botLid)) ||
+                        (targetRes.phoneJid && (targetRes.phoneJid === sock.user?.id || targetRes.phoneJid.split('@')[0] === botPhone)) ||
+                        (targetRes.lidJid && targetRes.lidJid === sock.user?.lid)
+                    );
 
-                    const authorTag = authorDigits ? `@${authorDigits}` : 'Admin';
-                    const targetJid = normalizeJid(p) || (targetNum ? `${targetNum}@s.whatsapp.net` : null);
-                    const normAuthorJid = normalizeJid(authorJid) || (authorDigits ? `${authorDigits}@s.whatsapp.net` : null);
-                    const mentionJids = [normAuthorJid, targetJid].filter(Boolean);
+                    const targetTag = targetNum ? `@${targetNum}` : '@user';
+                    const mentionJids = [...new Set([...authorRes.mentionJids, ...targetRes.mentionJids])].filter(Boolean);
 
                     if (isBotDemoted) {
                         // Special Bot Demote Self-Defense Notice
@@ -582,8 +687,8 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                         if (isAdminInformActive) {
                             const demoteText = 
 `╭━━━〔 ⚠️ *ADMIN DEMOTION ALERT* 〕━━━┈⊷
-┃ 📉 *Demoted Member:* @${targetNum}
-┃ 📱 *Number:* +${targetNum}
+┃ 📉 *Demoted Member:* ${targetTag}
+┃ 📱 *Number:* +${targetNum || 'N/A'}
 ┃ 👤 *Demoted By:* ${authorTag}
 ┃ ⏰ *Time:* ${timeStr}
 ┃ 🏷️ *Group:* ${groupSubject}
@@ -748,8 +853,15 @@ async function promoteCommand(sock, from, msg, isAdmin) {
     const target = getTarget(msg);
     if (!target) return await sock.sendMessage(from, { text: "❌ Reply to or tag the user you want to promote." }, { quoted: msg });
     try {
+        let gmeta = lastKnownGroupMeta.get(from) || null;
+        if (!gmeta) {
+            try { gmeta = await sock.groupMetadata(from); } catch (_) {}
+        }
+        const tRes = resolveParticipant(target, gmeta);
+        const tag = tRes.phoneNum ? `@${tRes.phoneNum}` : `@${target.split('@')[0]}`;
+        const mentionJids = tRes.mentionJids.length ? tRes.mentionJids : [target];
         await sock.groupParticipantsUpdate(from, [target], "promote");
-        await sock.sendMessage(from, { text: `✅ @${target.split('@')[0]} is now an admin.`, mentions: [target] }, { quoted: msg });
+        await sock.sendMessage(from, { text: `✅ ${tag} is now an admin.`, mentions: mentionJids }, { quoted: msg });
     } catch (e) {
         await sock.sendMessage(from, { text: "❌ Failed to promote. Make sure I am an admin." }, { quoted: msg });
     }
@@ -760,8 +872,15 @@ async function demoteCommand(sock, from, msg, isAdmin) {
     const target = getTarget(msg);
     if (!target) return await sock.sendMessage(from, { text: "❌ Reply to or tag the user you want to demote." }, { quoted: msg });
     try {
+        let gmeta = lastKnownGroupMeta.get(from) || null;
+        if (!gmeta) {
+            try { gmeta = await sock.groupMetadata(from); } catch (_) {}
+        }
+        const tRes = resolveParticipant(target, gmeta);
+        const tag = tRes.phoneNum ? `@${tRes.phoneNum}` : `@${target.split('@')[0]}`;
+        const mentionJids = tRes.mentionJids.length ? tRes.mentionJids : [target];
         await sock.groupParticipantsUpdate(from, [target], "demote");
-        await sock.sendMessage(from, { text: `✅ @${target.split('@')[0]} is no longer an admin.`, mentions: [target] }, { quoted: msg });
+        await sock.sendMessage(from, { text: `✅ ${tag} is no longer an admin.`, mentions: mentionJids }, { quoted: msg });
     } catch (e) {
         await sock.sendMessage(from, { text: "❌ Failed to demote. Make sure I am an admin." }, { quoted: msg });
     }

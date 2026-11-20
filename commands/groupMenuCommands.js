@@ -190,8 +190,23 @@ async function demoteSingleCommand(sock, from, msg, isAdmin, args = []) {
     if (!target) return await sock.sendMessage(from, { text: "❌ *User ko tag karein ya uske message ko reply karein!*" }, { quoted: msg });
 
     try {
+        let targetNum = target.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        let mentionJids = [target];
+        try {
+            const meta = await sock.groupMetadata(from);
+            const part = (meta.participants || []).find(p => (p.id && (p.id === target || p.id.startsWith(targetNum))) || (p.lid && (p.lid === target || p.lid.startsWith(targetNum))));
+            if (part) {
+                if (part.id) {
+                    targetNum = part.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                    mentionJids.push(part.id.split('@')[0].split(':')[0] + '@s.whatsapp.net');
+                }
+                if (part.lid) mentionJids.push(part.lid.split('@')[0].split(':')[0] + '@lid');
+            }
+        } catch (_) {}
+        mentionJids = [...new Set(mentionJids)].filter(Boolean);
+
         await sock.groupParticipantsUpdate(from, [target], 'demote');
-        await sock.sendMessage(from, { text: `🔻 @${target.split('@')[0]} ko admin se demote kar diya gaya!`, mentions: [target] }, { quoted: msg });
+        await sock.sendMessage(from, { text: `🔻 @${targetNum} ko admin se demote kar diya gaya!`, mentions: mentionJids }, { quoted: msg });
     } catch (e) {
         await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
     }
@@ -497,8 +512,23 @@ async function promoteSingleCommand(sock, from, msg, isAdmin, args = []) {
     if (!target) return await sock.sendMessage(from, { text: "❌ *User ko tag karein ya uske message ko reply karein!*" }, { quoted: msg });
 
     try {
+        let targetNum = target.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+        let mentionJids = [target];
+        try {
+            const meta = await sock.groupMetadata(from);
+            const part = (meta.participants || []).find(p => (p.id && (p.id === target || p.id.startsWith(targetNum))) || (p.lid && (p.lid === target || p.lid.startsWith(targetNum))));
+            if (part) {
+                if (part.id) {
+                    targetNum = part.id.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                    mentionJids.push(part.id.split('@')[0].split(':')[0] + '@s.whatsapp.net');
+                }
+                if (part.lid) mentionJids.push(part.lid.split('@')[0].split(':')[0] + '@lid');
+            }
+        } catch (_) {}
+        mentionJids = [...new Set(mentionJids)].filter(Boolean);
+
         await sock.groupParticipantsUpdate(from, [target], 'promote');
-        await sock.sendMessage(from, { text: `👑 @${target.split('@')[0]} ko Group Admin bana diya gaya!`, mentions: [target] }, { quoted: msg });
+        await sock.sendMessage(from, { text: `👑 @${targetNum} ko Group Admin bana diya gaya!`, mentions: mentionJids }, { quoted: msg });
     } catch (e) {
         await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
     }
