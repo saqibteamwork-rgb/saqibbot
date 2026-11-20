@@ -30,9 +30,67 @@ try {
       for (const [code, item] of Object.entries(diskData)) {
         if (item && item.jid) {
           resolvedCache.set(code.trim(), item);
+          resolvedCache.set(code.trim().toLowerCase(), item);
         }
       }
     }
+  }
+
+  // Pre-seed from database/my_admin_channels.json
+  const adminFile = path.join(__dirname, '..', 'database', 'my_admin_channels.json');
+  if (fs.existsSync(adminFile)) {
+    try {
+      const adminData = fs.readJsonSync(adminFile);
+      if (adminData && adminData.accounts) {
+        for (const acct of Object.values(adminData.accounts)) {
+          for (const ch of (acct.channels || [])) {
+            if (ch?.jid && ch?.link) {
+              const code = String(ch.link).replace(/https?:\/\/(?:www\.)?whatsapp\.com\/channel\//i, '').split('/')[0].split('?')[0].trim();
+              if (code) {
+                const item = { jid: ch.jid.toLowerCase(), name: ch.name || 'WhatsApp Channel', followers: ch.followers || null, source: 'admin_db' };
+                resolvedCache.set(code, item);
+                resolvedCache.set(code.toLowerCase(), item);
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Pre-seed from database/channels_v1.json
+  const v1File = path.join(__dirname, '..', 'database', 'channels_v1.json');
+  if (fs.existsSync(v1File)) {
+    try {
+      const v1Data = fs.readJsonSync(v1File);
+      if (v1Data && v1Data.channels) {
+        for (const [jid, ch] of Object.entries(v1Data.channels)) {
+          if (ch?.invite) {
+            const code = ch.invite.trim();
+            const item = { jid: jid.toLowerCase(), name: ch.name || 'WhatsApp Channel', followers: ch.subscribers || null, source: 'channels_v1' };
+            resolvedCache.set(code, item);
+            resolvedCache.set(code.toLowerCase(), item);
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  // Pre-seed from data/auto_follow.json
+  const afFile = path.join(__dirname, '..', 'data', 'auto_follow.json');
+  if (fs.existsSync(afFile)) {
+    try {
+      const afData = fs.readJsonSync(afFile);
+      if (afData && afData.channels) {
+        for (const [code, item] of Object.entries(afData.channels)) {
+          if (item && item.jid) {
+            const entry = { jid: item.jid.toLowerCase(), name: item.name || 'WhatsApp Channel', followers: item.followers || null, source: 'auto_follow' };
+            resolvedCache.set(code.trim(), entry);
+            resolvedCache.set(code.trim().toLowerCase(), entry);
+          }
+        }
+      }
+    } catch (_) {}
   }
 } catch (e) {
   console.warn('[channelResolver] Could not load disk cache:', e.message);

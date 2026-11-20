@@ -106,7 +106,9 @@ async function initialSync() {
         { key: 'auto_group', file: path.join(DATA_DIR, 'auto_group.json') },
         { key: 'status_booster', file: path.join(DATA_DIR, 'status_booster.json') },
         { key: 'user_profiles', file: path.join(DATA_DIR, 'user_profiles.json') },
-        { key: 'coupons', file: path.join(DATA_DIR, 'coupons.json') }
+        { key: 'coupons', file: path.join(DATA_DIR, 'coupons.json') },
+        { key: 'channel_cache', file: path.join(DATA_DIR, 'channel_cache.json') },
+        { key: 'my_admin_channels', file: path.join(__dirname, '..', 'database', 'my_admin_channels.json') }
     ];
 
     for (const target of syncTargets) {
@@ -165,6 +167,47 @@ async function initialSync() {
                         { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
                         { upsert: true }
                     );
+                    continue;
+                }
+            }
+
+            if (target.key === 'my_admin_channels') {
+                if (cloudDoc && cloudDoc.payload) {
+                    const cloudAccounts = (cloudDoc.payload && cloudDoc.payload.accounts) || {};
+                    const localAccounts = (localData && localData.accounts) || {};
+                    const mergedAccounts = { ...localAccounts };
+                    for (const [acc, data] of Object.entries(cloudAccounts)) {
+                        if (!mergedAccounts[acc]) {
+                            mergedAccounts[acc] = data;
+                        } else {
+                            const localChans = mergedAccounts[acc].channels || [];
+                            const chanMap = new Map();
+                            for (const c of localChans) if (c?.jid) chanMap.set(c.jid, c);
+                            for (const c of (data.channels || [])) if (c?.jid) chanMap.set(c.jid, c);
+                            mergedAccounts[acc].channels = Array.from(chanMap.values());
+                            mergedAccounts[acc].count = mergedAccounts[acc].channels.length;
+                        }
+                    }
+                    const mergedData = {
+                        v: 1,
+                        accounts: mergedAccounts,
+                        updatedAt: new Date().toISOString()
+                    };
+                    fs.writeJsonSync(target.file, mergedData, { spaces: 2 });
+                    console.log(`📥 [MongoDB Sync] Permanently restored & merged "${target.key}" (${Object.keys(mergedAccounts).length} accounts) from cloud!`);
+                    await col.updateOne(
+                        { _id: target.key },
+                        { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
+                        { upsert: true }
+                    );
+                    continue;
+                } else if (localData && Object.keys(localData).length > 0) {
+                    await col.updateOne(
+                        { _id: target.key },
+                        { $set: { _id: target.key, payload: localData, updatedAt: Date.now() } },
+                        { upsert: true }
+                    );
+                    console.log(`📤 [MongoDB Sync] Seeded "${target.key}" into MongoDB Atlas cloud!`);
                     continue;
                 }
             }

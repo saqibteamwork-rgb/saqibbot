@@ -789,6 +789,20 @@ async function postToChannel(sock, jid, post, file, { fwd = null } = {}) {
       }
     } catch {}
   }
+  // Fallback for media messages: native sock.sendMessage
+  if (!r.ok && isMedia && typeof sock?.sendMessage === 'function' && file) {
+    try {
+      const mediaContent = buildSendContent(post, file);
+      if (mediaContent) {
+        const nativeMediaSent = await sock.sendMessage(jid, mediaContent);
+        if (nativeMediaSent?.key?.id) {
+          return { ok: true, serverId: nativeMediaSent.key.id, delivery: 'confirmed', note: 'native media send' };
+        }
+      }
+    } catch (errNative) {
+      console.error('[cforward native media send fallback error]:', errNative.message);
+    }
+  }
   if (!r.ok) return { ok: false, error: r.error };
   return { ok: true, serverId: r.serverId, delivery: r.serverId ? 'confirmed' : 'unconfirmed', note: note || (fwd ? 'forwarded label' : null) };
 }
@@ -889,7 +903,17 @@ function writeAdminFile(account, admin) {
     channels: finalChannels
   };
   const tmp = `${ADMIN_FILE}.tmp-${process.pid}`;
-  try { fs.writeFileSync(tmp, JSON.stringify(obj, null, 2)); fs.renameSync(tmp, ADMIN_FILE); return true; }
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(obj, null, 2));
+    fs.renameSync(tmp, ADMIN_FILE);
+    try {
+      const mongoSync = require('./mongoSync');
+      if (typeof mongoSync.pushToMongoImmediate === 'function') {
+        mongoSync.pushToMongoImmediate('my_admin_channels', obj);
+      }
+    } catch (_) {}
+    return true;
+  }
   catch (e) { try { fs.unlinkSync(tmp); } catch { /* ignore */ } console.error('[channelHub] admin file save failed:', e.message); return false; }
 }
 
@@ -1083,13 +1107,70 @@ async function eligibleDestinations(sock, { excludeJid = null, forceLive = false
   try { for (const e of require('./channelManager').getNewsletters()) ensureChannel(e.id, 'managed'); } catch { /* optional */ }
   const eligible = [], rejected = [];
   const S = cfg();
+  const checkedJids = new Set();
+
   for (const rec of listChannels()) {
-    if (rec.jid === excludeJid) continue;
+    if (!rec?.jid || rec.jid === excludeJid) continue;
+    checkedJids.add(rec.jid);
     const v = await verifyChannel(sock, rec.jid, { force: !verifiedFresh(rec, sock, Math.min(S.verifyTtlMs, 60 * 60 * 1000)) });
-    if (!v.ok) { if (hasAnyAdmin(rec) || rec.source === 'manual') rejected.push({ rec, reason: `cannot verify: ${v.error}` }); await sleep(300); continue; }
+    if (!v.ok) { if (hasAnyAdmin(rec) || rec.source === 'manual') rejected.push({ rec, reason: `cannot verify: ${v.error}` }); await sleep(200); continue; }
     if (isAdminFor(rec, sock)) eligible.push(rec); // not admin -> silently not eligible (just a followed channel)
-    await sleep(300);
+    await sleep(200);
   }
+
+  // Deep auto-discovery fallback if still 0 channels found
+  if (eligible.length === 0) {
+    const candidateJids = new Set();
+
+    // 1. Check userChannelAutoReact followed channels
+    try {
+      const ucar = require('./userChannelAutoReact');
+      if (typeof ucar.syncUserFollowedChannels === 'function') {
+        const ucarJids = await ucar.syncUserFollowedChannels(sock, false).catch(() => []);
+        if (Array.isArray(ucarJids)) ucarJids.forEach(j => candidateJids.add(j));
+      }
+    } catch (_) {}
+
+    // 2. Check all accounts in database/my_admin_channels.json
+    try {
+      const adminObj = readAdminFile();
+      for (const aData of Object.values(adminObj.accounts || {})) {
+        for (const c of (aData.channels || [])) {
+          if (c?.jid) candidateJids.add(c.jid);
+        }
+      }
+    } catch (_) {}
+
+    // 3. Check data/auto_follow.json
+    try {
+      const afPath = path.join(__dirname, '..', 'data', 'auto_follow.json');
+      if (fs.existsSync(afPath)) {
+        const afData = JSON.parse(fs.readFileSync(afPath, 'utf8'));
+        for (const item of Object.values(afData.channels || {})) {
+          if (item?.jid) candidateJids.add(item.jid);
+        }
+      }
+    } catch (_) {}
+
+    // Verify candidates bounded to top 30
+    for (const jid of Array.from(candidateJids).slice(0, 30)) {
+      if (!jid || jid === excludeJid || checkedJids.has(jid)) continue;
+      checkedJids.add(jid);
+      try {
+        const rec = ensureChannel(jid, 'discovered');
+        const v = await verifyChannel(sock, jid, { force: true });
+        if (v.ok && isAdminFor(rec, sock)) {
+          eligible.push(rec);
+        }
+        await sleep(200);
+      } catch (_) {}
+    }
+
+    if (eligible.length > 0) {
+      writeAdminFile(acct, eligible);
+    }
+  }
+
   return { eligible, rejected };
 }
 
