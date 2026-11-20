@@ -160,6 +160,28 @@ const COMMAND_GUIDES = {
       '(Message ko reply karein) ➜ .was'
     ]
   },
+  famofc: {
+    name: 'famofc',
+    aliases: ['famsticker', 'fam', 'lottie2', 'was2', 'premiumsticker', 'famreact'],
+    category: 'STICKER & REACTION',
+    permission: 'Everyone 🌐',
+    usage: '.famofc [send | react | save | info | <number>]',
+    desc: 'Official WhatsApp Native Vector Animated Lottie Sticker (.was). Standalone send karta hai ya replied message par sticker reaction attach karta hai.',
+    params: [
+      'send: Force standalone sticker send',
+      'react: Attach sticker reaction on quoted message',
+      'save [name]: Save into your personal collection',
+      'info: Show detailed vector specs card',
+      '<number>: Send sticker directly to that phone number'
+    ],
+    examples: [
+      '.famofc (Standalone animated Lottie sticker)',
+      '(Message ko reply karein) ➜ .famofc (Attach Lottie reaction)',
+      '.famofc save vip (Save to personal collection)',
+      '.famofc 923438673242 (Send to number)',
+      '.famofc info'
+    ]
+  },
   mt: {
     name: 'mt',
     aliases: ['mimic', 'voicecopy', 'mirrorvoice', 'voicereply', 'samevoice'],
