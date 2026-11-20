@@ -15,6 +15,7 @@
  */
 
 const { downloadContentFromMessage, jidNormalizedUser } = require('@whiskeysockets/baileys');
+const { lockGroupCommand, unlockGroupCommand, closeGroupCommand, openGroupCommand } = require('./groupLockManager');
 
 function cleanJid(jid) {
     if (!jid) return '';
@@ -227,15 +228,7 @@ async function demoteallCommand(sock, from, msg, isOwner) {
 
 // 8. .end - Close/mute group chat (announcement mode: only admins can message)
 async function endCommand(sock, from, msg, isAdmin) {
-    if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
-    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ye command use kar sakta hai!*" }, { quoted: msg });
-
-    try {
-        await sock.groupSettingUpdate(from, 'announcement');
-        await sock.sendMessage(from, { text: "🔒 *Group Close Kar Diya Gaya Hai!*\n_Ab sirf Admins message bhej sakte hain._" }, { quoted: msg });
-    } catch (e) {
-        await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
-    }
+    return await closeGroupCommand(sock, from, msg, isAdmin);
 }
 
 // 9. .gcfrwrd - Forward replied message to all or target groups
@@ -477,17 +470,9 @@ async function listadminsCommand(sock, from, msg) {
     }
 }
 
-// 19. .lock - Lock group settings (only admins can edit group info)
-async function lockCommand(sock, from, msg, isAdmin) {
-    if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
-    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin lock kar sakta hai!*" }, { quoted: msg });
-
-    try {
-        await sock.groupSettingUpdate(from, 'locked');
-        await sock.sendMessage(from, { text: "🔒 *Group Settings Locked!*\n_Ab sirf admins group ki info/icon edit kar sakte hain._" }, { quoted: msg });
-    } catch (e) {
-        await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
-    }
+// 19. .lock - Lock group chat & settings
+async function lockCommand(sock, from, msg, isAdmin, args = []) {
+    return await lockGroupCommand(sock, from, msg, isAdmin, args);
 }
 
 // 20. .membercount - Show total members
@@ -772,17 +757,9 @@ async function tagadminsCommand(sock, from, msg, isAdmin, args = []) {
     }
 }
 
-// 36. .unlock - Unlock group settings (all members can edit group info)
-async function unlockCommand(sock, from, msg, isAdmin) {
-    if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
-    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin unlock kar sakta hai!*" }, { quoted: msg });
-
-    try {
-        await sock.groupSettingUpdate(from, 'unlocked');
-        await sock.sendMessage(from, { text: "🔓 *Group Settings Unlocked!*\n_Ab tamam members group ki info/icon edit kar sakte hain._" }, { quoted: msg });
-    } catch (e) {
-        await sock.sendMessage(from, { text: `❌ *Error:* ${e.message}` }, { quoted: msg });
-    }
+// 36. .unlock - Unlock group chat & settings
+async function unlockCommand(sock, from, msg, isAdmin, args = []) {
+    return await unlockGroupCommand(sock, from, msg, isAdmin, args);
 }
 
 // 37. .welcome - Toggle welcome message

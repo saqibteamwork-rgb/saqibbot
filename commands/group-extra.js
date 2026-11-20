@@ -2,6 +2,7 @@
 // Warn, Mute, Welcome/Goodbye, Promote/Demote, Group Settings, Antispam, AntiAdmin, AdminInform
 const settings = require('../settings');
 const ownerManager = require('../utils/ownerManager');
+const { closeGroupCommand, openGroupCommand } = require('./groupLockManager');
 
 // Deduplication map to prevent double-firing of participant updates (stub vs listener)
 const recentParticipantEvents = new Map();
@@ -84,19 +85,12 @@ async function unwarnCommand(sock, from, msg, isAdmin, botData, saveBotData) {
 
 // ---------- MUTE / CLOSE GROUP ----------
 async function muteCommand(sock, from, msg, isAdmin, botData, saveBotData) {
-    if (!isAdmin || !from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ye command use kar sakta hai!*" }, { quoted: msg });
+    if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
     const target = getTarget(msg);
     if (!target) {
-        // Group mute / Close group (admin only)
-        try {
-            await sock.groupSettingUpdate(from, 'announcement');
-            return await sock.sendMessage(from, { 
-                text: "🔒 *Group Close / Mute Kar Diya Gaya Hai!*\n\n_Ab sirf Group Admins hi messages send kar sakte hain._\n_Dobara open karne ke liye *.open* ya *.unmute* likhein._" 
-            }, { quoted: msg });
-        } catch (e) {
-            return await sock.sendMessage(from, { text: `❌ Group mute karne ke liye Bot ka Group Admin hona zaroori hai!` }, { quoted: msg });
-        }
+        return await closeGroupCommand(sock, from, msg, isAdmin);
     }
+    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin kisi user ko mute kar sakta hai!*" }, { quoted: msg });
 
     if (!botData.mutedUsers) botData.mutedUsers = {};
     if (!botData.mutedUsers[from]) botData.mutedUsers[from] = {};
@@ -107,19 +101,12 @@ async function muteCommand(sock, from, msg, isAdmin, botData, saveBotData) {
 
 // ---------- UNMUTE / OPEN GROUP ----------
 async function unmuteCommand(sock, from, msg, isAdmin, botData, saveBotData) {
-    if (!isAdmin || !from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin ye command use kar sakta hai!*" }, { quoted: msg });
+    if (!from.endsWith('@g.us')) return await sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
     const target = getTarget(msg);
     if (!target) {
-        // Group unmute / Open group (all members can send)
-        try {
-            await sock.groupSettingUpdate(from, 'not_announcement');
-            return await sock.sendMessage(from, { 
-                text: "🔓 *Group Open / Unmute Kar Diya Gaya Hai!*\n\n_Ab sabhi members messages send kar sakte hain._\n_Admins only karne ke liye *.close* ya *.mute* likhein._" 
-            }, { quoted: msg });
-        } catch (e) {
-            return await sock.sendMessage(from, { text: `❌ Group unmute karne ke liye Bot ka Group Admin hona zaroori hai!` }, { quoted: msg });
-        }
+        return await openGroupCommand(sock, from, msg, isAdmin);
     }
+    if (!isAdmin) return await sock.sendMessage(from, { text: "❌ *Sirf Group Admin kisi user ko unmute kar sakta hai!*" }, { quoted: msg });
 
     if (botData.mutedUsers?.[from]) {
         delete botData.mutedUsers[from][target];

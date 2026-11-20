@@ -157,6 +157,7 @@ const {
 const { lottieCommand } = require('./commands/lottie');
 const { saqibLottieCommand } = require('./commands/saqibLottie');
 const { savePremiumCommand, reactPremiumCommand } = require('./commands/premiumStickerManager');
+const { lockGroupCommand, unlockGroupCommand, closeGroupCommand, openGroupCommand } = require('./commands/groupLockManager');
 const { simdataCommand } = require('./commands/simdata');
 const { truecallerCommand } = require('./commands/truecaller');
 const { trackipCommand } = require('./commands/trackip');
@@ -1909,9 +1910,11 @@ class BotSession {
 
                         // 🛑 STRICT PRIVATE GUARD:
                         // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
-                        // EXCEPTION: Always allow pairing commands (.pair, /pair, pairing, code) so any user can link their WhatsApp!
+                        // EXCEPTION 1: Always allow pairing commands (.pair, /pair, pairing, code) so any user can link their WhatsApp!
+                        // EXCEPTION 2: Group admin management commands (.lock, .unlock, .close, .open) are allowed for Group Admins!
                         const isPairCmd = commandName === 'pair' || commandName === 'pairing' || commandName === 'code';
-                        if (!this.isPublic && !isOwner && !isSessionOwner && !isPremium && !isPairCmd) {
+                        const isGroupAdminCmd = isGroup && ['lock', 'unlock', 'close', 'open', 'mute', 'unmute', 'glock', 'gunlock', 'gclose', 'gopen', 'lockgroup', 'unlockgroup', 'group'].includes(commandName);
+                        if (!this.isPublic && !isOwner && !isSessionOwner && !isPremium && !isPairCmd && !isGroupAdminCmd) {
                             return; // Complete silent ignore — koi response nahi jayega
                         }
 
@@ -2576,30 +2579,34 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         // ===== NEW UPGRADE: Group Management =====
                                         case 'warn': await groupExtra.warnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
                                         case 'unwarn': await groupExtra.unwarnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
+                                        // ===== GROUP LOCK, CLOSE & MUTE ENGINE =====
+                                        case 'lock': case 'lockgroup': case 'glock':
+                                            await lockGroupCommand(this.sock, from, msg, isOwner, args);
+                                            break;
+                                        case 'unlock': case 'unlockgroup': case 'gunlock':
+                                            await unlockGroupCommand(this.sock, from, msg, isOwner, args);
+                                            break;
+                                        case 'close': case 'gclose':
+                                            await closeGroupCommand(this.sock, from, msg, isOwner);
+                                            break;
+                                        case 'open': case 'gopen':
+                                            await openGroupCommand(this.sock, from, msg, isOwner);
+                                            break;
                                         case 'mute':
-                                        case 'close':
-                                        case 'lock':
-                                        case 'gclose':
-                                        case 'lockgroup':
                                             await groupExtra.muteCommand(this.sock, from, msg, isAdmin || isOwner, botData, saveBotData);
                                             break;
                                         case 'unmute':
-                                        case 'open':
-                                        case 'unlock':
-                                        case 'gopen':
-                                        case 'unlockgroup':
                                             await groupExtra.unmuteCommand(this.sock, from, msg, isAdmin || isOwner, botData, saveBotData);
                                             break;
                                         case 'group': {
                                             if (!from.endsWith('@g.us')) return await this.sock.sendMessage(from, { text: "❌ *Sirf groups mein kaam karta hai!*" }, { quoted: msg });
-                                            if (!isAdmin && !isOwner) return await this.sock.sendMessage(from, { text: "❌ *Sirf Group Admin ye command use kar sakta hai!*" }, { quoted: msg });
                                             const sub = (args[0] || '').toLowerCase().trim();
                                             if (sub === 'close' || sub === 'mute' || sub === 'lock' || sub === 'admin' || sub === 'adminonly') {
-                                                await groupExtra.muteCommand(this.sock, from, msg, true, botData, saveBotData);
+                                                await lockGroupCommand(this.sock, from, msg, isOwner, args.slice(1));
                                                 break;
                                             }
                                             if (sub === 'open' || sub === 'unmute' || sub === 'unlock' || sub === 'all') {
-                                                await groupExtra.unmuteCommand(this.sock, from, msg, true, botData, saveBotData);
+                                                await unlockGroupCommand(this.sock, from, msg, isOwner, args.slice(1));
                                                 break;
                                             }
                                             return await this.sock.sendMessage(from, {
@@ -2858,7 +2865,6 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'leaveall': case 'leftall': case 'outall': case 'leaveallgc': case 'leftallgc':
                                             await groupMenuCmds.leftallCommand(this.sock, from, msg, isOwner || isSessionOwner);
                                             break;
-                                        case 'lock': await groupMenuCmds.lockCommand(this.sock, from, msg, isAdmin); break;
                                         case 'membercount': await groupMenuCmds.membercountCommand(this.sock, from, msg); break;
                                         case 'promoteall': await groupMenuCmds.promoteallCommand(this.sock, from, msg, isOwner); break;
                                         case 'r': await groupMenuCmds.rCommand(this.sock, from, msg, args); break;
@@ -2874,7 +2880,6 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'setgrouppfp': case 'setgpp': await groupMenuCmds.setgrouppfpCommand(this.sock, from, msg, isAdmin); break;
                                         case 'setwelcome': await groupMenuCmds.setwelcomeCommand(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
                                         case 'tagadmins': await groupMenuCmds.tagadminsCommand(this.sock, from, msg, isAdmin, args); break;
-                                        case 'unlock': await groupMenuCmds.unlockCommand(this.sock, from, msg, isAdmin); break;
 
                                         // ===== CHANNEL MENU & OWNER COMMAND SUITE =====
                                         case 'set':
