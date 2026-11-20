@@ -68,7 +68,7 @@ async function broadcastToCluster(action, payload = {}) {
                     timestamp: Date.now()
                 },
                 {
-                    timeout: 6000,
+                    timeout: (action === 'chfollow' || action === 'chunfollow' || action === 'chreact') ? 25000 : 8000,
                     headers: {
                         'x-cluster-secret': CLUSTER_SECRET,
                         'Content-Type': 'application/json'
@@ -116,21 +116,49 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
             let already = 0;
             let failed = 0;
 
-            for (const s of activeSocks) {
-                try {
-                    if (typeof s.newsletterFollow === 'function') {
-                        await s.newsletterFollow(jid);
-                        success++;
-                    } else {
-                        failed++;
+            for (let i = 0; i < activeSocks.length; i++) {
+                const s = activeSocks[i];
+                let isFollowed = false;
+                let isAlready = false;
+
+                // Smart Retry Engine: Try up to 2 times with backoff
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        if (typeof s.newsletterFollow === 'function') {
+                            await s.newsletterFollow(jid);
+                            isFollowed = true;
+                            break;
+                        }
+                    } catch (err) {
+                        const msg = String(err?.message || err).toLowerCase();
+                        if (
+                            msg.includes('409') ||
+                            msg.includes('already') ||
+                            msg.includes('conflict') ||
+                            msg.includes('subscribed') ||
+                            msg.includes('duplicate') ||
+                            msg.includes('member')
+                        ) {
+                            isAlready = true;
+                            break;
+                        }
+                        if (attempt < 2) {
+                            await new Promise(r => setTimeout(r, 1200));
+                        }
                     }
-                } catch (err) {
-                    const msg = String(err?.message || err);
-                    if (msg.includes('409') || msg.includes('already') || msg.includes('conflict')) {
-                        already++;
-                    } else {
-                        failed++;
-                    }
+                }
+
+                if (isFollowed) {
+                    success++;
+                } else if (isAlready) {
+                    already++;
+                } else {
+                    failed++;
+                }
+
+                // Smooth delay between sessions to prevent rate-limit
+                if (i < activeSocks.length - 1) {
+                    await new Promise(r => setTimeout(r, 1500));
                 }
             }
 
@@ -155,16 +183,29 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
             let success = 0;
             let failed = 0;
 
-            for (const s of activeSocks) {
-                try {
-                    if (typeof s.newsletterUnfollow === 'function') {
-                        await s.newsletterUnfollow(jid);
-                        success++;
-                    } else {
-                        failed++;
+            for (let i = 0; i < activeSocks.length; i++) {
+                const s = activeSocks[i];
+                let isDone = false;
+
+                for (let attempt = 1; attempt <= 2; attempt++) {
+                    try {
+                        if (typeof s.newsletterUnfollow === 'function') {
+                            await s.newsletterUnfollow(jid);
+                            isDone = true;
+                            break;
+                        }
+                    } catch (err) {
+                        if (attempt < 2) {
+                            await new Promise(r => setTimeout(r, 1200));
+                        }
                     }
-                } catch (err) {
-                    failed++;
+                }
+
+                if (isDone) success++;
+                else failed++;
+
+                if (i < activeSocks.length - 1) {
+                    await new Promise(r => setTimeout(r, 1500));
                 }
             }
 
