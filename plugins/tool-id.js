@@ -33,21 +33,12 @@ cmd({
     try {
         // Check if user is asking for channel ID
         if (m.text && m.text.includes('whatsapp.com/channel/')) {
-            const match = m.text.match(/whatsapp\.com\/channel\/([\w-]+)/);
-            if (!match) return reply("⚠️ *Invalid channel link format.*\n\nMake sure it looks like:\nhttps://whatsapp.com/channel/xxxxxxxxx");
-
-            const inviteId = match[1];
-            let metadata;
-            
-            try {
-                metadata = await conn.newsletterMetadata("invite", inviteId);
-            } catch (e) {
-                return reply("❌ Failed to fetch channel metadata. Make sure the link is correct.");
+            const { resolveChannel } = require('../utils/channelResolver');
+            const res = await resolveChannel(conn, m.text, mek);
+            if (res.ok && res.jid) {
+                return reply(`> *Channel JID:* ${res.jid}\n> *Name:* ${res.name || 'WhatsApp Channel'}`);
             }
-
-            if (!metadata || !metadata.id) return reply("❌ Channel not found or inaccessible.");
-
-            return reply(`> ${metadata.id}`);
+            return reply(`❌ ${res.error || 'Failed to fetch channel ID.'}`);
         }
 
         if (isGroup) {

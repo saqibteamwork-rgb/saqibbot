@@ -1414,55 +1414,76 @@
     }
 
     // Ping health & latency for all 11 cluster servers
+    let isPingingCluster = false;
     async function pingClusterHealth() {
+      if (isPingingCluster) return;
+      isPingingCluster = true;
+
       const allKeys = Object.keys(CLUSTER);
       let totalActiveBots = 0;
       let onlineServersCount = 0;
 
-      const promises = allKeys.map(async (key) => {
-        const node = CLUSTER[key];
-        const t0 = performance.now();
-        try {
-          const res = await fetch(node.url + '/health', { cache: 'no-store' });
-          const latency = Math.round(performance.now() - t0);
-          if (res.ok) {
-            const data = await res.json();
-            node.online = true;
-            node.ping = latency;
-            node.active = data.activeSessions || 0;
-            totalActiveBots += node.active;
-            onlineServersCount++;
+      try {
+        const promises = allKeys.map(async (key) => {
+          const node = CLUSTER[key];
+          const t0 = performance.now();
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+          try {
+            const res = await fetch(node.url + '/health', {
+              cache: 'no-store',
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            const latency = Math.round(performance.now() - t0);
+            if (res.ok) {
+              const data = await res.json();
+              node.online = true;
+              node.ping = latency;
+              const activeCount = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
+              node.active = activeCount;
+              totalActiveBots += activeCount;
+              onlineServersCount++;
+
+              const dot = document.getElementById(key + 'Dot');
+              const pingEl = document.getElementById(key + 'Ping');
+              const capEl = document.getElementById(key + 'Capacity');
+
+              if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+              if (pingEl) pingEl.textContent = latency + 'ms';
+              if (capEl) capEl.innerHTML = '<span class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>';
+            } else {
+              throw new Error('Status ' + res.status);
+            }
+          } catch (e) {
+            clearTimeout(timeoutId);
+            node.online = false;
+            node.ping = null;
+            node.active = 0;
 
             const dot = document.getElementById(key + 'Dot');
             const pingEl = document.getElementById(key + 'Ping');
             const capEl = document.getElementById(key + 'Capacity');
-
-            if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-            if (pingEl) pingEl.textContent = latency + 'ms';
-            if (capEl) capEl.innerHTML = '<span class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>';
-          } else {
-            throw new Error('Status ' + res.status);
+            if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
+            if (pingEl) pingEl.textContent = '--ms';
+            if (capEl) capEl.innerHTML = '<span class="text-rose-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-xmark text-[8px]"></i> Offline</span>';
           }
-        } catch (e) {
-          node.online = false;
-          const dot = document.getElementById(key + 'Dot');
-          const pingEl = document.getElementById(key + 'Ping');
-          const capEl = document.getElementById(key + 'Capacity');
-          if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
-          if (pingEl) pingEl.textContent = 'Offline';
-          if (capEl) capEl.innerHTML = '<span class="text-rose-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-xmark text-[8px]"></i> Offline</span>';
+        });
+
+        await Promise.allSettled(promises);
+
+        const clusterStatusBadge = document.getElementById('clusterStatusBadge');
+        if (clusterStatusBadge) {
+          clusterStatusBadge.textContent = `${onlineServersCount}/${allKeys.length} Online • ${totalActiveBots} Paired`;
         }
-      });
-
-      await Promise.allSettled(promises);
-
-      const clusterStatusBadge = document.getElementById('clusterStatusBadge');
-      if (clusterStatusBadge) {
-        clusterStatusBadge.textContent = `${onlineServersCount}/${allKeys.length} Online`;
-      }
-      const clusterTotalActive = document.getElementById('clusterTotalActive');
-      if (clusterTotalActive) {
-        clusterTotalActive.textContent = 'Auto Optimized';
+        const clusterTotalActive = document.getElementById('clusterTotalActive');
+        if (clusterTotalActive) {
+          clusterTotalActive.textContent = `${totalActiveBots} Paired Active`;
+        }
+      } finally {
+        isPingingCluster = false;
       }
     }
 

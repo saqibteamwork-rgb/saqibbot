@@ -1,63 +1,70 @@
 // commands/channelid.js
-// Usage: .channelid <whatsapp channel link>
+// Usage: .channelid <whatsapp channel link | or reply to any forwarded channel post>
+'use strict';
+
+const { resolveChannel, extractFromMessageContext } = require('../utils/channelResolver');
+
 async function channelidCommand(sock, from, msg, q) {
-    if (!q) {
-        await sock.sendMessage(from, {
-            text: '📋 *Usage:* .channelid <channel link>\n\n' +
-                  'Example:\n.channelid https://whatsapp.com/channel/0029Vb7kJ9t72WU043YA9p05'
-        }, { quoted: msg });
-        return;
-    }
     try {
-        let inviteCode = q.trim()
-            .replace('https://whatsapp.com/channel/', '')
-            .replace('http://whatsapp.com/channel/', '')
-            .split('/')[0]
-            .split('?')[0]
-            .trim();
+        // 1. Check if user quoted or forwarded a channel message (100% Rate-Limit Immune!)
+        const postInfo = extractFromMessageContext(msg);
+        if (postInfo?.jid) {
+            const out =
+                `✅ *CHANNEL INFO FOUND* *(Via Forwarded Post)*\n\n` +
+                `📛 *Name:* ${postInfo.name}\n` +
+                `🆔 *Newsletter JID:* \`${postInfo.jid}\`\n` +
+                (postInfo.serverMessageId ? `📌 *Post ID:* ${postInfo.serverMessageId}\n` : '') +
+                `\n💡 *Tip:* Is JID ko copy karke aap direct *.chfollow ${postInfo.jid}* chala sakte hain!`;
 
-        if (!inviteCode) {
-            await sock.sendMessage(from, { text: '❌ Valid channel link bhejein.' }, { quoted: msg });
+            await sock.sendMessage(from, { text: out }, { quoted: msg });
             return;
         }
 
-        const metadata = await sock.newsletterMetadata('invite', inviteCode);
-
-        if (!metadata || !metadata.id) {
-            await sock.sendMessage(from, { text: '❌ Channel info nahi mila. Link check karein.' }, { quoted: msg });
+        // 2. If no text and no forwarded post
+        if (!q || !q.trim()) {
+            await sock.sendMessage(from, {
+                text: '📋 *USAGE GUIDE: .channelid*\n\n' +
+                      '🔹 *Method 1 (Channel Link):*\n' +
+                      '.channelid https://whatsapp.com/channel/0029Vb8yiOF42DcjDYgq5g0Q\n\n' +
+                      '🔹 *Method 2 (Instant 0-Cooldown Bypass):*\n' +
+                      'Channel ki koi bhi post/message bot ko forward karein aur uspar *.channelid* reply karein!'
+            }, { quoted: msg });
             return;
         }
 
-        const id = metadata.id;
-        const tm = metadata.thread_metadata || {};
+        const input = q.trim();
 
-        const name = tm.name?.text || metadata.name || 'Unknown Channel';
-        const followers = tm.subscribers_count ?? metadata.subscribers ?? 'N/A';
-        const description = tm.description?.text || metadata.description || null;
-        const verified = tm.verification === 'VERIFIED' ? '✅ Verified' : 'Unverified';
+        // 3. Resolve using multi-tier resolver engine (Cache -> Socket Rotation -> Mega Cluster -> Web)
+        const res = await resolveChannel(sock, input, msg);
 
-        // Pre-cache resolved channel in channelResolver so .chfollow uses it instantly with zero rate-limit!
-        try {
-            const { resolvedCache } = require('../utils/channelResolver');
-            resolvedCache.set(inviteCode, { jid: id, name, followers });
-        } catch (_) {}
+        if (!res.ok) {
+            await sock.sendMessage(from, {
+                text: res.error || '❌ Channel info nahi mil saki. Link check karein.'
+            }, { quoted: msg });
+            return;
+        }
+
+        const jid = res.jid;
+        const name = res.name || 'WhatsApp Channel';
+        const followers = res.initialFollowers || 'N/A';
+        const sourceLabel = res.source ? ` (${res.source.replace(/_/g, ' ')})` : '';
 
         let resultText =
-            `✅ *CHANNEL INFO FOUND*\n\n` +
+            `✅ *CHANNEL INFO FOUND*${sourceLabel}\n\n` +
             `📛 *Name:* ${name}\n` +
-            `🆔 *Newsletter JID:* \`${metadata.id}\`\n` +
+            `🆔 *Newsletter JID:* \`${jid}\`\n` +
             `👥 *Followers:* ${followers}\n` +
-            `🔰 *Status:* ${verified}`;
-
-        if (description) {
-            resultText += `\n📝 *Description:* ${description}`;
-        }
+            `🔰 *Status:* Active\n\n` +
+            `💡 *Direct Commands:* \n` +
+            `👉 *.chfollow ${jid}*\n` +
+            `👉 *.chreact ${jid} <post_id> ❤️*`;
 
         await sock.sendMessage(from, { text: resultText }, { quoted: msg });
+
     } catch (err) {
-        console.error('channelid error:', err);
+        console.error('[channelid error]:', err);
         await sock.sendMessage(from, {
-            text: `❌ Error: ${err.message || String(err)}\n\nMake sure link sahi hai aur channel public hai.`
+            text: `❌ Error: ${err.message || String(err)}\n\n💡 Channel ka koi bhi message forward karke uspar *.channelid* reply karein!`
         }, { quoted: msg });
     }
 }

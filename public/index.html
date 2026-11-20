@@ -1427,71 +1427,91 @@
     }
 
     // Ping health & latency for all 11 cluster servers
+    let isPingingCluster = false;
     async function pingClusterHealth() {
+      if (isPingingCluster) return;
+      isPingingCluster = true;
+
       const allKeys = Object.keys(CLUSTER);
       let totalActiveBots = 0;
       let onlineServersCount = 0;
 
-      const promises = allKeys.map(async (key) => {
-        const node = CLUSTER[key];
-        const t0 = performance.now();
-        try {
-          const res = await fetch(node.url + '/health', { cache: 'no-store' });
-          const latency = Math.round(performance.now() - t0);
-          if (res.ok) {
-            const data = await res.json();
-            node.online = true;
-            node.ping = latency;
-            const activeCount = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
-            node.active = activeCount;
-            totalActiveBots += activeCount;
-            onlineServersCount++;
+      try {
+        const promises = allKeys.map(async (key) => {
+          const node = CLUSTER[key];
+          const t0 = performance.now();
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6500);
+
+          try {
+            const res = await fetch(node.url + '/health', {
+              cache: 'no-store',
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+
+            const latency = Math.round(performance.now() - t0);
+            if (res.ok) {
+              const data = await res.json();
+              node.online = true;
+              node.ping = latency;
+              const activeCount = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
+              node.active = activeCount;
+              totalActiveBots += activeCount;
+              onlineServersCount++;
+
+              const dot = document.getElementById(key + 'Dot');
+              const pingEl = document.getElementById(key + 'Ping');
+              const capEl = document.getElementById(key + 'Capacity');
+              const sessEl = document.getElementById(key + 'Sessions');
+
+              if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+              if (pingEl) pingEl.textContent = latency + 'ms';
+              if (capEl) capEl.innerHTML = '<span class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>';
+              if (sessEl) {
+                if (activeCount > 0) {
+                  sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-teal-500/25 border border-teal-500/50 text-teal-300 font-bold flex items-center gap-1 shadow-sm';
+                  sessEl.innerHTML = `<i class="fa-solid fa-link text-[7px] text-teal-400"></i> ${activeCount} Paired`;
+                } else {
+                  sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1';
+                  sessEl.innerHTML = `<i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired`;
+                }
+              }
+            } else {
+              throw new Error('Status ' + res.status);
+            }
+          } catch (e) {
+            clearTimeout(timeoutId);
+            node.online = false;
+            node.ping = null;
+            node.active = 0;
 
             const dot = document.getElementById(key + 'Dot');
             const pingEl = document.getElementById(key + 'Ping');
             const capEl = document.getElementById(key + 'Capacity');
             const sessEl = document.getElementById(key + 'Sessions');
-
-            if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
-            if (pingEl) pingEl.textContent = latency + 'ms';
-            if (capEl) capEl.innerHTML = '<span class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>';
+            if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
+            if (pingEl) pingEl.textContent = '--ms';
+            if (capEl) capEl.innerHTML = '<span class="text-rose-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-xmark text-[8px]"></i> Offline</span>';
             if (sessEl) {
-              if (activeCount > 0) {
-                sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-teal-500/25 border border-teal-500/50 text-teal-300 font-bold flex items-center gap-1 shadow-sm';
-                sessEl.innerHTML = `<i class="fa-solid fa-link text-[7px] text-teal-400"></i> ${activeCount} Paired`;
-              } else {
-                sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1';
-                sessEl.innerHTML = `<i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired`;
-              }
+              sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-800/40 text-rose-400/80 flex items-center gap-1';
+              sessEl.innerHTML = `<i class="fa-solid fa-link-slash text-[7px]"></i> --`;
             }
-          } else {
-            throw new Error('Status ' + res.status);
           }
-        } catch (e) {
-          node.online = false;
-          const dot = document.getElementById(key + 'Dot');
-          const pingEl = document.getElementById(key + 'Ping');
-          const capEl = document.getElementById(key + 'Capacity');
-          const sessEl = document.getElementById(key + 'Sessions');
-          if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
-          if (pingEl) pingEl.textContent = 'Offline';
-          if (capEl) capEl.innerHTML = '<span class="text-rose-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-xmark text-[8px]"></i> Offline</span>';
-          if (sessEl) {
-            sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-800/40 text-rose-400/80 flex items-center gap-1';
-            sessEl.innerHTML = `<i class="fa-solid fa-link-slash text-[7px]"></i> --`;
-          }
+        });
+
+        await Promise.allSettled(promises);
+
+        const clusterStatusBadge = document.getElementById('clusterStatusBadge');
+        if (clusterStatusBadge) {
+          clusterStatusBadge.textContent = `${onlineServersCount}/${allKeys.length} Online • ${totalActiveBots} Paired`;
         }
-      });
-
-      await Promise.allSettled(promises);
-
-      const clusterStatusBadge = document.getElementById('clusterStatusBadge');
-      if (clusterStatusBadge) {
-        clusterStatusBadge.textContent = `${onlineServersCount}/${allKeys.length} Online • ${totalActiveBots} Paired`;
-      }
-      const clusterTotalActive = document.getElementById('clusterTotalActive');
-      if (clusterTotalActive) {
-        clusterTotalActive.innerHTML = `<i class="fa-solid fa-link text-[8px] text-teal-400"></i> ${totalActiveBots} Paired Active`;
+        const clusterTotalActive = document.getElementById('clusterTotalActive');
+        if (clusterTotalActive) {
+          clusterTotalActive.innerHTML = `<i class="fa-solid fa-link text-[8px] text-teal-400"></i> ${totalActiveBots} Paired Active`;
+        }
+      } finally {
+        isPingingCluster = false;
       }
     }
 
