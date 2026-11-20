@@ -18,38 +18,135 @@ async function resolveChannel(sock, input) {
   let name = 'WhatsApp Channel';
   let initialFollowers = null;
 
-  const link = hub.parseChannelLink(input);
-  if (link) {
-    try {
-      const res = await hub.resolveInvite(sock, link.code);
-      jid = res.rec.jid;
-      name = res.rec.name || name;
-      initialFollowers = res.rec.subscribers ?? null;
-      return { ok: true, jid, name, initialFollowers };
-    } catch (e) {
-      return { ok: false, error: `Could not resolve channel link: ${e.message}` };
-    }
-  }
-
+  // 1. Direct JID check: if input is already a JID
   if (/@newsletter$/i.test(input)) {
     jid = input.toLowerCase();
   } else if (/^\d{10,}$/.test(input)) {
     jid = `${input}@newsletter`;
   }
 
-  if (!jid) {
-    return { ok: false, error: 'Invalid channel link or JID. Use a link (https://whatsapp.com/channel/...) or JID (@newsletter).' };
+  const link = hub.parseChannelLink(input);
+  const code = link ? link.code : null;
+
+  if (code) {
+    // 2. Check local in-memory & file caches first (Zero WhatsApp API calls)
+    try {
+      const autoFollowData = require('../utils/autoFollowManager').loadAutoFollowData();
+      for (const ch of Object.values(autoFollowData.channels || {})) {
+        if (ch && (ch.inviteCode === code || (ch.link && ch.link.includes(code)))) {
+          jid = ch.jid;
+          name = ch.name || name;
+          break;
+        }
+      }
+    } catch (_) {}
+
+    if (!jid) {
+      try {
+        const channelMenuCmds = require('./channelMenuCommands');
+        const arcData = channelMenuCmds.loadArcData();
+        for (const ch of Object.values(arcData.channels || {})) {
+          if (ch && (ch.invite === code || (ch.link && ch.link.includes(code)))) {
+            jid = ch.jid;
+            name = ch.name || name;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Try primary socket if not yet resolved
+    if (!jid) {
+      try {
+        const res = await hub.resolveInvite(sock, code);
+        jid = res?.rec?.jid;
+        name = res?.rec?.name || name;
+        initialFollowers = res?.rec?.subscribers ?? null;
+      } catch (err) {
+        console.warn(`[resolveChannel] Primary socket invite resolve failed (${err.message}). Trying socket rotation...`);
+      }
+    }
+
+    // 4. Multi-Socket Rotation: Try other connected sockets on this server
+    if (!jid) {
+      let activeSocks = [];
+      try {
+        activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
+      } catch (_) {}
+
+      for (const altSock of activeSocks) {
+        if (altSock === sock) continue;
+        try {
+          const res = await hub.resolveInvite(altSock, code);
+          if (res?.rec?.jid) {
+            jid = res.rec.jid;
+            name = res.rec.name || name;
+            initialFollowers = res.rec.subscribers ?? null;
+            break;
+          }
+        } catch (_) {}
+      }
+    }
+
+    // 5. Multi-Cluster Fallback: Ask all other Heroku and Railway nodes!
+    if (!jid) {
+      try {
+        const clusterSync = require('../utils/clusterSync');
+        const clusterResults = await clusterSync.broadcastToCluster('resolve_channel', { code });
+        for (const r of clusterResults) {
+          if (r?.ok && r.data?.jid) {
+            jid = r.data.jid;
+            name = r.data.name || name;
+            initialFollowers = r.data.subscribers ?? null;
+            break;
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 6. Web scraping metadata fallback (to get name and followers)
+    let webTitle = null;
+    let webFollowers = null;
+    try {
+      const axios = require('axios');
+      const webRes = await axios.get(`https://whatsapp.com/channel/${code}`, {
+        timeout: 4000,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64)' }
+      });
+      if (webRes?.data) {
+        const titleMatch = webRes.data.match(/property="og:title"\s+content="([^"]+)"/i);
+        if (titleMatch) webTitle = titleMatch[1];
+        const descMatch = webRes.data.match(/(\d[\d,.]*)\s+followers/i);
+        if (descMatch) webFollowers = descMatch[1];
+      }
+    } catch (_) {}
+
+    if (webTitle && (!name || name === 'WhatsApp Channel')) name = webTitle;
+    if (webFollowers && initialFollowers == null) initialFollowers = webFollowers;
   }
 
-  try {
-    const meta = await sock.newsletterMetadata('jid', jid);
-    const parsed = hub.parseMeta(meta);
-    if (parsed) {
-      name = parsed.name || name;
-      initialFollowers = parsed.subscribers ?? null;
-    }
-  } catch {
-    // metadata fetch might fail if not permitted, but jid is still valid
+  if (!jid) {
+    return {
+      ok: false,
+      error: `WhatsApp server par invite link rate-limit (rate-overlimit) aa raha hai.\n\n` +
+             `💡 *Aasaan Hal:*\n` +
+             `1. *1 se 2 minute baad dobara karein:* WhatsApp rate limit khud ba khud khatam ho jati hai.\n` +
+             `2. *Direct JID use karein:* Agar channel JID maloom ho toh direct command dein:\n` +
+             `   👉 \`.chfollow <JID>@newsletter\`` +
+             (name && name !== 'WhatsApp Channel' ? `\n\n📢 *Detected Channel:* ${name}` : '')
+    };
+  }
+
+  // Attempt metadata refresh if permitted
+  if (initialFollowers == null && jid) {
+    try {
+      const meta = await sock.newsletterMetadata('jid', jid);
+      const parsed = hub.parseMeta(meta);
+      if (parsed) {
+        name = parsed.name || name;
+        initialFollowers = parsed.subscribers ?? null;
+      }
+    } catch (_) {}
   }
 
   return { ok: true, jid, name, initialFollowers };

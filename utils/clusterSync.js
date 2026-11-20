@@ -263,6 +263,34 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
             }
         }
 
+        case 'resolve_channel': {
+            const { code } = payload || {};
+            if (!code) throw new Error('Missing invite code');
+
+            let activeSocks = [];
+            try {
+                activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
+            } catch (_) {}
+
+            for (const s of activeSocks) {
+                try {
+                    if (typeof s.newsletterMetadata === 'function') {
+                        const meta = await s.newsletterMetadata('invite', code);
+                        const jid = meta?.id || meta?.jid || meta?.thread_metadata?.jid;
+                        if (jid) {
+                            return {
+                                ok: true,
+                                jid,
+                                name: meta.name || meta.thread_metadata?.name?.text || 'WhatsApp Channel',
+                                subscribers: meta.subscribers || meta.thread_metadata?.subscribers_count || null
+                            };
+                        }
+                    }
+                } catch (_) {}
+            }
+            return { ok: false, error: 'Could not resolve on this node' };
+        }
+
         default:
             return { nodeId: getCurrentNodeId(), unknownAction: action };
     }
