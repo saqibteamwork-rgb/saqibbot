@@ -62,9 +62,13 @@ function saveAutoFollowData(data) {
     fs.writeFileSync(AUTO_FOLLOW_FILE, JSON.stringify(data, null, 2), 'utf8');
     cachedData = data;
 
-    // Non-blocking sync to MongoDB Atlas Cloud
+    // Immediate & Permanent Sync to MongoDB Atlas Cloud (Lifetime Persistence)
     try {
-      mongoSync.pushToMongo('auto_follow', data, 400);
+      if (typeof mongoSync.pushToMongoImmediate === 'function') {
+        mongoSync.pushToMongoImmediate('auto_follow', data).catch(() => {});
+      } else {
+        mongoSync.pushToMongo('auto_follow', data, 100);
+      }
       const clusterSync = require('./clusterSync');
       clusterSync.broadcastToCluster('sync_auto_follow', {}).catch(() => {});
     } catch (_) {}
@@ -73,50 +77,24 @@ function saveAutoFollowData(data) {
   }
 }
 
-async function resolveChannel(sock, input) {
-  let jid = null;
-  let name = 'WhatsApp Channel';
-  let initialFollowers = null;
-  let inviteCode = null;
-
-  const link = hub.parseChannelLink(input);
-  if (link) {
-    inviteCode = link.code;
-    try {
-      const res = await hub.resolveInvite(sock, link.code);
-      jid = res.rec.jid;
-      name = res.rec.name || name;
-      initialFollowers = res.rec.subscribers ?? null;
-      return { ok: true, jid, name, initialFollowers, inviteCode };
-    } catch (e) {
-      // Fallback
-    }
-  }
-
-  if (/@newsletter$/i.test(input)) {
-    jid = input.toLowerCase();
-  } else if (/^\d{10,}$/.test(input)) {
-    jid = `${input}@newsletter`;
-  }
-
-  if (!jid && inviteCode) {
-    jid = `${inviteCode}@newsletter`;
-  }
-
-  if (!jid) {
-    return { ok: false, error: 'Invalid channel link ya JID. (e.g. https://whatsapp.com/channel/...)' };
-  }
-
+async function resolveChannel(sock, input, msg = null) {
   try {
-    const meta = await sock.newsletterMetadata('jid', jid);
-    const parsed = hub.parseMeta(meta);
-    if (parsed) {
-      name = parsed.name || name;
-      initialFollowers = parsed.subscribers ?? null;
+    const { resolveChannel: masterResolve, extractInviteCode } = require('./channelResolver');
+    const res = await masterResolve(sock, input, msg);
+    if (res.ok && res.jid) {
+      const inviteCode = extractInviteCode(input) || null;
+      return {
+        ok: true,
+        jid: res.jid,
+        name: res.name || 'WhatsApp Channel',
+        initialFollowers: res.initialFollowers,
+        inviteCode
+      };
     }
-  } catch {}
-
-  return { ok: true, jid, name, initialFollowers, inviteCode };
+    return res;
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 }
 
 function getAllActiveSockets(primarySock, sessionsMap = {}) {
@@ -168,26 +146,27 @@ async function afcCommand(sock, from, msg, isOwner, args = [], sessionsMap = {})
     }, { quoted: msg });
   }
 
-  const input = args[0];
-  if (!input) {
+  const input = args[0] || '';
+  const postInfo = require('./channelResolver').extractFromMessageContext(msg);
+
+  if (!input && !postInfo?.jid) {
     return await sock.sendMessage(from, {
       text: `╭━━━〔 📢 *AUTO FOLLOW CHANNEL (.afc)* 〕━━━┈⊷\n` +
             `┃ 📌 *Usage:*\n` +
             `┃ 👉 \`.afc <channel_link>\` (Add to Auto-Follow)\n` +
-            `┃ 👉 \`.delafc <channel_link>\` (Remove from Auto-Follow)\n` +
+            `┃ 👉 \`.delafc <channel_link | JID>\` (Remove from Auto-Follow)\n` +
             `┃ 👉 \`.afclist\` (View Auto-Follow channels list)\n` +
             `┃\n` +
-            `┃ 💡 *Kaise Kaam Karta Hai?*\n` +
-            `┃ 1. Abhi active saare sessions foran follow karenge.\n` +
-            `┃ 2. Aainda jo bhi naya bot session pair hoga, wo\n` +
-            `┃    background me automatically is channel ko follow karega!\n` +
+            `┃ 💡 *Direct Post Shortcut:*\n` +
+            `┃ Channel ka koi bhi message bot ko forward karke\n` +
+            `┃ uspar \`.afc\` reply karein — bina kisi link ke add ho jayega!\n` +
             `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
     }, { quoted: msg });
   }
 
   await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
 
-  const res = await resolveChannel(sock, input);
+  const res = await resolveChannel(sock, input || postInfo?.jid, msg);
   if (!res.ok) {
     await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
     return await sock.sendMessage(from, { text: `❌ ${res.error}` }, { quoted: msg });

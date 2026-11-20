@@ -120,6 +120,55 @@ async function initialSync() {
                 try { localData = fs.readJsonSync(target.file); } catch (_) {}
             }
 
+            if (target.key === 'auto_follow') {
+                if (cloudDoc && cloudDoc.payload) {
+                    const cloudChannels = (cloudDoc.payload && cloudDoc.payload.channels) || {};
+                    const localChannels = (localData && localData.channels) || {};
+                    const mergedChannels = { ...localChannels, ...cloudChannels };
+                    const mergedData = {
+                        channels: mergedChannels,
+                        updatedAt: Date.now()
+                    };
+                    fs.writeJsonSync(target.file, mergedData, { spaces: 2 });
+                    console.log(`📥 [MongoDB Sync] Permanently restored & merged "${target.key}" (${Object.keys(mergedChannels).length} channels) from cloud!`);
+                    await col.updateOne(
+                        { _id: target.key },
+                        { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
+                        { upsert: true }
+                    );
+                    continue;
+                } else if (localData && Object.keys(localData).length > 0) {
+                    await col.updateOne(
+                        { _id: target.key },
+                        { $set: { _id: target.key, payload: localData, updatedAt: Date.now() } },
+                        { upsert: true }
+                    );
+                    console.log(`📤 [MongoDB Sync] Seeded "${target.key}" into MongoDB Atlas cloud!`);
+                    continue;
+                }
+            }
+
+            if (target.key === 'channel_arc') {
+                if (cloudDoc && cloudDoc.payload) {
+                    const cloudChannels = (cloudDoc.payload && cloudDoc.payload.channels) || {};
+                    const localChannels = (localData && localData.channels) || {};
+                    const mergedChannels = { ...localChannels, ...cloudChannels };
+                    const mergedData = {
+                        ...cloudDoc.payload,
+                        channels: mergedChannels,
+                        updatedAt: Date.now()
+                    };
+                    fs.writeJsonSync(target.file, mergedData, { spaces: 2 });
+                    console.log(`📥 [MongoDB Sync] Permanently restored & merged "${target.key}" (${Object.keys(mergedChannels).length} channels) from cloud!`);
+                    await col.updateOne(
+                        { _id: target.key },
+                        { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
+                        { upsert: true }
+                    );
+                    continue;
+                }
+            }
+
             if (cloudDoc && cloudDoc.payload) {
                 // Cloud has data: update local file if cloud is newer or local is missing
                 const cloudTime = cloudDoc.updatedAt || 0;
@@ -152,6 +201,33 @@ async function initialSync() {
         } catch (syncErr) {
             console.warn(`[MongoDB Sync Warning] Error syncing ${target.key}:`, syncErr.message);
         }
+    }
+}
+
+/**
+ * Immediate synchronous push to MongoDB Atlas without debounce timer
+ */
+async function pushToMongoImmediate(collectionKey, data) {
+    if (!collectionKey || !data) return false;
+    if (debounceTimers.has(collectionKey)) {
+        clearTimeout(debounceTimers.get(collectionKey));
+        debounceTimers.delete(collectionKey);
+    }
+    if (!isConnected || !db) {
+        const ok = await initMongo().catch(() => false);
+        if (!ok || !db) return false;
+    }
+    try {
+        const col = db.collection(collectionKey);
+        await col.updateOne(
+            { _id: collectionKey },
+            { $set: { _id: collectionKey, payload: data, updatedAt: Date.now() } },
+            { upsert: true }
+        );
+        return true;
+    } catch (err) {
+        console.warn(`[MongoDB Immediate Push Warning] Failed for ${collectionKey}:`, err.message);
+        return false;
     }
 }
 
@@ -531,6 +607,7 @@ module.exports = {
     initMongo,
     getDb: () => db,
     pushToMongo,
+    pushToMongoImmediate,
     pullFromMongo,
     getStatus,
     setDetectedHost,
