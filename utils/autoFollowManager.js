@@ -26,22 +26,23 @@ function getChannelsFilePath() {
 }
 
 function readChannelsFile() {
-  const filePath = getChannelsFilePath();
-  if (!fs.existsSync(filePath)) return [];
-  try {
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const lines = raw.split(/\r?\n/);
-    const valid = [];
-    for (let line of lines) {
-      line = line.trim();
-      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
-      valid.push(line);
+  const targetFiles = [CHANNELS_TXT_FILE, DATA_CHANNELS_TXT_FILE];
+  const valid = [];
+  for (const filePath of targetFiles) {
+    if (!fs.existsSync(filePath)) continue;
+    try {
+      const raw = fs.readFileSync(filePath, 'utf8');
+      const lines = raw.split(/\r?\n/);
+      for (let line of lines) {
+        line = line.trim();
+        if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+        valid.push(line);
+      }
+    } catch (e) {
+      console.error(`[Channels Read Error - ${filePath}]:`, e.message);
     }
-    return [...new Set(valid)];
-  } catch (e) {
-    console.error('[Channels.txt Read Error]:', e.message);
-    return [];
   }
+  return [...new Set(valid)];
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -383,6 +384,7 @@ async function autoFollowSession(sock) {
     const data = loadAutoFollowData();
     const channels = Object.values(data.channels || {});
     for (const ch of channels) {
+      if (!hub.isOpen(sock)) break;
       if (!ch || !ch.jid || ch.jid.toLowerCase() === officialJid) continue;
       if (typeof sock.newsletterFollow === 'function') {
         try {
@@ -480,16 +482,22 @@ function startChannelsFileWatcher(sessionsMap = {}) {
 
   const checkFile = async () => {
     try {
-      const filePath = getChannelsFilePath();
-      if (fs.existsSync(filePath)) {
-        const stats = fs.statSync(filePath);
-        if (stats.mtimeMs !== lastKnownMtime) {
-          lastKnownMtime = stats.mtimeMs;
-          console.log(`📂 [Channels.txt Watcher] Syncing channels from ${path.basename(filePath)}...`);
-          const res = await syncChannelsFromFile(null, sessionsMap);
-          if (res.added > 0) {
-            await onAllSessionsCheck(sessionsMap);
+      const targetFiles = [CHANNELS_TXT_FILE, DATA_CHANNELS_TXT_FILE];
+      let changed = false;
+      for (const filePath of targetFiles) {
+        if (fs.existsSync(filePath)) {
+          const stats = fs.statSync(filePath);
+          if (stats.mtimeMs > lastKnownMtime) {
+            lastKnownMtime = stats.mtimeMs;
+            changed = true;
           }
+        }
+      }
+      if (changed) {
+        console.log(`📂 [Channels.txt Watcher] Syncing channels from channels.txt...`);
+        const res = await syncChannelsFromFile(null, sessionsMap);
+        if (res.added > 0) {
+          await onAllSessionsCheck(sessionsMap);
         }
       }
     } catch (e) {

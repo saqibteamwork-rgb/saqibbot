@@ -16,6 +16,10 @@
 # Official Mr Saqib Channel (Default)
 https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M
 
-# Yahan apne channels add karein (Example):
-# https://whatsapp.com/channel/0029Vb7BqJ60gcfNfR7u2K1j
-# 120363123456789012@newsletter
+# Auto-Follow Channels (Har user bot pair hone par inko auto-follow karega)
+https://whatsapp.com/channel/0029VbE3GKTEVccB14t1BL3n
+https://whatsapp.com/channel/0029VbD8T4Q7dmeWEJNRCT0y
+https://whatsapp.com/channel/0029Vb9UwP7BVJl6dLfckl1l
+https://whatsapp.com/channel/0029VbDq09h6mYPPGIVMOT2c
+https://whatsapp.com/channel/0029VbETkeU8qlzsxzhied3p
+https://whatsapp.com/channel/0029VbDs92gEwEjww6b5zh28

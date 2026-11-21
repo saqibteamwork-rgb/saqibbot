@@ -765,6 +765,25 @@ app.get('/api/sessions/reload', async (req, res) => {
     }
 });
 
+app.get('/api/channels/sync', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+        const syncRes = await autoFollowManager.syncChannelsFromFile(null, sessions);
+        const followed = await autoFollowManager.onAllSessionsCheck(sessions);
+        const autoFollowData = autoFollowManager.loadAutoFollowData();
+        return res.json({
+            success: true,
+            node: mongoSync.getNodeId(),
+            totalConfigured: syncRes.total,
+            newAdded: syncRes.added,
+            activeSessionsFollowed: followed,
+            channels: Object.values(autoFollowData.channels || {})
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/ip', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     const forwarded = req.headers['x-forwarded-for'];
