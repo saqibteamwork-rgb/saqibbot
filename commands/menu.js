@@ -612,24 +612,37 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         }
 
         if (!sentViaRelay) {
-            // Card 1: Menu Picture with All Commands (Specifications Header + Categorized Commands + Footer)
+            // Reliable 2-Card Delivery (Guaranteed within WhatsApp caption limit):
+            // If menu text fits within WhatsApp media caption limit (<= 1500 chars, e.g. single category):
+            // Card 1: Image + Category Commands
+            // Card 2: Google Search Card
+            // For full menu (1,020 commands, 21KB):
+            // Card 1: Menu Image + Bot Specifications Header (fits safely in image caption)
+            // Card 2: All Commands List + Google Search Card (in full text message, supports up to 65KB)
+            const combinedCommandsAndSearch = `${(bodyText + footerText).trim()}\n\n${GOOGLE_LINKS_CARD}`;
+
             if (imagePayload) {
-                try {
-                    await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
-                } catch (imgErr) {
-                    console.warn('[menuCommand] Image upload failed or caption issue, sending pure text menu:', imgErr.message);
-                    await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+                if (menuText.length <= 1500) {
+                    try {
+                        await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
+                        await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD, contextInfo: channelContext });
+                    } catch (imgErr) {
+                        console.warn('[menuCommand] Short image menu failed, falling back to text:', imgErr.message);
+                        await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}`, contextInfo: channelContext }, { quoted: msg });
+                    }
+                } else {
+                    // Full menu: Card 1 (Image + Header), Card 2 (Commands + Google Search)
+                    try {
+                        await sock.sendMessage(from, { image: imagePayload, caption: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
+                        await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
+                    } catch (imgErr) {
+                        console.warn('[menuCommand] Image send failed, sending pure text menu:', imgErr.message);
+                        await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}`, contextInfo: channelContext }, { quoted: msg });
+                    }
                 }
             } else {
-                await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
-            }
-
-            // Card 2: Dedicated Separate 'SEARCH ON GOOGLE' Card
-            try {
-                await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD, contextInfo: channelContext }, { quoted: msg });
-            } catch (card2Err) {
-                console.error('[menuCommand] Error sending google search card:', card2Err.message);
-                await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }).catch(() => {});
+                await sock.sendMessage(from, { text: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
+                await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
             }
         } else {
             // If sent via payment relay, deliver Card 2 (Google Search Card) right after
@@ -642,8 +655,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         }
     } catch (err) {
         console.error('[menuCommand] Error sending menu:', err.message);
-        await sock.sendMessage(from, { text: menuText }, { quoted: msg }).catch(() => {});
-        await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }).catch(() => {});
+        await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}` }, { quoted: msg }).catch(() => {});
     }
 }
 

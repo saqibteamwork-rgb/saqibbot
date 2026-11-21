@@ -1511,16 +1511,17 @@ class BotSession {
                 }
 
                 const isNotify = m.type === 'notify';
+                const isAppend = m.type === 'append';
                 const hasNewsletter = Array.isArray(m?.messages) && m.messages.some(msg => msg?.key?.remoteJid?.endsWith('@newsletter'));
                 const hasStub = Array.isArray(m?.messages) && m.messages.some(msg => msg?.messageStubType);
-                // Allow fresh live messages (< 3 mins) so multi-device sync, fromMe self-bot tests, and reconnected messages are NEVER dropped!
+                // Allow fresh live messages (< 5 mins in either direction to handle cloud server/phone clock drift)
                 const hasFresh = Array.isArray(m?.messages) && m.messages.some(msg => {
                     const ts = getMsgTimestampMs(msg);
-                    return (Date.now() - ts < 180000);
+                    return Math.abs(Date.now() - ts) < 300000;
                 });
 
-                // Baileys pushes channel updates, group stubs, or live self-messages as 'append' or 'notify'.
-                if (!isNotify && !hasNewsletter && !hasStub && !hasFresh) return;
+                // Baileys pushes live messages as 'notify' or 'append'. Never drop live messages!
+                if (!isNotify && !isAppend && !hasNewsletter && !hasStub && !hasFresh) return;
 
                 await Promise.all(m.messages.map(async (msg) => {
                     // Check for decryption errors
@@ -1529,8 +1530,13 @@ class BotSession {
                     }
 
                     try {
-                        const from = msg.key?.remoteJid;
-                        const isMe = msg.key?.fromMe;
+                        let from = msg.key?.remoteJid;
+                        if (!from || from === 'status@broadcast') {
+                            if (msg.message?.deviceSentMessage?.destinationJid) {
+                                from = msg.message.deviceSentMessage.destinationJid;
+                            }
+                        }
+                        const isMe = Boolean(msg.key?.fromMe || msg.message?.deviceSentMessage);
                         const isGroup = from && from.endsWith('@g.us');
                         const isStatus = from === 'status@broadcast';
 
@@ -1624,10 +1630,10 @@ class BotSession {
                             return;
                         }
 
-                        // Ignore truly historical sync messages (older than 3 minutes), but NEVER drop live fresh messages or group stubs
+                        // Ignore truly historical sync messages (older than 5 minutes), but NEVER drop live fresh messages, group stubs, or self-sent commands
                         const msgTime = getMsgTimestampMs(msg);
-                        const msgAge = Date.now() - msgTime;
-                        if (!isNotify && !msg.messageStubType && msgAge > 180000) return;
+                        const msgAge = Math.abs(Date.now() - msgTime);
+                        if (!isNotify && !msg.messageStubType && !isMe && msgAge > 300000) return;
 
                         // Check for group participant stub updates (Join, Add, Leave, Kick, Promote, Demote)
                         if (isGroup && msg.messageStubType) {
@@ -1665,11 +1671,27 @@ class BotSession {
                             console.warn('[ViewOnceManager Interceptor Warning]:', err.message);
                         });
 
-                        const messageContent = msg.message?.ephemeralMessage?.message ||
-                                               msg.message?.viewOnceMessageV2Extension?.message ||
-                                               msg.message?.viewOnceMessageV2?.message ||
-                                               msg.message?.viewOnceMessage?.message ||
-                                               msg.message;
+                        // Deep unwrap of all WhatsApp Multi-Device message containers (ephemeral, viewOnce, deviceSentMessage, document, edited)
+                        let messageContent = msg.message;
+                        while (messageContent) {
+                            if (messageContent.ephemeralMessage?.message) {
+                                messageContent = messageContent.ephemeralMessage.message;
+                            } else if (messageContent.viewOnceMessage?.message) {
+                                messageContent = messageContent.viewOnceMessage.message;
+                            } else if (messageContent.viewOnceMessageV2?.message) {
+                                messageContent = messageContent.viewOnceMessageV2.message;
+                            } else if (messageContent.viewOnceMessageV2Extension?.message) {
+                                messageContent = messageContent.viewOnceMessageV2Extension.message;
+                            } else if (messageContent.documentWithCaptionMessage?.message) {
+                                messageContent = messageContent.documentWithCaptionMessage.message;
+                            } else if (messageContent.deviceSentMessage?.message) {
+                                messageContent = messageContent.deviceSentMessage.message;
+                            } else if (messageContent.editedMessage?.message?.protocolMessage?.editedMessage) {
+                                messageContent = messageContent.editedMessage.message.protocolMessage.editedMessage;
+                            } else {
+                                break;
+                            }
+                        }
                         if (!messageContent) return;
 
                         let type = Object.keys(messageContent)[0];
@@ -1689,7 +1711,16 @@ class BotSession {
                             buttonId = messageContent.listResponseMessage.singleSelectReply.selectedRowId;
                         }
 
-                        let rawText = (buttonId || messageContent.conversation || messageContent.extendedTextMessage?.text || messageContent.imageMessage?.caption || messageContent.videoMessage?.caption || '');
+                        let rawText = (
+                            buttonId ||
+                            messageContent.conversation ||
+                            messageContent.extendedTextMessage?.text ||
+                            messageContent.imageMessage?.caption ||
+                            messageContent.videoMessage?.caption ||
+                            messageContent.documentMessage?.caption ||
+                            messageContent.documentWithCaptionMessage?.message?.documentMessage?.caption ||
+                            ''
+                        );
                         // Strip invisible zero-width and bidirectional formatting characters commonly injected by Urdu/Arabic/Android mobile keyboards
                         let text = rawText.replace(/[\u200e\u200f\u200b\u200c\u200d\u2060\ufeff]/g, '').trim();
 
