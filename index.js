@@ -1222,6 +1222,7 @@ class BotSession {
                 logger: P({ level: 'fatal' }),
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: false,
+                shouldSyncHistoryMessage: () => false,
                 markOnlineOnConnect: true,
                 keepAliveIntervalMs: 15000,
                 connectTimeoutMs: 30000,
@@ -1272,7 +1273,6 @@ class BotSession {
                     }
                     return message;
                 },
-                generateHighQualityLinkPreview: true,
             });
 
             // Bind socket events IMMEDIATELY so creds.update and connection.update are listening during pairing handshake!
@@ -3327,6 +3327,7 @@ app.get('/api/qr/start', async (req, res) => {
             logger: P({ level: 'fatal' }),
             browser: Browsers.ubuntu('Chrome'),
             syncFullHistory: false,
+            shouldSyncHistoryMessage: () => false,
             markOnlineOnConnect: true,
             keepAliveIntervalMs: 15000,
             connectTimeoutMs: 30000,
@@ -3524,11 +3525,6 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
 
                 // 4.6. Start Channels File Watcher (channels.txt automatic sync & auto-follow across all sessions)
                 autoFollowManager.startChannelsFileWatcher(sessions);
-
-                // 5. Initial flush of verified sessions to MongoDB Atlas
-                setTimeout(() => {
-                    mongoSync.backupAllSessionsToMongo(AUTH_DIR).catch(() => {});
-                }, 30000);
             } catch (bootErr) {
                 console.error('❌ [System Boot Error]:', bootErr.message);
                 loadExistingSessions().catch(() => {});
@@ -3616,12 +3612,13 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 2 mins to prevent memory leaks and OOM crashes)
+        // Periodic Memory Trimmer (Runs every 30s; invokes GC if RSS exceeds 360MB to prevent OOM)
         setInterval(() => {
-            if (global.gc) {
+            const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
+            if (global.gc && memMb > 360) {
                 try { global.gc(); } catch (e) {}
             }
-        }, 2 * 60 * 1000);
+        }, 30 * 1000);
     });
 }
 

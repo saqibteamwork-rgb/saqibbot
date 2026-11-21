@@ -593,7 +593,6 @@ async function backupAllSessionsToMongo(authDir) {
     if (!fs.existsSync(authDir)) return;
     try {
         const dirs = await fs.readdir(authDir);
-        const promises = [];
         for (const d of dirs) {
             if (d.includes('_backup_') || d.includes('_expired_') || d.startsWith('.')) continue;
             const dirPath = path.join(authDir, d);
@@ -602,12 +601,16 @@ async function backupAllSessionsToMongo(authDir) {
                 if (stat.isDirectory()) {
                     const credsFile = path.join(dirPath, 'creds.json');
                     if (fs.existsSync(credsFile)) {
-                        promises.push(backupSessionToMongo(d, dirPath, true));
+                        await backupSessionToMongo(d, dirPath, true);
+                        // Stagger backups with 600ms delay and force GC to prevent RAM spikes and OOM crashes
+                        await new Promise(r => setTimeout(r, 600));
+                        if (global.gc) {
+                            try { global.gc(); } catch (_) {}
+                        }
                     }
                 }
             } catch (_) {}
         }
-        await Promise.allSettled(promises);
     } catch (e) {
         console.warn('[MongoDB Backup All Warning]:', e.message);
     }
