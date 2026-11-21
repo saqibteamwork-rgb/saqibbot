@@ -3657,7 +3657,10 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             'https://saqibbot22-9318c2de0250.herokuapp.com',
             'https://saqibot23-1f4bec48d0f2.herokuapp.com',
             'https://saqibbot25-46c4cf949a77.herokuapp.com',
-            'https://saqibot25-0974df36edd8.herokuapp.com'
+            'https://saqibot25-0974df36edd8.herokuapp.com',
+            'https://saqibot26-69a8011cc819.herokuapp.com',
+            'https://saqibot27-1c1d295781fa.herokuapp.com',
+            'https://saqibbot28-658e7de676c8.herokuapp.com'
         ];
         const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
         const fallbackRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';

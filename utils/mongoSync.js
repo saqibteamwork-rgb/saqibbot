@@ -57,6 +57,9 @@ const KNOWN_NODES = {
     s23: 'https://saqibot23-1f4bec48d0f2.herokuapp.com',
     s25: 'https://saqibbot25-46c4cf949a77.herokuapp.com',
     s25b: 'https://saqibot25-0974df36edd8.herokuapp.com',
+    s26: 'https://saqibot26-69a8011cc819.herokuapp.com',
+    s27: 'https://saqibot27-1c1d295781fa.herokuapp.com',
+    s28: 'https://saqibbot28-658e7de676c8.herokuapp.com',
     railway: 'https://web-production-08da5300.up.railway.app'
 };
 

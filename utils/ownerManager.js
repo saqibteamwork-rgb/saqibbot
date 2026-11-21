@@ -47,6 +47,9 @@ const CLUSTER_MONITOR_NODES = [
     { id: 's23', name: 'Heroku-23', url: 'https://saqibot23-1f4bec48d0f2.herokuapp.com' },
     { id: 's25', name: 'Heroku-25', url: 'https://saqibbot25-46c4cf949a77.herokuapp.com' },
     { id: 's25b', name: 'Heroku-25B', url: 'https://saqibot25-0974df36edd8.herokuapp.com' },
+    { id: 's26', name: 'Heroku-26', url: 'https://saqibot26-69a8011cc819.herokuapp.com' },
+    { id: 's27', name: 'Heroku-27', url: 'https://saqibot27-1c1d295781fa.herokuapp.com' },
+    { id: 's28', name: 'Heroku-28', url: 'https://saqibbot28-658e7de676c8.herokuapp.com' },
     { id: 'railway', name: 'Railway', url: 'https://web-production-08da5300.up.railway.app' }
 ];
 
