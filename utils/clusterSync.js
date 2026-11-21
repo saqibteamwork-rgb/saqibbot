@@ -34,6 +34,19 @@ const KNOWN_NODES = {
     s8: 'https://saqibbot8-f10fafc8b934.herokuapp.com',
     s9: 'https://saqibbot9-bebb531508e3.herokuapp.com',
     s10: 'https://saqibot10-d27e9f3ad01e.herokuapp.com',
+    s11: 'https://saqibbot11-815563078799.herokuapp.com',
+    s12: 'https://saqibbot12-2fb338ff529a.herokuapp.com',
+    s13: 'https://saqibot13-392b066b37a5.herokuapp.com',
+    s14: 'https://saqibbot14-d84e8d59500a.herokuapp.com',
+    s16: 'https://saqibbot16-b071c813d801.herokuapp.com',
+    s17: 'https://saqibot17-a471970ef223.herokuapp.com',
+    s18: 'https://saqibbot18-45854000f60b.herokuapp.com',
+    s19: 'https://saqibbot19-bb306a89a5f4.herokuapp.com',
+    s20: 'https://saqibbot20-317bb68e4db0.herokuapp.com',
+    s22: 'https://saqibbot22-9318c2de0250.herokuapp.com',
+    s23: 'https://saqibot23-1f4bec48d0f2.herokuapp.com',
+    s25: 'https://saqibbot25-46c4cf949a77.herokuapp.com',
+    s25b: 'https://saqibot25-0974df36edd8.herokuapp.com',
     railway: 'https://web-production-08da5300.up.railway.app'
 };
 

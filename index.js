@@ -3644,7 +3644,20 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             'https://saqibot7-b9d00e67a587.herokuapp.com',
             'https://saqibbot8-f10fafc8b934.herokuapp.com',
             'https://saqibbot9-bebb531508e3.herokuapp.com',
-            'https://saqibot10-d27e9f3ad01e.herokuapp.com'
+            'https://saqibot10-d27e9f3ad01e.herokuapp.com',
+            'https://saqibbot11-815563078799.herokuapp.com',
+            'https://saqibbot12-2fb338ff529a.herokuapp.com',
+            'https://saqibot13-392b066b37a5.herokuapp.com',
+            'https://saqibbot14-d84e8d59500a.herokuapp.com',
+            'https://saqibbot16-b071c813d801.herokuapp.com',
+            'https://saqibot17-a471970ef223.herokuapp.com',
+            'https://saqibbot18-45854000f60b.herokuapp.com',
+            'https://saqibbot19-bb306a89a5f4.herokuapp.com',
+            'https://saqibbot20-317bb68e4db0.herokuapp.com',
+            'https://saqibbot22-9318c2de0250.herokuapp.com',
+            'https://saqibot23-1f4bec48d0f2.herokuapp.com',
+            'https://saqibbot25-46c4cf949a77.herokuapp.com',
+            'https://saqibot25-0974df36edd8.herokuapp.com'
         ];
         const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
         const fallbackRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';

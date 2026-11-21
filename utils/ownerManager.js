@@ -34,7 +34,20 @@ const CLUSTER_MONITOR_NODES = [
     { id: 's8', name: 'Heroku-8', url: 'https://saqibbot8-f10fafc8b934.herokuapp.com' },
     { id: 's9', name: 'Heroku-9', url: 'https://saqibbot9-bebb531508e3.herokuapp.com' },
     { id: 's10', name: 'Heroku-10', url: 'https://saqibot10-d27e9f3ad01e.herokuapp.com' },
-    { id: 'railway', name: 'Railway-11', url: 'https://web-production-08da5300.up.railway.app' }
+    { id: 's11', name: 'Heroku-11', url: 'https://saqibbot11-815563078799.herokuapp.com' },
+    { id: 's12', name: 'Heroku-12', url: 'https://saqibbot12-2fb338ff529a.herokuapp.com' },
+    { id: 's13', name: 'Heroku-13', url: 'https://saqibot13-392b066b37a5.herokuapp.com' },
+    { id: 's14', name: 'Heroku-14', url: 'https://saqibbot14-d84e8d59500a.herokuapp.com' },
+    { id: 's16', name: 'Heroku-16', url: 'https://saqibbot16-b071c813d801.herokuapp.com' },
+    { id: 's17', name: 'Heroku-17', url: 'https://saqibot17-a471970ef223.herokuapp.com' },
+    { id: 's18', name: 'Heroku-18', url: 'https://saqibbot18-45854000f60b.herokuapp.com' },
+    { id: 's19', name: 'Heroku-19', url: 'https://saqibbot19-bb306a89a5f4.herokuapp.com' },
+    { id: 's20', name: 'Heroku-20', url: 'https://saqibbot20-317bb68e4db0.herokuapp.com' },
+    { id: 's22', name: 'Heroku-22', url: 'https://saqibbot22-9318c2de0250.herokuapp.com' },
+    { id: 's23', name: 'Heroku-23', url: 'https://saqibot23-1f4bec48d0f2.herokuapp.com' },
+    { id: 's25', name: 'Heroku-25', url: 'https://saqibbot25-46c4cf949a77.herokuapp.com' },
+    { id: 's25b', name: 'Heroku-25B', url: 'https://saqibot25-0974df36edd8.herokuapp.com' },
+    { id: 'railway', name: 'Railway', url: 'https://web-production-08da5300.up.railway.app' }
 ];
 
 
