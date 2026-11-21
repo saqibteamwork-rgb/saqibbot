@@ -10,7 +10,7 @@ cmds = ["npm install --production=false"]
 cmds = []
 
 [variables]
-NODE_OPTIONS = "--experimental-require-module --expose-gc --max-old-space-size=460"
+NODE_OPTIONS = "--experimental-require-module --expose-gc --max-old-space-size=4096"
 
 [start]
-cmd = "node --experimental-require-module --expose-gc --max-old-space-size=460 index.js"
+cmd = "node --experimental-require-module --expose-gc --max-old-space-size=4096 index.js"

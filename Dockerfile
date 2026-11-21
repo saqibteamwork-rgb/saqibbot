@@ -17,9 +17,9 @@ RUN npm install --production=false
 COPY . .
 
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--experimental-require-module --expose-gc --max-old-space-size=460"
+ENV NODE_OPTIONS="--experimental-require-module --expose-gc --max-old-space-size=4096"
 
 EXPOSE 3000
 
 # Start the bot with experimental ESM require support and memory management
-CMD ["node", "--experimental-require-module", "--expose-gc", "--max-old-space-size=460", "index.js"]
+CMD ["node", "--experimental-require-module", "--expose-gc", "--max-old-space-size=4096", "index.js"]

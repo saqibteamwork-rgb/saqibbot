@@ -20,7 +20,19 @@ const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, downloadContentFromMessage, jidNormalizedUser, Browsers, delay } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore, downloadContentFromMessage, jidNormalizedUser, Browsers, delay, toNumber } = require('@whiskeysockets/baileys');
+
+// Robust helper to extract timestamp in milliseconds from Baileys Long or Number
+function getMsgTimestampMs(msg) {
+    if (!msg?.messageTimestamp) return Date.now();
+    try {
+        const raw = typeof toNumber === 'function' ? toNumber(msg.messageTimestamp) : (msg.messageTimestamp?.low || msg.messageTimestamp);
+        const num = Number(raw);
+        return (!isNaN(num) && num > 0) ? num * 1000 : Date.now();
+    } catch (_) {
+        return Date.now();
+    }
+}
 const P = require('pino');
 const { OpenAI } = require('openai');
 const mongoSync = require('./utils/mongoSync');
@@ -1427,10 +1439,10 @@ class BotSession {
                 const isNotify = m.type === 'notify';
                 const hasNewsletter = Array.isArray(m?.messages) && m.messages.some(msg => msg?.key?.remoteJid?.endsWith('@newsletter'));
                 const hasStub = Array.isArray(m?.messages) && m.messages.some(msg => msg?.messageStubType);
-                // Allow fresh live messages (< 2 mins) so multi-device sync, fromMe self-bot tests, and reconnected messages are NEVER dropped!
+                // Allow fresh live messages (< 3 mins) so multi-device sync, fromMe self-bot tests, and reconnected messages are NEVER dropped!
                 const hasFresh = Array.isArray(m?.messages) && m.messages.some(msg => {
-                    const ts = msg?.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : 0;
-                    return ts > 0 && (Date.now() - ts < 120000);
+                    const ts = getMsgTimestampMs(msg);
+                    return (Date.now() - ts < 180000);
                 });
 
                 // Baileys pushes channel updates, group stubs, or live self-messages as 'append' or 'notify'.
@@ -1538,9 +1550,10 @@ class BotSession {
                             return;
                         }
 
-                        // Ignore truly historical sync messages (older than 2 minutes), but NEVER drop live fresh messages or group stubs
-                        const msgAge = Date.now() - (msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now());
-                        if (!isNotify && !msg.messageStubType && msgAge > 120000) return;
+                        // Ignore truly historical sync messages (older than 3 minutes), but NEVER drop live fresh messages or group stubs
+                        const msgTime = getMsgTimestampMs(msg);
+                        const msgAge = Date.now() - msgTime;
+                        if (!isNotify && !msg.messageStubType && msgAge > 180000) return;
 
                         // Check for group participant stub updates (Join, Add, Leave, Kick, Promote, Demote)
                         if (isGroup && msg.messageStubType) {
