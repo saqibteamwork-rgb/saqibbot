@@ -11,6 +11,8 @@ process.on('exit', (code) => {
     console.error(`🛑 [Process Exit] Node server exiting with code: ${code}`);
 });
 
+global.isServerShuttingDown = false;
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
@@ -944,10 +946,11 @@ setInterval(() => {
     utilityCmds.checkReminders(sessions, botData, saveBotData).catch(() => {});
 }, 30 * 1000);
 
-// Load existing sessions on startup
+// Load existing sessions on startup with smooth sequential staggering (prevents socket flood & OOM)
 async function loadExistingSessions() {
     try {
         const authDirs = await fs.readdir(AUTH_DIR);
+        let started = 0;
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             const authPath = path.join(AUTH_DIR, userId);
@@ -958,6 +961,11 @@ async function loadExistingSessions() {
                     console.log('📂 [System] Found existing session for: ' + userId + '. Initializing...');
                     if (!sessions[userId]) {
                         sessions[userId] = new BotSession(userId);
+                        // Stagger each session initialization by 2.5s so sessions boot cleanly without crashing
+                        if (started > 0) {
+                            await new Promise(r => setTimeout(r, 2500));
+                        }
+                        started++;
                         sessions[userId].initialize().catch(err => {
                             console.error('❌ [System] Failed to auto-initialize session ' + userId + ': ' + err.message);
                         });
@@ -3100,27 +3108,47 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error)?.output?.statusCode || (lastDisconnect?.error)?.statusCode;
                     const isExplicitLogout = statusCode === DisconnectReason.loggedOut;
+                    const isReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
                     this.isConnected = false;
                     this.isInitializing = false;
-                    this.sendLog(`⚠️ Connection closed (code ${statusCode || 'unknown'}). Auto-reconnecting...`, 'warning');
+                    this.sendLog(`⚠️ Connection closed (code ${statusCode || 'unknown'}).`, 'warning');
                     this.sendConnectionStatus();
 
+                    // 1. If server is deploying or shutting down, do not attempt to reconnect!
+                    if (global.isServerShuttingDown) {
+                        this.sendLog('🛑 Server is deploying/shutting down. Reconnect suppressed.', 'info');
+                        return;
+                    }
+
+                    // 2. If connection was replaced by a newer deployment or node (Code 440):
+                    // Stand down peacefully! Never enter an infinite 440 reconnect war that causes WhatsApp logout!
+                    if (isReplaced) {
+                        this.sendLog('🛑 Connection replaced by updated deployment/node. Standing down peacefully.', 'info');
+                        return;
+                    }
+
+                    // 3. Explicit device logout (401)
                     if (isExplicitLogout) {
-                        this.sendLog('🔴 Session explicitly logged out from device. Clearing auth data for fresh pairing...', 'error');
+                        this.sendLog('🔴 Session disconnected from WhatsApp.', 'error');
                         try {
                             if (fs.existsSync(this.authPath)) {
                                 fs.removeSync(this.authPath);
                             }
                         } catch (e) {}
-                        mongoSync.deleteSessionFromMongo(this.userId);
+                        // Do NOT aggressively wipe cloud MongoDB on deploy glitches to prevent permanent session loss!
                         delete sessions[this.userId];
                         this.sendConnectionStatus();
-                    } else {
-                        // High-resilience Auto-Reconnect within 2s for all temporary connection drops
-                        const delayTime = (statusCode === 515 || statusCode === 428) ? 1500 : 2500;
-                        this.sendLog(`🔄 Auto-reconnecting session in ${delayTime / 1000}s...`, 'info');
-                        setTimeout(() => this.initialize(), delayTime);
+                        return;
                     }
+
+                    // 4. Temporary connection drop (515, 428, network blips): Safe backoff reconnect
+                    const delayTime = (statusCode === 515 || statusCode === 428) ? 2000 : 3500;
+                    this.sendLog(`🔄 Auto-reconnecting session in ${delayTime / 1000}s...`, 'info');
+                    setTimeout(() => {
+                        if (!global.isServerShuttingDown && !sessions[this.userId]?.isConnected) {
+                            this.initialize();
+                        }
+                    }, delayTime);
                 } else if (connection === 'open') {
                     this.isConnected = true;
                     this.isInitializing = false;
@@ -3502,6 +3530,7 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         const handleGracefulShutdown = async (signal) => {
             if (isShuttingDown) return;
             isShuttingDown = true;
+            global.isServerShuttingDown = true;
             console.log(`\n🛑 [System] ${signal} signal received! Flushing WhatsApp sessions to MongoDB Atlas...`);
             try {
                 await mongoSync.backupAllSessionsToMongo(AUTH_DIR);

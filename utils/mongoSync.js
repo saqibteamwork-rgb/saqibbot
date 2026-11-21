@@ -502,15 +502,20 @@ async function restoreAllSessionsFromMongo(authDir) {
 
         const myNode = currentServerNodeId || 'default';
         let query = {};
-        if (myNode !== 'default' && myNode !== 'all') {
+        if (myNode === 'railway' || myNode === 'default' || myNode === 'all') {
+            // Master Scale Engine (Railway / Default) owns its sessions + unassigned/default sessions
             query = {
                 $or: [
                     { nodeId: myNode },
-                    { nodeId: { $exists: false } },
+                    { nodeId: 'default' },
                     { nodeId: null },
-                    { nodeId: 'default' }
+                    { nodeId: { $exists: false } }
                 ]
             };
+        } else {
+            // Ephemeral Cluster Worker Nodes (Heroku s1..s10) ONLY restore sessions specifically assigned to them!
+            // Prevents 10 Heroku dynos competing for and duplicating Railway sessions on deploy!
+            query = { nodeId: myNode };
         }
 
         const sessionDocs = await col.find(query).toArray();
