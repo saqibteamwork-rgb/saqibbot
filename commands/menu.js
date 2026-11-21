@@ -43,6 +43,7 @@ const {
 const { sendSwipeCarouselMenu } = require('./carouselMenu');
 const { sendMetaAiButtonMenu } = require('./metaAiMenu');
 const { sendCategoryButtonMenu } = require('./categoryButtonMenu');
+const { getBotPic } = require('../lib/botpic');
 
 /**
  * Convert string to Mathematical Sans-Serif Bold Unicode (e.g. 𝗠𝗥 𝗦𝗔𝗤𝗜𝗕 𝗠𝗗)
@@ -551,7 +552,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 
     const menuText = (headerText + bodyText + footerText).trim();
 
-    // 5. Image payload resolution (Custom session image -> Custom global image -> Preloaded RAM buffer -> Settings URL)
+    // 5. Image payload resolution (Custom session image -> Custom global image -> Preloaded RAM buffer -> getBotPic -> Settings URL)
     let imagePayload = null;
     if (profile.menuImage) {
         try {
@@ -560,6 +561,10 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
     }
     if (!imagePayload) {
         imagePayload = PRELOADED_MENU_IMAGE;
+    }
+    if (!imagePayload) {
+        const botPic = typeof getBotPic === 'function' ? getBotPic(sock) : null;
+        if (botPic) imagePayload = botPic;
     }
     if (!imagePayload && settings.menuImage && settings.menuImage.trim() !== '') {
         const imgPath = settings.menuImage.trim();
