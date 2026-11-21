@@ -4,7 +4,7 @@
   "description": "Professional WhatsApp Automation Tool with Baileys",
   "main": "index.js",
   "engines": {
-    "node": ">=22.0.0"
+    "node": "22.x"
   },
   "scripts": {
     "start": "node --experimental-require-module --expose-gc --max-old-space-size=460 index.js",
@@ -15,13 +15,11 @@
     "@distube/ytdl-core": "^5.2.1",
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@jerrycoder/instagram-api": "^2.5.9",
-    "@mrnima/instagram-downloader": "^1.0.0",
     "@renpwn/fb-downloader": "^1.0.16",
     "@vitalets/google-translate-api": "^9.2.1",
     "@whiskeysockets/baileys": "^7.0.0-rc10",
     "ab-downloader": "^2.0.0",
     "axios": "^1.6.0",
-    "cakkatrok-instagram-downloader": "^2.0.2",
     "cheerio": "^1.2.0",
     "dotenv": "^16.6.1",
     "edge-tts-universal": "^1.4.0",
