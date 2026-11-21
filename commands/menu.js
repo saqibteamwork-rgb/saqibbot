@@ -612,40 +612,27 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         }
 
         if (!sentViaRelay) {
+            const combinedCommandsAndSearch = `${(bodyText + footerText).trim()}\n\n${GOOGLE_LINKS_CARD}`;
             if (imagePayload) {
-                if (menuText.length > 2500) {
-                    // WhatsApp media caption limit is ~2048-3000 chars. Full 987-command menu (21k chars)
-                    // gets silently dropped by WhatsApp servers if put entirely in caption!
-                    // Reliable 2-part delivery: Image + Header card, followed immediately by Full Commands text!
-                    try {
-                        await sock.sendMessage(from, { image: imagePayload, caption: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
-                        await sock.sendMessage(from, { text: (bodyText + footerText).trim(), contextInfo: channelContext });
-                    } catch (imgErr) {
-                        console.warn('[menuCommand] Image upload failed, sending pure text menu:', imgErr.message);
-                        await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
-                    }
-                } else {
-                    // Single category menu (fits safely inside WhatsApp caption)
-                    try {
-                        await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
-                    } catch (imgErr) {
-                        console.warn('[menuCommand] Image upload failed, sending pure text menu:', imgErr.message);
-                        await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
-                    }
+                // Reliable 2-part delivery:
+                // Part 1: Image + Bot Specifications Header
+                // Part 2: Commands List + Google Search Card combined together!
+                try {
+                    await sock.sendMessage(from, { image: imagePayload, caption: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
+                    await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
+                } catch (imgErr) {
+                    console.warn('[menuCommand] Image upload failed, sending pure text menu:', imgErr.message);
+                    await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}`, contextInfo: channelContext }, { quoted: msg });
                 }
             } else {
-                await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+                await sock.sendMessage(from, { text: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
+                await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
             }
         }
     } catch (err) {
         console.error('[menuCommand] Error sending menu:', err.message);
-        await sock.sendMessage(from, { text: menuText }, { quoted: msg }).catch(() => {});
+        await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}` }, { quoted: msg }).catch(() => {});
     }
-
-    // 7. Send Message 2: Separate 'SEARCH ON GOOGLE' Card (100% Preserved as requested!)
-    sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }, { quoted: msg }).catch((e) => {
-        console.error('[menuCommand] Error sending links card:', e.message);
-    });
 }
 
 module.exports = {
