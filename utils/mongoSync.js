@@ -442,6 +442,8 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
             const filesMap = {};
             for (const file of files) {
                 if (file.includes('_backup_') || file.includes('_expired_') || file.endsWith('.tmp')) continue;
+                // Exclude ephemeral cache files (tctoken, lid-mapping) that bloat disk and cause dyno OOM crashes
+                if (file.startsWith('tctoken-') || file.startsWith('lid-mapping-')) continue;
                 const filePath = path.join(authPath, file);
                 const stat = await fs.stat(filePath);
                 if (stat.isFile()) {
@@ -567,6 +569,8 @@ async function restoreAllSessionsFromMongo(authDir) {
 
                 await fs.ensureDir(sessionDir);
                 for (const [filename, content] of Object.entries(filesMap)) {
+                    // Skip ephemeral junk that bloats dyno inodes & crashes Heroku with OOM
+                    if (filename.startsWith('tctoken-') || filename.startsWith('lid-mapping-')) continue;
                     await fs.writeFile(path.join(sessionDir, filename), content, 'utf8');
                 }
 
