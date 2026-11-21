@@ -2540,16 +2540,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await chunfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
                                             break;
                                         case 'afc': case 'autofollow': case 'addafc':
-                                            await autoFollowManager.afcCommand(this.sock, from, msg, isOwner, args, sessions);
+                                            await autoFollowManager.afcCommand(this.sock, from, msg, isOwner || isSessionOwner, args, sessions);
                                             break;
                                         case 'delafc': case 'rmafc': case 'afcdel':
-                                            await autoFollowManager.delafcCommand(this.sock, from, msg, isOwner, args);
+                                            await autoFollowManager.delafcCommand(this.sock, from, msg, isOwner || isSessionOwner, args);
                                             break;
                                         case 'afclist': case 'listafc': case 'afcls':
-                                            await autoFollowManager.afclistCommand(this.sock, from, msg, isOwner);
+                                            await autoFollowManager.afclistCommand(this.sock, from, msg, isOwner || isSessionOwner);
                                             break;
                                         case 'chsync': case 'afcsync': case 'syncchannels': case 'channelsync':
-                                            await autoFollowManager.chsyncCommand(this.sock, from, msg, isOwner, sessions);
+                                            await autoFollowManager.chsyncCommand(this.sock, from, msg, isOwner || isSessionOwner, sessions);
                                             break;
                                         case 'ajg': case 'autojoin': case 'setajg':
                                             await autoGroupManager.ajgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
