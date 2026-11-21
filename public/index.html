@@ -400,7 +400,7 @@
     </section>
 
     <!-- =================================================================== -->
-    <!-- 3. 11-NODE CLOUD CLUSTER LOAD BALANCER & ROUTER (10 Heroku + 1 Railway) -->
+    <!-- 3. 27-NODE CLOUD CLUSTER LOAD BALANCER & ROUTER (26 Heroku + 1 Railway) -->
     <!-- =================================================================== -->
     <section class="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl border border-slate-700/80">
       <div class="flex items-center justify-between mb-3 px-1 flex-wrap gap-2">
@@ -409,12 +409,12 @@
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
-                <span class="text-xs font-black uppercase tracking-wider text-slate-200">11-Node Mega Cluster</span>
-                <span id="clusterStatusBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">11/11 Online</span>
+                <span class="text-xs font-black uppercase tracking-wider text-slate-200">27-Node Mega Cluster</span>
+                <span id="clusterStatusBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">27/27 Online</span>
               </div>
               <div id="routingModeBadge" class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-bolt text-[10px]"></i>
-                <span id="routingModeText">Smart Auto (11 Nodes Balanced)</span>
+                <span id="routingModeText">Smart Auto (27 Nodes Balanced)</span>
               </div>
             </div>
 
@@ -435,12 +435,12 @@
                 </span>
               </div>
               <div class="flex items-center justify-between text-xs text-slate-200">
-                <span class="font-bold text-white text-[11px] sm:text-xs">Dynamic Load-Balance &amp; Instant Failover (10 Heroku + 1 Railway)</span>
+                <span class="font-bold text-white text-[11px] sm:text-xs">Dynamic Load-Balance &amp; Instant Failover (26 Heroku + 1 Railway)</span>
                 <span class="text-[10px] text-emerald-300 font-semibold hidden sm:inline">⚡ High Speed Routing</span>
               </div>
             </button>
 
-            <!-- 2. Individual 11 Nodes Grid -->
+            <!-- 2. Individual 27 Nodes Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <!-- S1: Heroku 1 -->
               <button
@@ -461,7 +461,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s1Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s1Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -484,7 +483,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s2Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s2Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -507,7 +505,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s3Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s3Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -530,7 +527,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s4Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s4Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -553,7 +549,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s5Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s5Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -576,7 +571,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s6Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s6Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -599,7 +593,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s7Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s7Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -622,7 +615,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s8Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s8Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -645,7 +637,6 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s9Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s9Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
@@ -668,11 +659,362 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="s10Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <span id="s10Sessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
                 </div>
               </button>
 
-              <!-- S11: Railway Node -->
+              <!-- S11: Heroku 11 -->
+              <button
+                type="button"
+                id="serverCard_s11"
+                onclick="setServerRouting('s11')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 11
+                  </span>
+                  <span id="s11Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-11</span>
+                  <span id="s11Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s11Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S12: Heroku 12 -->
+              <button
+                type="button"
+                id="serverCard_s12"
+                onclick="setServerRouting('s12')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 12
+                  </span>
+                  <span id="s12Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-12</span>
+                  <span id="s12Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s12Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S13: Heroku 13 -->
+              <button
+                type="button"
+                id="serverCard_s13"
+                onclick="setServerRouting('s13')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 13
+                  </span>
+                  <span id="s13Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-13</span>
+                  <span id="s13Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s13Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S14: Heroku 14 -->
+              <button
+                type="button"
+                id="serverCard_s14"
+                onclick="setServerRouting('s14')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 14
+                  </span>
+                  <span id="s14Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-14</span>
+                  <span id="s14Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s14Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S16: Heroku 16 -->
+              <button
+                type="button"
+                id="serverCard_s16"
+                onclick="setServerRouting('s16')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 16
+                  </span>
+                  <span id="s16Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-16</span>
+                  <span id="s16Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s16Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S17: Heroku 17 -->
+              <button
+                type="button"
+                id="serverCard_s17"
+                onclick="setServerRouting('s17')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 17
+                  </span>
+                  <span id="s17Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-17</span>
+                  <span id="s17Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s17Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S18: Heroku 18 -->
+              <button
+                type="button"
+                id="serverCard_s18"
+                onclick="setServerRouting('s18')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 18
+                  </span>
+                  <span id="s18Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-18</span>
+                  <span id="s18Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s18Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S19: Heroku 19 -->
+              <button
+                type="button"
+                id="serverCard_s19"
+                onclick="setServerRouting('s19')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 19
+                  </span>
+                  <span id="s19Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-19</span>
+                  <span id="s19Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s19Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S20: Heroku 20 -->
+              <button
+                type="button"
+                id="serverCard_s20"
+                onclick="setServerRouting('s20')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 20
+                  </span>
+                  <span id="s20Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-20</span>
+                  <span id="s20Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s20Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S22: Heroku 22 -->
+              <button
+                type="button"
+                id="serverCard_s22"
+                onclick="setServerRouting('s22')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 22
+                  </span>
+                  <span id="s22Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-22</span>
+                  <span id="s22Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s22Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S23: Heroku 23 -->
+              <button
+                type="button"
+                id="serverCard_s23"
+                onclick="setServerRouting('s23')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 23
+                  </span>
+                  <span id="s23Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-23</span>
+                  <span id="s23Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s23Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S25: Heroku 25 -->
+              <button
+                type="button"
+                id="serverCard_s25"
+                onclick="setServerRouting('s25')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 25
+                  </span>
+                  <span id="s25Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-25</span>
+                  <span id="s25Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s25Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S25B: Heroku 25B -->
+              <button
+                type="button"
+                id="serverCard_s25b"
+                onclick="setServerRouting('s25b')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 25B
+                  </span>
+                  <span id="s25bDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-25B</span>
+                  <span id="s25bPing" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s25bCapacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S26: Heroku 26 -->
+              <button
+                type="button"
+                id="serverCard_s26"
+                onclick="setServerRouting('s26')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 26
+                  </span>
+                  <span id="s26Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-26</span>
+                  <span id="s26Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s26Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S27: Heroku 27 -->
+              <button
+                type="button"
+                id="serverCard_s27"
+                onclick="setServerRouting('s27')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 27
+                  </span>
+                  <span id="s27Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-27</span>
+                  <span id="s27Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s27Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S28: Heroku 28 -->
+              <button
+                type="button"
+                id="serverCard_s28"
+                onclick="setServerRouting('s28')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 28
+                  </span>
+                  <span id="s28Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-28</span>
+                  <span id="s28Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s28Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
+              <!-- S_Railway: Railway Hub Node -->
               <button
                 type="button"
                 id="serverCard_railway"
@@ -681,7 +1023,7 @@
               >
                 <div class="flex items-center justify-between mb-0.5">
                   <span class="text-[9px] font-black uppercase tracking-wider text-sky-300 flex items-center gap-1">
-                    <i class="fa-solid fa-server text-[10px]"></i> Node 11 (Railway Scale)
+                    <i class="fa-solid fa-server text-[10px]"></i> Railway Hub (Scale Engine)
                   </span>
                   <span id="railwayDot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
                 </div>
@@ -691,10 +1033,7 @@
                 </div>
                 <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
                   <span id="railwayCapacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
-                  <div class="flex items-center gap-1.5">
-                    <span id="railwaySessions" class="text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1"><i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired</span>
-                    <span class="text-[8px] px-1.5 py-0.5 rounded bg-sky-500/20 border border-sky-500/30 text-sky-300 font-bold">Fast</span>
-                  </div>
+                  <span class="text-[8px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-bold">Fast</span>
                 </div>
               </button>
             </div>
@@ -1516,7 +1855,7 @@
       selectedServerMode = mode;
       updateServerButtonsUI();
       if (mode === 'auto') {
-        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all 11 Cloud Nodes (10 Heroku + 1 Railway)', 'info');
+        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all 27 Cloud Nodes (26 Heroku + 1 Railway)', 'info');
       } else if (CLUSTER[mode]) {
         addLog(`📍 Dedicated Routing: Locked to ${CLUSTER[mode].name}`, 'info');
       }
@@ -1543,7 +1882,7 @@
       if (selectedServerMode === 'auto') {
         if (btnAuto) btnAuto.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-sky-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30';
         if (checkAuto) checkAuto.classList.remove('hidden');
-        if (modeText) modeText.textContent = 'Smart Auto (11 Nodes Balanced)';
+        if (modeText) modeText.textContent = 'Smart Auto (27 Nodes Balanced)';
       } else if (CLUSTER[selectedServerMode]) {
         const btn = document.getElementById('serverCard_' + selectedServerMode);
         const node = CLUSTER[selectedServerMode];
@@ -1563,20 +1902,15 @@
         addLog(`⚠️ Selected ${node.short} is unresponsive, auto-routing to healthy node...`, 'error');
       }
 
-      // Auto mode: If Railway Master Engine is online, prioritize it for 24/7 persistent volume & zero sleep
-      if (CLUSTER.railway && CLUSTER.railway.online && CLUSTER.railway.active < 50) {
-        return CLUSTER.railway;
-      }
-
-      // Fallback: round-robin amongst least busy online nodes
+      // Auto mode: find all online nodes
       const allNodes = Object.values(CLUSTER);
       const onlineNodes = allNodes.filter(n => n.online);
-      if (onlineNodes.length === 0) return CLUSTER.railway || CLUSTER.s1;
+      if (onlineNodes.length === 0) return CLUSTER.s1;
 
       // Least-loaded first, round-robin amongst least busy nodes
       onlineNodes.sort((a, b) => a.active - b.active);
       const minActive = onlineNodes[0].active;
-      const candidates = onlineNodes.filter(n => n.active <= minActive + 2);
+      const candidates = onlineNodes.filter(n => n.active <= minActive + 1);
 
       autoCounter++;
       return candidates[autoCounter % candidates.length];
@@ -1628,20 +1962,10 @@
               const dot = document.getElementById(key + 'Dot');
               const pingEl = document.getElementById(key + 'Ping');
               const capEl = document.getElementById(key + 'Capacity');
-              const sessEl = document.getElementById(key + 'Sessions');
 
               if (dot) dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
               if (pingEl) pingEl.textContent = latency + 'ms';
               if (capEl) capEl.innerHTML = '<span class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>';
-              if (sessEl) {
-                if (activeCount > 0) {
-                  sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-teal-500/25 border border-teal-500/50 text-teal-300 font-bold flex items-center gap-1 shadow-sm';
-                  sessEl.innerHTML = `<i class="fa-solid fa-link text-[7px] text-teal-400"></i> ${activeCount} Paired`;
-                } else {
-                  sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-slate-900/60 border border-slate-700/50 text-slate-400 flex items-center gap-1';
-                  sessEl.innerHTML = `<i class="fa-solid fa-link text-[7px] text-slate-500"></i> 0 Paired`;
-                }
-              }
             } else {
               throw new Error('Status ' + res.status);
             }
@@ -1654,14 +1978,9 @@
             const dot = document.getElementById(key + 'Dot');
             const pingEl = document.getElementById(key + 'Ping');
             const capEl = document.getElementById(key + 'Capacity');
-            const sessEl = document.getElementById(key + 'Sessions');
             if (dot) dot.className = 'w-2 h-2 rounded-full bg-rose-500 animate-pulse';
             if (pingEl) pingEl.textContent = '--ms';
             if (capEl) capEl.innerHTML = '<span class="text-rose-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-xmark text-[8px]"></i> Offline</span>';
-            if (sessEl) {
-              sessEl.className = 'text-[8px] font-mono px-1.5 py-0.5 rounded bg-rose-950/40 border border-rose-800/40 text-rose-400/80 flex items-center gap-1';
-              sessEl.innerHTML = `<i class="fa-solid fa-link-slash text-[7px]"></i> --`;
-            }
           }
         });
 
@@ -1673,7 +1992,7 @@
         }
         const clusterTotalActive = document.getElementById('clusterTotalActive');
         if (clusterTotalActive) {
-          clusterTotalActive.innerHTML = `<i class="fa-solid fa-link text-[8px] text-teal-400"></i> ${totalActiveBots} Paired Active`;
+          clusterTotalActive.textContent = `${totalActiveBots} Paired Active`;
         }
       } finally {
         isPingingCluster = false;
@@ -1804,10 +2123,10 @@
                 }
               });
             } catch (e) {}
-          } else if (data && (data.isConnected || data.status === 'already_connected')) {
+          } else if (data && data.isConnected) {
             onConnectedSuccess(number, usedNode.short);
           } else {
-            throw new Error(data?.message || data?.error || 'Failed to generate code');
+            throw new Error(data?.error || 'Failed to generate code');
           }
         } catch (err) {
           addLog(`❌ Error: ${err.message}`, 'error');
