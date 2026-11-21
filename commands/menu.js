@@ -100,7 +100,7 @@ const CATEGORIES = {
         'toimg', 'tourl', 'vc', 'watermark'
     ],
     'CHANNEL': [
-        'achr', 'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock', 'arclocklist',
+        'achr', 'afc', 'afclist', 'delafc', 'chsync', 'arc', 'arcblock', 'arcblocklist', 'arcdel', 'arclist', 'arclock', 'arclocklist',
         'arcprem', 'arcpremiumlist', 'arcremoveall', 'arcstop', 'arcunblock', 'arcunlock', 'autochreact', 'cc',
         'cfch', 'cforward', 'channelid', 'channels', 'chautoreact', 'chfollow', 'chreact', 'chreactall',
         'chstatus', 'chunfollow', 'chunreact', 'chvote', 'pollrand', 'pollunvote', 'pollvfix', 'pollvinfo',

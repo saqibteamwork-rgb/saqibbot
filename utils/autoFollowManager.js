@@ -16,6 +16,33 @@ const settings = require('../settings');
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const AUTO_FOLLOW_FILE = path.join(DATA_DIR, 'auto_follow.json');
+const CHANNELS_TXT_FILE = path.join(__dirname, '..', 'channels.txt');
+const DATA_CHANNELS_TXT_FILE = path.join(DATA_DIR, 'channels.txt');
+
+function getChannelsFilePath() {
+  if (fs.existsSync(CHANNELS_TXT_FILE)) return CHANNELS_TXT_FILE;
+  if (fs.existsSync(DATA_CHANNELS_TXT_FILE)) return DATA_CHANNELS_TXT_FILE;
+  return CHANNELS_TXT_FILE;
+}
+
+function readChannelsFile() {
+  const filePath = getChannelsFilePath();
+  if (!fs.existsSync(filePath)) return [];
+  try {
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const lines = raw.split(/\r?\n/);
+    const valid = [];
+    for (let line of lines) {
+      line = line.trim();
+      if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+      valid.push(line);
+    }
+    return [...new Set(valid)];
+  } catch (e) {
+    console.error('[Channels.txt Read Error]:', e.message);
+    return [];
+  }
+}
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -317,6 +344,10 @@ async function afclistCommand(sock, from, msg, isOwner) {
 async function autoFollowSession(sock) {
   try {
     if (!sock) return;
+
+    // First ensure channels from channels.txt are ingested and synced
+    await syncChannelsFromFile(sock).catch(() => {});
+
     const officialJid = (settings.newsletterJid || '120363431913895899@newsletter').toLowerCase();
 
     // 1. Guaranteed follow of Mr Saqib's official channel for every connected session
@@ -369,6 +400,155 @@ async function autoFollowSession(sock) {
 }
 
 /**
+ * Synchronize channels defined in channels.txt into auto_follow.json and trigger follow
+ */
+async function syncChannelsFromFile(primarySock = null, sessionsMap = {}) {
+  const rawEntries = readChannelsFile();
+  if (rawEntries.length === 0) return { total: 0, added: 0 };
+
+  const data = loadAutoFollowData();
+  let addedCount = 0;
+  const activeSocks = getAllActiveSockets(primarySock, sessionsMap);
+  const resolverSock = activeSocks[0] || primarySock;
+
+  for (const entry of rawEntries) {
+    try {
+      const cleanEntry = entry.trim();
+      if (!cleanEntry) continue;
+
+      if (cleanEntry.toLowerCase().endsWith('@newsletter')) {
+        const jid = cleanEntry.toLowerCase();
+        if (!data.channels[jid]) {
+          data.channels[jid] = {
+            jid,
+            name: 'WhatsApp Channel',
+            link: '',
+            inviteCode: null,
+            addedAt: Date.now(),
+            source: 'channels.txt'
+          };
+          addedCount++;
+          console.log(`[AutoFollow] ➕ Ingested JID from channels.txt: ${jid}`);
+        }
+      } else {
+        const { extractInviteCode } = require('./channelResolver');
+        const code = extractInviteCode(cleanEntry);
+
+        // Check if already in data.channels by inviteCode or link
+        const existingKey = Object.keys(data.channels).find(k => {
+          const ch = data.channels[k];
+          return ch && (ch.link === cleanEntry || (code && ch.inviteCode === code) || (code && ch.link && ch.link.includes(code)));
+        });
+
+        if (!existingKey) {
+          let res = null;
+          if (resolverSock) {
+            res = await resolveChannel(resolverSock, cleanEntry).catch(() => null);
+          }
+          if (res && res.ok && res.jid) {
+            data.channels[res.jid] = {
+              jid: res.jid,
+              name: res.name || 'WhatsApp Channel',
+              link: res.inviteCode ? `https://whatsapp.com/channel/${res.inviteCode}` : cleanEntry,
+              inviteCode: res.inviteCode,
+              addedAt: Date.now(),
+              source: 'channels.txt'
+            };
+            addedCount++;
+            console.log(`[AutoFollow] ➕ Ingested & resolved from channels.txt: ${res.name} (${res.jid})`);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[AutoFollow Sync Entry Warning]:`, err.message);
+    }
+  }
+
+  if (addedCount > 0) {
+    saveAutoFollowData(data);
+  }
+
+  return { total: Object.keys(data.channels).length, added: addedCount };
+}
+
+let fileWatcherStarted = false;
+let lastKnownMtime = 0;
+
+function startChannelsFileWatcher(sessionsMap = {}) {
+  if (fileWatcherStarted) return;
+  fileWatcherStarted = true;
+
+  const checkFile = async () => {
+    try {
+      const filePath = getChannelsFilePath();
+      if (fs.existsSync(filePath)) {
+        const stats = fs.statSync(filePath);
+        if (stats.mtimeMs !== lastKnownMtime) {
+          lastKnownMtime = stats.mtimeMs;
+          console.log(`📂 [Channels.txt Watcher] Syncing channels from ${path.basename(filePath)}...`);
+          const res = await syncChannelsFromFile(null, sessionsMap);
+          if (res.added > 0) {
+            await onAllSessionsCheck(sessionsMap);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[Channels Watcher Error]:', e.message);
+    }
+  };
+
+  setTimeout(checkFile, 3000);
+  setInterval(checkFile, 3 * 60 * 1000);
+}
+
+/**
+ * Command: .chsync / .afcsync
+ * Manually re-reads channels.txt, follows all channels across all active sessions, and reports.
+ */
+async function chsyncCommand(sock, from, msg, isOwner, sessionsMap = {}) {
+  if (!isOwner) {
+    return await sock.sendMessage(from, { text: `❌ *Access Denied! Sirf Bot Owner ye command use kar sakta hai.*` }, { quoted: msg });
+  }
+
+  await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+
+  const syncRes = await syncChannelsFromFile(sock, sessionsMap);
+  const activeSocks = getAllActiveSockets(sock, sessionsMap);
+
+  const data = loadAutoFollowData();
+  const channels = Object.values(data.channels || {});
+
+  for (const s of activeSocks) {
+    for (const ch of channels) {
+      if (!ch?.jid) continue;
+      try {
+        if (typeof s.newsletterFollow === 'function') {
+          await s.newsletterFollow(ch.jid).catch(() => {});
+        }
+        if (typeof s.subscribeNewsletterUpdates === 'function') {
+          await s.subscribeNewsletterUpdates(ch.jid).catch(() => {});
+        }
+      } catch (_) {}
+    }
+  }
+
+  await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
+
+  return await sock.sendMessage(from, {
+    text: `╭━━━〔 📢 *CHANNELS.TXT AUTO-FOLLOW SYNC* 〕━━━┈⊷\n` +
+          `┃ 📂 *File:* \`channels.txt\`\n` +
+          `┃ 📋 *Total Channels in List:* *${syncRes.total}*\n` +
+          `┃ ➕ *New Channels Added:* *${syncRes.added}*\n` +
+          `┃ 📱 *Active Sessions Followed:* *${activeSocks.length}*\n` +
+          `┃ 🟢 *Auto-Follow Status:* ACTIVE 24/7\n` +
+          `┃ ☁️ *Cloud Database:* MongoDB Atlas Synced\n` +
+          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+          `💡 *Aap \`channels.txt\` file me channel links daal kar save karein, bot unhe automatically follow karta rahega!* ✨\n\n` +
+          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+  }, { quoted: msg });
+}
+
+/**
  * Iterates through all connected sessions on this node and triggers auto-follow
  */
 async function onAllSessionsCheck(sessions = {}) {
@@ -395,5 +575,9 @@ module.exports = {
   autoFollowSession,
   onAllSessionsCheck,
   resolveChannel,
-  getAllActiveSockets
+  getAllActiveSockets,
+  readChannelsFile,
+  syncChannelsFromFile,
+  startChannelsFileWatcher,
+  chsyncCommand
 };

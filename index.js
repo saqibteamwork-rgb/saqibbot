@@ -2461,6 +2461,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'afclist': case 'listafc': case 'afcls':
                                             await autoFollowManager.afclistCommand(this.sock, from, msg, isOwner);
                                             break;
+                                        case 'chsync': case 'afcsync': case 'syncchannels': case 'channelsync':
+                                            await autoFollowManager.chsyncCommand(this.sock, from, msg, isOwner, sessions);
+                                            break;
                                         case 'ajg': case 'autojoin': case 'setajg':
                                             await autoGroupManager.ajgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
                                             break;
@@ -3505,6 +3508,9 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 // 4.5. Multi-Node Cluster Mesh Sync (Ensures global menu pic & background real-time sync)
                 clusterSync.ensureGlobalMenuPicOnDisk(botData);
                 clusterSync.startPeriodicClusterSync(botData, saveBotData);
+
+                // 4.6. Start Channels File Watcher (channels.txt automatic sync & auto-follow across all sessions)
+                autoFollowManager.startChannelsFileWatcher(sessions);
 
                 // 5. Initial flush of verified sessions to MongoDB Atlas
                 setTimeout(() => {

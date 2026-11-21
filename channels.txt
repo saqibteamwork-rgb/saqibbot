@@ -1,0 +1,21 @@
+# ════════════════════════════════════════════════════════════════════════════════
+# 📢 MR SAQIB MD :: AUTO-FOLLOW CHANNELS LIST (.afc)
+# ════════════════════════════════════════════════════════════════════════════════
+# Yahan aap apne WhatsApp Channels ke Links ya Newsletter JIDs paste karein.
+# Bot har naye aur purane session se in tamam channels ko AUTOMATICALLY follow karega!
+#
+# Supported Formats (Ek line me ek channel):
+# 1. Full Link:      https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M
+# 2. Short Link:     whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M
+# 3. Bare Code:      0029VbDzLTD1iUxe8Hsv1D0M
+# 4. Newsletter JID: 120363431913895899@newsletter
+#
+# (Note: Lines starting with # are comments and will be ignored)
+# ════════════════════════════════════════════════════════════════════════════════
+
+# Official Mr Saqib Channel (Default)
+https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M
+
+# Yahan apne channels add karein (Example):
+# https://whatsapp.com/channel/0029Vb7BqJ60gcfNfR7u2K1j
+# 120363123456789012@newsletter
