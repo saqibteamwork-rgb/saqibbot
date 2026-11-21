@@ -711,6 +711,48 @@ app.get('/api/active', (req, res) => {
     });
 });
 
+app.get('/api/sessions', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+        const col = mongoSync.getDb()?.collection('whatsapp_sessions');
+        let dbSessions = [];
+        if (col) {
+            dbSessions = await col.find({}, { projection: { _id: 1, nodeId: 1, updatedAt: 1, fileCount: 1 } }).toArray();
+        }
+        const memSessions = Object.keys(sessions).map(k => ({
+            id: k,
+            connected: Boolean(sessions[k]?.isConnected),
+            isInit: Boolean(sessions[k]?.isInitializing),
+            phone: sessions[k]?.sock?.user?.id || null,
+            name: sessions[k]?.sock?.user?.name || null
+        }));
+        return res.json({
+            currentNode: mongoSync.getNodeId(),
+            dbCount: dbSessions.length,
+            dbSessions,
+            memCount: memSessions.length,
+            memSessions
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/session/transfer', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const { id, node } = req.query;
+    if (!id || !node) return res.status(400).json({ error: 'Missing id or node' });
+    try {
+        const col = mongoSync.getDb()?.collection('whatsapp_sessions');
+        if (!col) return res.status(500).json({ error: 'DB not connected' });
+        const targetNode = String(node).toLowerCase();
+        const result = await col.updateOne({ _id: String(id) }, { $set: { nodeId: targetNode } });
+        return res.json({ success: true, id, node: targetNode, modified: result.modifiedCount });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/ip', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     const forwarded = req.headers['x-forwarded-for'];
@@ -1222,7 +1264,6 @@ class BotSession {
                 logger: P({ level: 'fatal' }),
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: false,
-                shouldSyncHistoryMessage: () => false,
                 markOnlineOnConnect: true,
                 keepAliveIntervalMs: 15000,
                 connectTimeoutMs: 30000,
@@ -3327,7 +3368,6 @@ app.get('/api/qr/start', async (req, res) => {
             logger: P({ level: 'fatal' }),
             browser: Browsers.ubuntu('Chrome'),
             syncFullHistory: false,
-            shouldSyncHistoryMessage: () => false,
             markOnlineOnConnect: true,
             keepAliveIntervalMs: 15000,
             connectTimeoutMs: 30000,
