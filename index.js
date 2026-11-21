@@ -769,14 +769,16 @@ app.get('/api/channels/sync', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     try {
         const syncRes = await autoFollowManager.syncChannelsFromFile(null, sessions);
-        const followed = await autoFollowManager.onAllSessionsCheck(sessions);
+        // Run mass session follow in background so HTTP response never times out on cloud proxies
+        autoFollowManager.onAllSessionsCheck(sessions).catch(e => console.error('[Channels Sync BG Error]:', e.message));
         const autoFollowData = autoFollowManager.loadAutoFollowData();
+        const activeCount = Object.values(sessions).filter(s => s && s.isConnected).length;
         return res.json({
             success: true,
             node: mongoSync.getNodeId(),
             totalConfigured: syncRes.total,
             newAdded: syncRes.added,
-            activeSessionsFollowed: followed,
+            activeSessions: activeCount,
             channels: Object.values(autoFollowData.channels || {})
         });
     } catch (e) {
