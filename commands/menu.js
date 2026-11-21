@@ -612,26 +612,38 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
         }
 
         if (!sentViaRelay) {
-            const combinedCommandsAndSearch = `${(bodyText + footerText).trim()}\n\n${GOOGLE_LINKS_CARD}`;
+            // Card 1: Menu Picture with All Commands (Specifications Header + Categorized Commands + Footer)
             if (imagePayload) {
-                // Reliable 2-part delivery:
-                // Part 1: Image + Bot Specifications Header
-                // Part 2: Commands List + Google Search Card combined together!
                 try {
-                    await sock.sendMessage(from, { image: imagePayload, caption: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
-                    await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
+                    await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
                 } catch (imgErr) {
-                    console.warn('[menuCommand] Image upload failed, sending pure text menu:', imgErr.message);
-                    await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}`, contextInfo: channelContext }, { quoted: msg });
+                    console.warn('[menuCommand] Image upload failed or caption issue, sending pure text menu:', imgErr.message);
+                    await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
                 }
             } else {
-                await sock.sendMessage(from, { text: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
-                await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
+                await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+            }
+
+            // Card 2: Dedicated Separate 'SEARCH ON GOOGLE' Card
+            try {
+                await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD, contextInfo: channelContext }, { quoted: msg });
+            } catch (card2Err) {
+                console.error('[menuCommand] Error sending google search card:', card2Err.message);
+                await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }).catch(() => {});
+            }
+        } else {
+            // If sent via payment relay, deliver Card 2 (Google Search Card) right after
+            try {
+                await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD, contextInfo: channelContext }, { quoted: msg });
+            } catch (relayCard2Err) {
+                console.error('[menuCommand] Error sending google search card after relay:', relayCard2Err.message);
+                await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }).catch(() => {});
             }
         }
     } catch (err) {
         console.error('[menuCommand] Error sending menu:', err.message);
-        await sock.sendMessage(from, { text: `${menuText}\n\n${GOOGLE_LINKS_CARD}` }, { quoted: msg }).catch(() => {});
+        await sock.sendMessage(from, { text: menuText }, { quoted: msg }).catch(() => {});
+        await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD }).catch(() => {});
     }
 }
 
