@@ -613,7 +613,26 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
 
         if (!sentViaRelay) {
             if (imagePayload) {
-                await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
+                if (menuText.length > 2500) {
+                    // WhatsApp media caption limit is ~2048-3000 chars. Full 987-command menu (21k chars)
+                    // gets silently dropped by WhatsApp servers if put entirely in caption!
+                    // Reliable 2-part delivery: Image + Header card, followed immediately by Full Commands text!
+                    try {
+                        await sock.sendMessage(from, { image: imagePayload, caption: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
+                        await sock.sendMessage(from, { text: (bodyText + footerText).trim(), contextInfo: channelContext });
+                    } catch (imgErr) {
+                        console.warn('[menuCommand] Image upload failed, sending pure text menu:', imgErr.message);
+                        await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+                    }
+                } else {
+                    // Single category menu (fits safely inside WhatsApp caption)
+                    try {
+                        await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
+                    } catch (imgErr) {
+                        console.warn('[menuCommand] Image upload failed, sending pure text menu:', imgErr.message);
+                        await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
+                    }
+                }
             } else {
                 await sock.sendMessage(from, { text: menuText, contextInfo: channelContext }, { quoted: msg });
             }
