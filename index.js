@@ -1122,13 +1122,35 @@ class BotSession {
 
     startActiveCheck() {
         if (this.activeInterval) clearInterval(this.activeInterval);
-        // High-frequency presence ping every 25s prevents WhatsApp from closing idle Baileys WebSocket
+        let consecutiveFailures = 0;
+        // 24/7 Socket Watchdog & High-frequency presence ping (prevents sleep, detects dead sockets, auto-heals)
         this.activeInterval = setInterval(async () => {
-            if (this.isConnected && this.sock?.user) {
+            if (!this.isConnected || !this.sock) return;
+
+            // 1. Detect closed or zombie WebSocket state
+            if (this.sock.ws && (this.sock.ws.readyState === 2 || this.sock.ws.readyState === 3)) {
+                console.warn(`[Watchdog] Session ${this.userId} socket dead (readyState ${this.sock.ws.readyState}). Reconnecting...`);
+                this.isConnected = false;
+                try { this.sock.ws.close(); } catch (_) {}
+                setTimeout(() => this.initialize(), 1500);
+                return;
+            }
+
+            // 2. High-frequency presence ping prevents WhatsApp from closing idle socket
+            if (this.sock.user) {
                 try {
                     await this.sock.sendPresenceUpdate('available');
+                    consecutiveFailures = 0;
                 } catch (e) {
-                    // Do not forcefully terminate socket on temporary presence update failure
+                    consecutiveFailures++;
+                    console.warn(`[Watchdog] Session ${this.userId} presence ping warning (${consecutiveFailures}/3): ${e.message}`);
+                    if (consecutiveFailures >= 3) {
+                        console.warn(`[Watchdog] Session ${this.userId} connection stalled. Auto-healing socket...`);
+                        this.isConnected = false;
+                        consecutiveFailures = 0;
+                        try { this.sock.end(); } catch (_) {}
+                        setTimeout(() => this.initialize(), 2000);
+                    }
                 }
             }
         }, 25 * 1000);
@@ -1397,9 +1419,14 @@ class BotSession {
                 const isNotify = m.type === 'notify';
                 const hasNewsletter = Array.isArray(m?.messages) && m.messages.some(msg => msg?.key?.remoteJid?.endsWith('@newsletter'));
                 const hasStub = Array.isArray(m?.messages) && m.messages.some(msg => msg?.messageStubType);
+                // Allow fresh live messages (< 2 mins) so multi-device sync, fromMe self-bot tests, and reconnected messages are NEVER dropped!
+                const hasFresh = Array.isArray(m?.messages) && m.messages.some(msg => {
+                    const ts = msg?.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : 0;
+                    return ts > 0 && (Date.now() - ts < 120000);
+                });
 
-                // Baileys pushes channel updates or group stubs as 'append' or 'notify'.
-                if (!isNotify && !hasNewsletter && !hasStub) return;
+                // Baileys pushes channel updates, group stubs, or live self-messages as 'append' or 'notify'.
+                if (!isNotify && !hasNewsletter && !hasStub && !hasFresh) return;
 
                 await Promise.all(m.messages.map(async (msg) => {
                     // Check for decryption errors
@@ -1503,8 +1530,9 @@ class BotSession {
                             return;
                         }
 
-                        // Ignore historical append messages unless this is a group participant stub update (Join, Add, Leave, Kick, Promote, Demote)
-                        if (!isNotify && !msg.messageStubType) return;
+                        // Ignore truly historical sync messages (older than 2 minutes), but NEVER drop live fresh messages or group stubs
+                        const msgAge = Date.now() - (msg.messageTimestamp ? Number(msg.messageTimestamp) * 1000 : Date.now());
+                        if (!isNotify && !msg.messageStubType && msgAge > 120000) return;
 
                         // Check for group participant stub updates (Join, Add, Leave, Kick, Promote, Demote)
                         if (isGroup && msg.messageStubType) {
@@ -1566,7 +1594,9 @@ class BotSession {
                             buttonId = messageContent.listResponseMessage.singleSelectReply.selectedRowId;
                         }
 
-                        let text = (buttonId || messageContent.conversation || messageContent.extendedTextMessage?.text || messageContent.imageMessage?.caption || messageContent.videoMessage?.caption || '').trim();
+                        let rawText = (buttonId || messageContent.conversation || messageContent.extendedTextMessage?.text || messageContent.imageMessage?.caption || messageContent.videoMessage?.caption || '');
+                        // Strip invisible zero-width and bidirectional formatting characters commonly injected by Urdu/Arabic/Android mobile keyboards
+                        let text = rawText.replace(/[\u200e\u200f\u200b\u200c\u200d\u2060\ufeff]/g, '').trim();
 
                         // Universal flexible command parser: supports .menu, . menu, .Menu, .MENU, . MENU, !menu, /menu, etc.
                         const cmdMatch = text.match(/^([.#!/?])\s*([a-zA-Z][a-zA-Z0-9_-]*)([\s\S]*)$/);
@@ -1595,8 +1625,27 @@ class BotSession {
                             if (messageContent.imageMessage?.caption) messageContent.imageMessage.caption = text;
                             if (messageContent.videoMessage?.caption) messageContent.videoMessage.caption = text;
                         } else {
-                            args = text ? text.split(/\s+/).slice(1) : [];
-                            q = args.join(' ');
+                            // Prefixless command fallback for top queries (menu, help, ping, alive, speed, owner)
+                            const firstWord = (text.split(/\s+/)[0] || '').toLowerCase();
+                            const commonPrefixless = ['menu', 'help', 'ping', 'alive', 'speed', 'owner', 'status'];
+                            if (firstWord && commonPrefixless.includes(firstWord)) {
+                                isCommand = true;
+                                usedPrefix = '.';
+                                commandName = firstWord;
+                                command = commandName;
+                                const rest = text.slice(firstWord.length).trim();
+                                args = rest ? rest.split(/\s+/) : [];
+                                q = rest;
+
+                                text = `.${commandName}${rest ? ' ' + rest : ''}`;
+                                if (messageContent.conversation) messageContent.conversation = text;
+                                if (messageContent.extendedTextMessage?.text) messageContent.extendedTextMessage.text = text;
+                                if (messageContent.imageMessage?.caption) messageContent.imageMessage.caption = text;
+                                if (messageContent.videoMessage?.caption) messageContent.videoMessage.caption = text;
+                            } else {
+                                args = text ? text.split(/\s+/).slice(1) : [];
+                                q = args.join(' ');
+                            }
                         }
 
                         // Handle Autoread, Autotyping, Autorecording (non-blocking for ultra-fast response)

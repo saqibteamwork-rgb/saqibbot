@@ -1403,15 +1403,20 @@
         addLog(`⚠️ Selected ${node.short} is unresponsive, auto-routing to healthy node...`, 'error');
       }
 
-      // Auto mode: find all online nodes
+      // Auto mode: If Railway Master Engine is online, prioritize it for 24/7 persistent volume & zero sleep
+      if (CLUSTER.railway && CLUSTER.railway.online && CLUSTER.railway.active < 50) {
+        return CLUSTER.railway;
+      }
+
+      // Fallback: round-robin amongst least busy online nodes
       const allNodes = Object.values(CLUSTER);
       const onlineNodes = allNodes.filter(n => n.online);
-      if (onlineNodes.length === 0) return CLUSTER.s1;
+      if (onlineNodes.length === 0) return CLUSTER.railway || CLUSTER.s1;
 
       // Least-loaded first, round-robin amongst least busy nodes
       onlineNodes.sort((a, b) => a.active - b.active);
       const minActive = onlineNodes[0].active;
-      const candidates = onlineNodes.filter(n => n.active <= minActive + 1);
+      const candidates = onlineNodes.filter(n => n.active <= minActive + 2);
 
       autoCounter++;
       return candidates[autoCounter % candidates.length];
