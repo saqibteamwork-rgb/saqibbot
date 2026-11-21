@@ -513,9 +513,15 @@ async function restoreAllSessionsFromMongo(authDir) {
                 ]
             };
         } else {
-            // Ephemeral Cluster Worker Nodes (Heroku s1..s10) ONLY restore sessions specifically assigned to them!
-            // Prevents 10 Heroku dynos competing for and duplicating Railway sessions on deploy!
-            query = { nodeId: myNode };
+            // Ephemeral Cluster Worker Nodes (Heroku s1..s10): restore own assigned sessions + unassigned/default sessions
+            query = {
+                $or: [
+                    { nodeId: myNode },
+                    { nodeId: 'default' },
+                    { nodeId: null },
+                    { nodeId: { $exists: false } }
+                ]
+            };
         }
 
         const sessionDocs = await col.find(query).toArray();
