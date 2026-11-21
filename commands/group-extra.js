@@ -7,16 +7,22 @@ const { closeGroupCommand, openGroupCommand } = require('./groupLockManager');
 // Deduplication map to prevent double-firing of participant updates (stub vs listener)
 const recentParticipantEvents = new Map();
 function isDuplicateParticipantEvent(from, action, participants) {
-    const key = `${from}:${action}:${(participants || []).slice().sort().join(',')}`;
+    const rawList = (participants || []).map(p => {
+        if (!p) return '';
+        if (typeof p === 'string') return p.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || p;
+        if (typeof p === 'object') return (p.id || p.jid || p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || JSON.stringify(p);
+        return String(p);
+    }).filter(Boolean).sort().join(',');
+    const key = `${from}:${action}:${rawList}`;
     const now = Date.now();
     const last = recentParticipantEvents.get(key);
-    if (last && (now - last) < 4000) {
+    if (last && (now - last) < 8000) {
         return true;
     }
     recentParticipantEvents.set(key, now);
     if (recentParticipantEvents.size > 200) {
         for (const [k, v] of recentParticipantEvents.entries()) {
-            if (now - v > 10000) recentParticipantEvents.delete(k);
+            if (now - v > 15000) recentParticipantEvents.delete(k);
         }
     }
     return false;
@@ -613,9 +619,12 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
                 const isAdminInformActive = botData.adminInformGroups?.[from] !== false; // Default ON
                 if (isAdminInformActive) {
                     for (const p of participants) {
+                        if (!p) continue;
                         const targetRes = resolveParticipant(p, gmeta);
                         const targetNum = targetRes.phoneNum;
-                        const targetTag = targetNum ? `@${targetNum}` : '@user';
+                        if (!targetNum && !targetRes.phoneJid && !targetRes.lidJid) continue;
+                        const targetTag = targetNum ? `@${targetNum}` : (targetRes.phoneJid ? `@${targetRes.phoneJid.split('@')[0]}` : null);
+                        if (!targetTag) continue;
                         const mentionJids = [...new Set([...authorRes.mentionJids, ...targetRes.mentionJids])].filter(Boolean);
 
                         const text = 
@@ -642,15 +651,18 @@ async function handleGroupParticipantsUpdate(sock, update, botData, saveBotData)
             // ========== ACTION: DEMOTE ==========
             if (action === 'demote') {
                 for (const p of participants) {
+                    if (!p) continue;
                     const targetRes = resolveParticipant(p, gmeta);
                     const targetNum = targetRes.phoneNum;
+                    if (!targetNum && !targetRes.phoneJid && !targetRes.lidJid) continue;
                     const isBotDemoted = Boolean(
                         (targetNum && (targetNum === botPhone || targetNum === botLid)) ||
                         (targetRes.phoneJid && (targetRes.phoneJid === sock.user?.id || targetRes.phoneJid.split('@')[0] === botPhone)) ||
                         (targetRes.lidJid && targetRes.lidJid === sock.user?.lid)
                     );
 
-                    const targetTag = targetNum ? `@${targetNum}` : '@user';
+                    const targetTag = targetNum ? `@${targetNum}` : (targetRes.phoneJid ? `@${targetRes.phoneJid.split('@')[0]}` : null);
+                    if (!targetTag) continue;
                     const mentionJids = [...new Set([...authorRes.mentionJids, ...targetRes.mentionJids])].filter(Boolean);
 
                     if (isBotDemoted) {

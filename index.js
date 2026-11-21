@@ -1515,16 +1515,18 @@ class BotSession {
                             // 27: ADD, 31: INVITE, 140/141: COMMUNITY, 159: CAG_INVITE_AUTO_ADD, 161: CAG_INVITE_AUTO_JOINED, 171: JOINED_PARENT
                             const isJoin = [27, 31, 140, 141, 159, 161, 171].includes(stubType);
                             const isLeave = [28, 32].includes(stubType);
-                            const isPromote = stubType === 29;
-                            const isDemote = stubType === 30;
 
-                            if (isJoin || isLeave || isPromote || isDemote) {
-                                const participantJids = (msg.messageStubParameters && msg.messageStubParameters.length > 0)
-                                    ? msg.messageStubParameters
-                                    : [msg.key.participant || msg.participant || msg.key.remoteJid];
+                            // Note: Promote and Demote are handled exclusively by sock.ev.on('group-participants.update')
+                            // to prevent duplicate, partial or broken '@user / +N/A' stub alerts.
+                            if (isJoin || isLeave) {
+                                const rawParams = Array.isArray(msg.messageStubParameters) ? msg.messageStubParameters : [];
+                                const validParams = rawParams.filter(p => p && typeof p === 'string' && p.trim().length > 0);
+                                const participantJids = validParams.length > 0
+                                    ? validParams
+                                    : [msg.key.participant || msg.participant || msg.key.remoteJid].filter(Boolean);
                                 const authorJid = msg.key.participant || msg.participant || '';
 
-                                const action = isJoin ? 'add' : (isLeave ? 'remove' : (isPromote ? 'promote' : 'demote'));
+                                const action = isJoin ? 'add' : 'remove';
 
                                 groupExtra.handleGroupParticipantsUpdate(this.sock, {
                                     id: from,
