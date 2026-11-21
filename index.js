@@ -753,6 +753,18 @@ app.get('/api/session/transfer', async (req, res) => {
     }
 });
 
+app.get('/api/sessions/reload', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+        const restored = await mongoSync.restoreAllSessionsFromMongo(AUTH_DIR);
+        await loadExistingSessions();
+        const activeCount = Object.values(sessions).filter(s => s && s.isConnected).length;
+        return res.json({ success: true, node: mongoSync.getNodeId(), restored, active: activeCount });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 app.get('/api/ip', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     const forwarded = req.headers['x-forwarded-for'];
