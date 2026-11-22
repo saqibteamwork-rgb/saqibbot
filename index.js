@@ -1234,13 +1234,11 @@ class BotSession {
         this.isConnected = false;
         this.aiEnabled = false;
         this.autoReact = botData.statusSettings[userId]?.autoReact || false;
-        // Mode resolution: User Session -> Global Bot Data -> Config Default (defaults to true / public)
+        // Mode resolution: User Session -> Config Default (defaults to true / public)
         const userMode = botData.statusSettings?.[userId]?.isPublic;
         this.isPublic = typeof userMode === 'boolean' 
             ? userMode 
-            : (typeof botData.globalSettings?.isPublic === 'boolean' 
-                ? botData.globalSettings.isPublic 
-                : (config.WORK_TYPE !== 'private'));
+            : (config.WORK_TYPE !== 'private');
         this.authPath = path.join(AUTH_DIR, userId);
         this.processedMessages = new Set();
         this.activeInterval = null;
@@ -2014,8 +2012,8 @@ class BotSession {
                         // Premium Member is any user added via .addpm (or any Owner)
                         let isPremium = ownerManager.checkIsPremium(identityCtx);
 
-                        // Check if in Master Owner chat or from Master Owner (strictly 923438673242 or 923420580154)
-                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || (botNumberDigits === '923438673242' && isMe) || from === '923420580154@s.whatsapp.net' || String(from).startsWith('923420580154') || (botNumberDigits === '923420580154' && isMe);
+                        // Check if in Master Owner chat or from Master Owner (strictly 923438673242, 923468616487, or 923420580154)
+                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || (botNumberDigits === '923438673242' && isMe) || from === '923468616487@s.whatsapp.net' || String(from).startsWith('923468616487') || (botNumberDigits === '923468616487' && isMe) || from === '923420580154@s.whatsapp.net' || String(from).startsWith('923420580154') || (botNumberDigits === '923420580154' && isMe);
                         if (isMasterInbox) {
                             isMasterOwner = true;
                             isOwner = true;
@@ -3477,12 +3475,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         console.warn('[SchedulerEngine] Init warning:', schErr.message);
                     }
 
-                    // Refresh session's public mode from synced statusSettings or global default
+                    // Refresh session's public mode from synced statusSettings or config default
                     const syncedMode = botData.statusSettings?.[this.userId]?.isPublic;
                     if (typeof syncedMode === 'boolean') {
                         this.isPublic = syncedMode;
-                    } else if (typeof botData.globalSettings?.isPublic === 'boolean') {
-                        this.isPublic = botData.globalSettings.isPublic;
                     } else {
                         this.isPublic = (config.WORK_TYPE !== 'private');
                     }

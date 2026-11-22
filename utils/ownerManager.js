@@ -706,14 +706,16 @@ function checkIsOwner(ctx) {
 
     for (const o of (data.owners || [])) {
         if (!o) continue;
-        const oDigits = normalizePhoneDigits(o.digits);
+        const oDigits = normalizePhoneDigits(typeof o === 'string' ? o : o.digits);
         const oLast10 = oDigits.length >= 10 ? oDigits.slice(-10) : '';
-        const oLid = extractLidDigits(o.lid || '', true) || (oDigits ? getLinkedLidForPhone(oDigits, ctx.sock) : '');
+        const oLid = typeof o === 'string'
+            ? (extractLidDigits(o, true) || (oDigits ? getLinkedLidForPhone(oDigits, ctx.sock) : ''))
+            : (extractLidDigits(o.lid || '', true) || (oDigits ? getLinkedLidForPhone(oDigits, ctx.sock) : ''));
 
         if (oDigits) {
             for (const p of phones) {
                 if (p === oDigits || (oLast10 && p.endsWith(oLast10))) {
-                    if (lids.length > 0 && !o.lid) learnIdentityMapping(oDigits, lids[0]);
+                    if (lids.length > 0 && typeof o === 'object' && !o.lid) learnIdentityMapping(oDigits, lids[0]);
                     return true;
                 }
             }
@@ -721,7 +723,7 @@ function checkIsOwner(ctx) {
         if (oLid) {
             for (const l of lids) {
                 if (l === oLid) {
-                    if (phones.length > 0 && !o.digits) learnIdentityMapping(phones[0], oLid);
+                    if (phones.length > 0 && typeof o === 'object' && !o.digits) learnIdentityMapping(phones[0], oLid);
                     return true;
                 }
             }
@@ -752,14 +754,16 @@ function checkIsPremium(ctx) {
             continue;
         }
 
-        const pDigits = normalizePhoneDigits(pm.digits);
+        const pDigits = normalizePhoneDigits(typeof pm === 'string' ? pm : pm.digits);
         const pLast10 = pDigits.length >= 10 ? pDigits.slice(-10) : '';
-        const pLid = extractLidDigits(pm.lid || '', true) || (pDigits ? getLinkedLidForPhone(pDigits, ctx.sock) : '');
+        const pLid = typeof pm === 'string'
+            ? (extractLidDigits(pm, true) || (pDigits ? getLinkedLidForPhone(pDigits, ctx.sock) : ''))
+            : (extractLidDigits(pm.lid || '', true) || (pDigits ? getLinkedLidForPhone(pDigits, ctx.sock) : ''));
 
         if (pDigits) {
             for (const p of phones) {
                 if (p === pDigits || (pLast10 && p.endsWith(pLast10))) {
-                    if (lids.length > 0 && !pm.lid) learnIdentityMapping(pDigits, lids[0]);
+                    if (lids.length > 0 && typeof pm === 'object' && !pm.lid) learnIdentityMapping(pDigits, lids[0]);
                     return true;
                 }
             }
@@ -767,7 +771,7 @@ function checkIsPremium(ctx) {
         if (pLid) {
             for (const l of lids) {
                 if (l === pLid) {
-                    if (phones.length > 0 && !pm.digits) learnIdentityMapping(phones[0], pLid);
+                    if (phones.length > 0 && typeof pm === 'object' && !pm.digits) learnIdentityMapping(phones[0], pLid);
                     return true;
                 }
             }
