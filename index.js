@@ -1115,25 +1115,35 @@ async function loadExistingSessions() {
 
 // ═════════════════════════════════════════════════════════
 // 24/7 STANDING SESSION RECONNECT WATCHDOG
-// Runs every 25 seconds: checks all paired sessions, auto-heals any dropped socket
+// Runs every 20 seconds: checks all paired sessions, auto-heals any dropped or zombie socket
 // ═════════════════════════════════════════════════════════
 setInterval(async () => {
     if (global.isServerShuttingDown) return;
     for (const userId of Object.keys(sessions)) {
         const sess = sessions[userId];
-        if (sess && !sess.isConnected && !sess.isInitializing) {
-            const credsFile = path.join(sess.authPath, 'creds.json');
-            if (fs.existsSync(credsFile)) {
-                console.log(`🔄 [Watchdog] Session ${userId} is disconnected while credentials exist. Auto-healing socket...`);
-                try {
-                    await sess.initialize();
-                } catch (err) {
-                    console.warn(`⚠️ [Watchdog] Auto-heal attempt for ${userId} failed: ${err.message}. Retrying next cycle.`);
+        if (!sess) continue;
+        const credsFile = path.join(sess.authPath, 'creds.json');
+        if (!fs.existsSync(credsFile)) continue;
+
+        // Verify WebSocket is actually healthy and ready (1 = OPEN)
+        const wsState = sess.sock?.ws?.readyState;
+        const isSocketHealthy = sess.isConnected && sess.sock && wsState === 1;
+
+        if (!isSocketHealthy && !sess.isInitializing) {
+            console.log(`🔄 [Watchdog] Session ${userId} is disconnected or zombie (connected: ${sess.isConnected}, wsState: ${wsState ?? 'none'}). Auto-healing socket...`);
+            sess.isConnected = false;
+            try {
+                if (sess.sock?.ws) {
+                    try { sess.sock.ws.removeAllListeners(); } catch (_) {}
+                    try { sess.sock.ws.terminate(); } catch (_) {}
                 }
+                await sess.initialize();
+            } catch (err) {
+                console.warn(`⚠️ [Watchdog] Auto-heal attempt for ${userId} failed: ${err.message}. Retrying next cycle.`);
             }
         }
     }
-}, 25 * 1000);
+}, 20 * 1000);
 
 const toBold = (text) => {
     const boldChars = {
@@ -1292,11 +1302,12 @@ class BotSession {
         this.activeInterval = setInterval(async () => {
             if (!this.isConnected || !this.sock) return;
 
-            // 1. Detect closed or zombie WebSocket state
-            if (this.sock.ws && (this.sock.ws.readyState === 2 || this.sock.ws.readyState === 3)) {
-                console.warn(`[Watchdog] Session ${this.userId} socket dead (readyState ${this.sock.ws.readyState}). Reconnecting...`);
+            // 1. Detect closed, closing or zombie WebSocket state
+            const wsState = this.sock.ws?.readyState;
+            if (!this.sock.ws || wsState !== 1) {
+                console.warn(`[Watchdog] Session ${this.userId} socket dead or closing (readyState ${wsState}). Reconnecting...`);
                 this.isConnected = false;
-                try { this.sock.ws.close(); } catch (_) {}
+                try { this.sock.ws?.terminate(); } catch (_) {}
                 setTimeout(() => this.initialize().catch(() => {}), 1500);
                 return;
             }
@@ -1308,17 +1319,18 @@ class BotSession {
                     consecutiveFailures = 0;
                 } catch (e) {
                     consecutiveFailures++;
-                    console.warn(`[Watchdog] Session ${this.userId} presence ping warning (${consecutiveFailures}/5): ${e.message}`);
-                    if (consecutiveFailures >= 5) {
+                    console.warn(`[Watchdog] Session ${this.userId} presence ping warning (${consecutiveFailures}/3): ${e.message}`);
+                    if (consecutiveFailures >= 3) {
                         console.warn(`[Watchdog] Session ${this.userId} connection stalled. Auto-healing socket...`);
                         this.isConnected = false;
                         consecutiveFailures = 0;
                         try { this.sock.end(); } catch (_) {}
+                        try { this.sock.ws?.terminate(); } catch (_) {}
                         setTimeout(() => this.initialize().catch(() => {}), 2000);
                     }
                 }
             }
-        }, 45 * 1000);
+        }, 25 * 1000);
     }
 
     async initialize(pairingNumber = null, customCodeOverride = null) {
@@ -3368,9 +3380,18 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     }
 
                     // 2. If connection was replaced by a newer deployment or node (Code 440):
-                    // Stand down peacefully! Never enter an infinite 440 reconnect war that causes WhatsApp logout!
+                    // Stand down temporarily to avoid reconnect storm, then safely re-check after 45s cooldown
                     if (isReplaced) {
-                        this.sendLog('🛑 Connection replaced by updated deployment/node. Standing down peacefully.', 'info');
+                        this.sendLog('⚠️ Connection replaced (Code 440). Standing by for 45s cooldown before safety check...', 'warning');
+                        setTimeout(() => {
+                            if (!global.isServerShuttingDown && !this.isConnected) {
+                                const creds = path.join(this.authPath, 'creds.json');
+                                if (fs.existsSync(creds)) {
+                                    this.sendLog('🔄 [Code 440 Safety Check] Re-initializing session cleanly...', 'info');
+                                    this.initialize().catch(() => {});
+                                }
+                            }
+                        }, 45 * 1000);
                         return;
                     }
 
@@ -3799,15 +3820,17 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 const cleanBase = myUrl.replace(/\/+$/, '');
                 targetUrls.add(`${cleanBase}/health`);
                 targetUrls.add(cleanBase);
-                // Ensure registered with central 24/7 mesh server
-                registerWithMeshServer(cleanBase).catch(() => {});
             }
 
-            // Permanent 24/7 Central Cloud Mesh endpoints (Runs 24/7 on Railway VPS, never sleeps)
-            targetUrls.add('https://web-production-08da5300.up.railway.app/health');
-            targetUrls.add('https://web-production-f30a34e9.up.railway.app/health');
+            // Cluster peer nodes: Cross-ping all known Heroku cluster nodes so nodes keep each other awake!
+            const allNodes = clusterSync?.KNOWN_NODES || {};
+            for (const [nodeId, url] of Object.entries(allNodes)) {
+                if (url && url.includes('.herokuapp.com')) {
+                    targetUrls.add(`${url.replace(/\/+$/, '')}/health`);
+                }
+            }
 
-            // Active cluster mesh peer nodes
+            // Dynamic mesh registered peer nodes
             if (typeof registeredMeshNodes !== 'undefined') {
                 const now = Date.now();
                 for (const [nodeUrl, info] of registeredMeshNodes.entries()) {
@@ -3819,20 +3842,25 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 }
             }
 
-            const promises = Array.from(targetUrls).map(url =>
-                axios.get(url, {
-                    timeout: 8000,
-                    headers: { 'User-Agent': 'AntiSleep-HerokuKeepAlive/5.0' }
-                }).catch(() => null)
-            );
-            await Promise.allSettled(promises);
+            // Concurrently ping targets in chunks of 5 with 6s timeout
+            const urlList = Array.from(targetUrls);
+            const chunkSize = 5;
+            for (let i = 0; i < urlList.length; i += chunkSize) {
+                const chunk = urlList.slice(i, i + chunkSize);
+                await Promise.allSettled(chunk.map(url =>
+                    axios.get(url, {
+                        timeout: 6000,
+                        headers: { 'User-Agent': 'AntiSleep-HerokuKeepAlive/6.0' }
+                    }).catch(() => null)
+                ));
+            }
         };
 
         // Fire initial wake-up sweep 5s after server boot
         setTimeout(pingPublicKeepAlive, 5000);
 
-        // Every 5 minutes (300s): resets Heroku's 20-30 min inactivity timer continuously!
-        setInterval(pingPublicKeepAlive, 5 * 60 * 1000);
+        // Every 45 seconds: resets Heroku's 20-30 min inactivity timer continuously across the cluster!
+        setInterval(pingPublicKeepAlive, 45 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {
