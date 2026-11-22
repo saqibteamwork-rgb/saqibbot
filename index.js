@@ -1,5 +1,8 @@
 require('dotenv').config();
 
+// Optimize libuv threadpool for high-concurrency DNS resolution and socket pings
+process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
+
 // Global Crash Prevention Guards
 process.on('uncaughtException', (err) => {
     console.error('🛡️ [UncaughtException Guard]:', err?.message || err);
@@ -403,15 +406,60 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
-// Auto-detect server domain / node from incoming web traffic
+// ═════════════════════════════════════════════════════════
+// 24/7 CLOUD MESH REGISTRY & ANTI-SLEEP ENGINE
+// ═════════════════════════════════════════════════════════
+const registeredMeshNodes = new Map();
+
+async function registerWithMeshServer(appUrl) {
+    if (!appUrl || appUrl.includes('localhost') || appUrl.includes('127.0.0.1')) return;
+    const meshEndpoints = [
+        'https://web-production-08da5300.up.railway.app/api/mesh/register',
+        'https://web-production-f30a34e9.up.railway.app/api/mesh/register'
+    ];
+    for (const endpoint of meshEndpoints) {
+        try {
+            await axios.post(endpoint, {
+                url: appUrl,
+                botName: settings.botName || 'MR SAQIB MD',
+                timestamp: Date.now()
+            }, { timeout: 6000 });
+        } catch (_) {}
+    }
+}
+
+// Auto-detect server domain / node from incoming web traffic & persist public URL
 app.use((req, res, next) => {
     if (req.headers) {
         const host = req.headers['x-forwarded-host'] || req.headers.host;
         if (host && !host.includes('localhost') && !host.includes('127.0.0.1')) {
             mongoSync.setDetectedHost(host);
+            const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
+            const detectedUrl = `${proto}://${host}`.replace(/\/+$/, '');
+            if (!botData.appUrl || botData.appUrl !== detectedUrl) {
+                botData.appUrl = detectedUrl;
+                saveBotData();
+                console.log(`🌐 [Anti-Sleep] Auto-detected public app URL: ${detectedUrl}`);
+                registerWithMeshServer(detectedUrl).catch(() => {});
+            }
         }
     }
     next();
+});
+
+// Dynamic mesh registration endpoints (allows any node to ping & be pinged)
+app.post('/api/mesh/register', (req, res) => {
+    const { url, botName } = req.body || {};
+    if (url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
+        const cleanUrl = url.trim().replace(/\/+$/, '');
+        registeredMeshNodes.set(cleanUrl, { botName: botName || 'Unknown', time: Date.now() });
+        return res.json({ success: true, registered: cleanUrl, totalNodes: registeredMeshNodes.size });
+    }
+    return res.status(400).json({ error: 'Invalid URL' });
+});
+
+app.get('/api/mesh/nodes', (req, res) => {
+    res.json({ total: registeredMeshNodes.size, nodes: Array.from(registeredMeshNodes.entries()) });
 });
 
 // Cluster node self-identification endpoint
@@ -1065,6 +1113,28 @@ async function loadExistingSessions() {
     }
 }
 
+// ═════════════════════════════════════════════════════════
+// 24/7 STANDING SESSION RECONNECT WATCHDOG
+// Runs every 25 seconds: checks all paired sessions, auto-heals any dropped socket
+// ═════════════════════════════════════════════════════════
+setInterval(async () => {
+    if (global.isServerShuttingDown) return;
+    for (const userId of Object.keys(sessions)) {
+        const sess = sessions[userId];
+        if (sess && !sess.isConnected && !sess.isInitializing) {
+            const credsFile = path.join(sess.authPath, 'creds.json');
+            if (fs.existsSync(credsFile)) {
+                console.log(`🔄 [Watchdog] Session ${userId} is disconnected while credentials exist. Auto-healing socket...`);
+                try {
+                    await sess.initialize();
+                } catch (err) {
+                    console.warn(`⚠️ [Watchdog] Auto-heal attempt for ${userId} failed: ${err.message}. Retrying next cycle.`);
+                }
+            }
+        }
+    }
+}, 25 * 1000);
+
 const toBold = (text) => {
     const boldChars = {
         'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
@@ -1218,7 +1288,7 @@ class BotSession {
     startActiveCheck() {
         if (this.activeInterval) clearInterval(this.activeInterval);
         let consecutiveFailures = 0;
-        // 24/7 Socket Watchdog & High-frequency presence ping (prevents sleep, detects dead sockets, auto-heals)
+        // 24/7 Socket Watchdog & Balanced presence ping (prevents sleep, detects dead sockets, auto-heals)
         this.activeInterval = setInterval(async () => {
             if (!this.isConnected || !this.sock) return;
 
@@ -1227,28 +1297,28 @@ class BotSession {
                 console.warn(`[Watchdog] Session ${this.userId} socket dead (readyState ${this.sock.ws.readyState}). Reconnecting...`);
                 this.isConnected = false;
                 try { this.sock.ws.close(); } catch (_) {}
-                setTimeout(() => this.initialize(), 1500);
+                setTimeout(() => this.initialize().catch(() => {}), 1500);
                 return;
             }
 
-            // 2. High-frequency presence ping prevents WhatsApp from closing idle socket
+            // 2. Balanced presence ping prevents WhatsApp from closing idle socket without hitting rate-limits
             if (this.sock.user) {
                 try {
                     await this.sock.sendPresenceUpdate('available');
                     consecutiveFailures = 0;
                 } catch (e) {
                     consecutiveFailures++;
-                    console.warn(`[Watchdog] Session ${this.userId} presence ping warning (${consecutiveFailures}/3): ${e.message}`);
-                    if (consecutiveFailures >= 3) {
+                    console.warn(`[Watchdog] Session ${this.userId} presence ping warning (${consecutiveFailures}/5): ${e.message}`);
+                    if (consecutiveFailures >= 5) {
                         console.warn(`[Watchdog] Session ${this.userId} connection stalled. Auto-healing socket...`);
                         this.isConnected = false;
                         consecutiveFailures = 0;
                         try { this.sock.end(); } catch (_) {}
-                        setTimeout(() => this.initialize(), 2000);
+                        setTimeout(() => this.initialize().catch(() => {}), 2000);
                     }
                 }
             }
-        }, 25 * 1000);
+        }, 45 * 1000);
     }
 
     async initialize(pairingNumber = null, customCodeOverride = null) {
@@ -2253,6 +2323,62 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'ping': case 'pong': case 'speed': case 'latency': case 'p':
                                             await commands.ping(this.sock, from, msg, this, botData);
                                             break;
+                                        case 'seturl': case 'appurl': case 'setappurl': {
+                                            if (!isOwner && !isSessionOwner) {
+                                                await this.sock.sendMessage(from, { text: '❌ Yeh command sirf bot owner ke liye hai.' }, { quoted: msg });
+                                                break;
+                                            }
+                                            const inputUrl = args[0] ? String(args[0]).trim() : '';
+                                            if (!inputUrl) {
+                                                const current = botData.appUrl || process.env.APP_URL || 'Auto-detect on web open';
+                                                await this.sock.sendMessage(from, {
+                                                    text: `╭━━━〔 🌐 *BOT APP URL* 〕━━━┈⊷\n` +
+                                                          `┃ 🔗 *Current URL:* ${current}\n` +
+                                                          `┃ 💡 *Usage:* .seturl https://your-app.herokuapp.com\n` +
+                                                          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                                }, { quoted: msg });
+                                                break;
+                                            }
+                                            if (!inputUrl.startsWith('http://') && !inputUrl.startsWith('https://')) {
+                                                await this.sock.sendMessage(from, { text: '❌ Invalid URL. URL https:// se shuru hona chahiye.' }, { quoted: msg });
+                                                break;
+                                            }
+                                            const cleanUrl = inputUrl.replace(/\/+$/, '');
+                                            botData.appUrl = cleanUrl;
+                                            saveBotData();
+                                            registerWithMeshServer(cleanUrl).catch(() => {});
+                                            let pingStatus = 'Testing...';
+                                            try {
+                                                const res = await axios.get(`${cleanUrl}/health`, { timeout: 8000 });
+                                                pingStatus = `✅ Success (${res.status} OK)`;
+                                            } catch (err) {
+                                                pingStatus = `⚠️ Warning: ${err.message}`;
+                                            }
+                                            await this.sock.sendMessage(from, {
+                                                text: `╭━━━〔 🌐 *APP URL UPDATED* 〕━━━┈⊷\n` +
+                                                      `┃ ✅ *Public URL:* ${cleanUrl}\n` +
+                                                      `┃ 📡 *Ping Test:* ${pingStatus}\n` +
+                                                      `┃ ⚡ *Anti-Sleep:* Enabled (5min interval)\n` +
+                                                      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                            }, { quoted: msg });
+                                            break;
+                                        }
+                                        case 'autoping': case 'antisleep': case 'sleepstatus': {
+                                            const current = botData.appUrl || process.env.APP_URL || 'Auto-detect on web open';
+                                            const uptimeSec = Math.floor(process.uptime());
+                                            const uptimeStr = `${Math.floor(uptimeSec / 3600)}h ${Math.floor((uptimeSec % 3600) / 60)}m ${uptimeSec % 60}s`;
+                                            await this.sock.sendMessage(from, {
+                                                text: `╭━━━〔 ⚡ *ANTI-SLEEP STATUS* ⚡ 〕━━━┈⊷\n` +
+                                                      `┃ 🟢 *Status:* ACTIVE 24/7\n` +
+                                                      `┃ 🌐 *Public URL:* ${current}\n` +
+                                                      `┃ ⏱️ *Keep-Alive Interval:* Every 5 minutes\n` +
+                                                      `┃ ⏳ *Dyno Uptime:* ${uptimeStr}\n` +
+                                                      `┃ 🛡️ *Mesh Network:* Active\n` +
+                                                      `┃ 🔄 *Socket Watchdog:* Active (25s auto-heal)\n` +
+                                                      `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+                                            }, { quoted: msg });
+                                            break;
+                                        }
                                         // ===== INTERACTIVE GAMES & CASINO SUITE =====
                                         case 'ttt': case 'tictactoe': case 'xo': case 'delttt':
                                             await handleTTTCommand(this.sock, from, msg, args, sender);
@@ -3663,69 +3789,50 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         process.on('SIGINT', () => handleGracefulShutdown('SIGINT'));
 
         // ═════════════════════════════════════════════════════════
-        // ULTRA RESILIENT 24/7 ANTI-SLEEP ENGINE (Multi-Target Ping)
+        // ULTRA RESILIENT 24/7 ZERO-SLEEP ENGINE (Public Router Keep-Alive)
+        // Pings through public DNS/HTTPS so Heroku Router resets 30-min idle timer!
         // ═════════════════════════════════════════════════════════
-        const clusterHerokuUrls = [
-            'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
-            'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
-            'https://saqibbot3-bb2b46aa1cb4.herokuapp.com',
-            'https://saqibot4-1469f73b3d77.herokuapp.com',
-            'https://saqibbot5-5ffa090fe31f.herokuapp.com',
-            'https://saqibot6-061b6d17645d.herokuapp.com',
-            'https://saqibot7-b9d00e67a587.herokuapp.com',
-            'https://saqibbot8-f10fafc8b934.herokuapp.com',
-            'https://saqibbot9-bebb531508e3.herokuapp.com',
-            'https://saqibot10-d27e9f3ad01e.herokuapp.com',
-            'https://saqibbot11-815563078799.herokuapp.com',
-            'https://saqibbot12-2fb338ff529a.herokuapp.com',
-            'https://saqibot13-392b066b37a5.herokuapp.com',
-            'https://saqibbot14-d84e8d59500a.herokuapp.com',
-            'https://saqibbot16-b071c813d801.herokuapp.com',
-            'https://saqibot17-a471970ef223.herokuapp.com',
-            'https://saqibbot18-45854000f60b.herokuapp.com',
-            'https://saqibbot19-bb306a89a5f4.herokuapp.com',
-            'https://saqibbot20-317bb68e4db0.herokuapp.com',
-            'https://saqibbot22-9318c2de0250.herokuapp.com',
-            'https://saqibot23-1f4bec48d0f2.herokuapp.com',
-            'https://saqibbot25-46c4cf949a77.herokuapp.com',
-            'https://saqibot25-0974df36edd8.herokuapp.com',
-            'https://saqibot26-69a8011cc819.herokuapp.com',
-            'https://saqibot27-1c1d295781fa.herokuapp.com',
-            'https://saqibbot28-658e7de676c8.herokuapp.com'
-        ];
-        const baseRailwayUrl = 'https://web-production-08da5300.up.railway.app';
-        const fallbackRailwayUrl = 'https://web-production-f30a34e9.up.railway.app';
-        const pingTargets = [
-            ...clusterHerokuUrls,
-            ...clusterHerokuUrls.map(u => `${u}/health`),
-            baseRailwayUrl,
-            `${baseRailwayUrl}/health`,
-            fallbackRailwayUrl,
-            `${fallbackRailwayUrl}/health`,
-            process.env.HEROKU_APP_NAME ? `https://${process.env.HEROKU_APP_NAME}.herokuapp.com/health` : null,
-            process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}/health` : null,
-            process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : null,
-            process.env.APP_URL ? `${process.env.APP_URL}/health` : null,
-            `http://127.0.0.1:${PORT}/health`
-        ].filter(Boolean);
+        const pingPublicKeepAlive = async () => {
+            const targetUrls = new Set();
+            const myUrl = botData.appUrl || process.env.APP_URL || (process.env.HEROKU_APP_NAME ? `https://${process.env.HEROKU_APP_NAME}.herokuapp.com` : null);
+            if (myUrl && !myUrl.includes('localhost') && !myUrl.includes('127.0.0.1')) {
+                const cleanBase = myUrl.replace(/\/+$/, '');
+                targetUrls.add(`${cleanBase}/health`);
+                targetUrls.add(cleanBase);
+                // Ensure registered with central 24/7 mesh server
+                registerWithMeshServer(cleanBase).catch(() => {});
+            }
 
-        const uniqueTargets = [...new Set(pingTargets)];
+            // Permanent 24/7 Central Cloud Mesh endpoints (Runs 24/7 on Railway VPS, never sleeps)
+            targetUrls.add('https://web-production-08da5300.up.railway.app/health');
+            targetUrls.add('https://web-production-f30a34e9.up.railway.app/health');
 
-        const pingAllNodesParallel = async () => {
-            const promises = uniqueTargets.map(url =>
+            // Active cluster mesh peer nodes
+            if (typeof registeredMeshNodes !== 'undefined') {
+                const now = Date.now();
+                for (const [nodeUrl, info] of registeredMeshNodes.entries()) {
+                    if (now - (info.time || 0) < 48 * 3600 * 1000) {
+                        targetUrls.add(`${nodeUrl}/health`);
+                    } else {
+                        registeredMeshNodes.delete(nodeUrl);
+                    }
+                }
+            }
+
+            const promises = Array.from(targetUrls).map(url =>
                 axios.get(url, {
-                    timeout: 30000,
-                    headers: { 'User-Agent': 'AntiSleep-MegaCluster/4.0' }
+                    timeout: 8000,
+                    headers: { 'User-Agent': 'AntiSleep-HerokuKeepAlive/5.0' }
                 }).catch(() => null)
             );
             await Promise.allSettled(promises);
         };
 
-        // Fire immediate wake-up sweep on server boot
-        setTimeout(pingAllNodesParallel, 2000);
+        // Fire initial wake-up sweep 5s after server boot
+        setTimeout(pingPublicKeepAlive, 5000);
 
-        // Resilient parallel ping every 45 seconds with 30s timeout guarantees 24/7 zero-sleep across all 11 nodes!
-        setInterval(pingAllNodesParallel, 45 * 1000);
+        // Every 5 minutes (300s): resets Heroku's 20-30 min inactivity timer continuously!
+        setInterval(pingPublicKeepAlive, 5 * 60 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {
