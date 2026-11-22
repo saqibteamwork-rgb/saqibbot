@@ -464,6 +464,7 @@ app.get('/api/mesh/nodes', (req, res) => {
 
 // Cluster node self-identification endpoint
 const BOOT_TOKEN = Math.random().toString(36).substring(2) + Date.now().toString(36);
+const PROCESS_INSTANCE_ID = (process.env.DYNO || mongoSync.getNodeId() || 'node') + '_' + BOOT_TOKEN;
 app.get('/api/node-identify', (req, res) => {
     if (req.query.token && req.query.token === BOOT_TOKEN) {
         return res.json({ match: true, node: mongoSync.getNodeId() });
@@ -1330,6 +1331,11 @@ class BotSession {
                     }
                 }
             }
+
+            // Renew distributed session lock in MongoDB
+            if (typeof mongoSync.renewSessionLock === 'function') {
+                mongoSync.renewSessionLock(this.userId, PROCESS_INSTANCE_ID).catch(() => {});
+            }
         }, 25 * 1000);
     }
 
@@ -1363,6 +1369,17 @@ class BotSession {
                 // Ensure completely clean auth folder for fresh pairing code generation
                 if (fs.existsSync(this.authPath)) {
                     try { await fs.remove(this.authPath); } catch (e) {}
+                }
+            }
+
+            // Distributed Leader Election Lock: Only 1 server node connects to WhatsApp at a time
+            if (!pairingNumber && typeof mongoSync.acquireSessionLock === 'function') {
+                const canLock = await mongoSync.acquireSessionLock(this.userId, PROCESS_INSTANCE_ID);
+                if (!canLock) {
+                    this.sendLog(`🛡️ Session ${this.userId} is actively running on another cluster node. Standing by as hot replica...`, 'info');
+                    this.isInitializing = false;
+                    this.isConnected = false;
+                    return;
                 }
             }
 
@@ -3370,6 +3387,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     const isReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
                     this.isConnected = false;
                     this.isInitializing = false;
+                    if (typeof mongoSync.releaseSessionLock === 'function') {
+                        mongoSync.releaseSessionLock(this.userId, PROCESS_INSTANCE_ID).catch(() => {});
+                    }
                     this.sendLog(`⚠️ Connection closed (code ${statusCode || 'unknown'}).`, 'warning');
                     this.sendConnectionStatus();
 

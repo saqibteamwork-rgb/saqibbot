@@ -680,6 +680,94 @@ async function getAllClusterSessions() {
     }
 }
 
+/**
+ * ═════════════════════════════════════════════════════════
+ * DISTRIBUTED SESSION LEADER ELECTION LOCK
+ * Guarantees ONLY ONE server node connects to WhatsApp at a time.
+ * Prevents Code 440 flapping, socket wars, and zombie state across 26 nodes!
+ * ═════════════════════════════════════════════════════════
+ */
+async function acquireSessionLock(userId, instanceId) {
+    if (!userId || !instanceId) return true;
+    if (!isConnected || !db) {
+        const ok = await initMongo().catch(() => false);
+        if (!ok || !db) return true; // Fail open if MongoDB is unreachable
+    }
+    try {
+        const col = db.collection('session_locks');
+        const now = Date.now();
+        const staleThreshold = now - 45000; // 45s heartbeat timeout
+
+        // Atomic check & claim:
+        // Claim lock if:
+        // 1. Lock already belongs to this instanceId
+        // 2. OR current lock heartbeat is older than 45s (previous holder died or slept)
+        const result = await col.findOneAndUpdate(
+            {
+                _id: String(userId),
+                $or: [
+                    { lockedBy: instanceId },
+                    { heartbeat: { $lt: staleThreshold } }
+                ]
+            },
+            {
+                $set: {
+                    lockedBy: instanceId,
+                    nodeId: currentServerNodeId || 'default',
+                    heartbeat: now,
+                    updatedAt: now
+                }
+            },
+            { returnDocument: 'after' }
+        );
+
+        if (result && (result.lockedBy === instanceId || result.value?.lockedBy === instanceId)) {
+            return true;
+        }
+
+        // Try inserting fresh lock if doc does not exist
+        try {
+            await col.insertOne({
+                _id: String(userId),
+                lockedBy: instanceId,
+                nodeId: currentServerNodeId || 'default',
+                heartbeat: now,
+                updatedAt: now
+            });
+            return true;
+        } catch (insertErr) {
+            // Duplicate key: another instance holds an active lock
+            const existing = await col.findOne({ _id: String(userId) });
+            if (existing && existing.lockedBy !== instanceId && (now - (existing.heartbeat || 0)) < 45000) {
+                return false; // Locked by another healthy living node
+            }
+            return true;
+        }
+    } catch (e) {
+        console.warn(`[Session Lock Warning] acquireSessionLock error for ${userId}:`, e.message);
+        return true;
+    }
+}
+
+async function renewSessionLock(userId, instanceId) {
+    if (!userId || !instanceId || !isConnected || !db) return;
+    try {
+        const col = db.collection('session_locks');
+        await col.updateOne(
+            { _id: String(userId), lockedBy: instanceId },
+            { $set: { heartbeat: Date.now() } }
+        );
+    } catch (_) {}
+}
+
+async function releaseSessionLock(userId, instanceId) {
+    if (!userId || !instanceId || !isConnected || !db) return;
+    try {
+        const col = db.collection('session_locks');
+        await col.deleteOne({ _id: String(userId), lockedBy: instanceId });
+    } catch (_) {}
+}
+
 module.exports = {
     initMongo,
     getDb: () => db,
@@ -694,5 +782,8 @@ module.exports = {
     restoreAllSessionsFromMongo,
     backupAllSessionsToMongo,
     deleteSessionFromMongo,
-    getAllClusterSessions
+    getAllClusterSessions,
+    acquireSessionLock,
+    renewSessionLock,
+    releaseSessionLock
 };
