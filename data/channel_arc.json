@@ -20,7 +20,7 @@
       "addedAt": 1794400000000,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": null
+      "lastPostId": "1542"
     },
     "120363412259265847@newsletter": {
       "jid": "120363412259265847@newsletter",
@@ -38,7 +38,7 @@
       "addedAt": 1794400000000,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": "709"
+      "lastPostId": "730"
     },
     "120363431124302760@newsletter": {
       "jid": "120363431124302760@newsletter",
@@ -56,7 +56,7 @@
       "addedAt": 1794400000000,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": "434"
+      "lastPostId": "467"
     },
     "120363431913895899@newsletter": {
       "jid": "120363431913895899@newsletter",
@@ -77,10 +77,11 @@
       "addedAt": 1794982269228,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": null
+      "lastPostId": "147"
     }
   },
   "blocked": {},
   "deletedChannels": {},
-  "defaultEmoji": "❤️"
+  "defaultEmoji": "❤️",
+  "updatedAt": 1795350754664
 }

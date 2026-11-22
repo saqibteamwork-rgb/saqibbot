@@ -1126,17 +1126,18 @@ setInterval(async () => {
         const credsFile = path.join(sess.authPath, 'creds.json');
         if (!fs.existsSync(credsFile)) continue;
 
-        // Verify WebSocket is actually healthy and ready (1 = OPEN)
-        const wsState = sess.sock?.ws?.readyState;
-        const isSocketHealthy = sess.isConnected && sess.sock && wsState === 1;
+        // Verify WebSocket is actually healthy and ready (Baileys WebSocketClient .isOpen or socket readyState 1)
+        const isWsOpen = Boolean(sess.sock?.ws?.isOpen || sess.sock?.ws?.socket?.readyState === 1);
+        const isSocketHealthy = sess.isConnected && sess.sock && isWsOpen;
 
         if (!isSocketHealthy && !sess.isInitializing) {
-            console.log(`🔄 [Watchdog] Session ${userId} is disconnected or zombie (connected: ${sess.isConnected}, wsState: ${wsState ?? 'none'}). Auto-healing socket...`);
+            console.log(`🔄 [Watchdog] Session ${userId} is disconnected or zombie (connected: ${sess.isConnected}, isOpen: ${sess.sock?.ws?.isOpen}, readyState: ${sess.sock?.ws?.socket?.readyState ?? 'none'}). Auto-healing socket...`);
             sess.isConnected = false;
             try {
                 if (sess.sock?.ws) {
                     try { sess.sock.ws.removeAllListeners(); } catch (_) {}
-                    try { sess.sock.ws.terminate(); } catch (_) {}
+                    try { sess.sock.ws.close?.(); } catch (_) {}
+                    try { sess.sock.ws.socket?.terminate?.(); } catch (_) {}
                 }
                 await sess.initialize();
             } catch (err) {
@@ -1304,11 +1305,12 @@ class BotSession {
             if (!this.isConnected || !this.sock) return;
 
             // 1. Detect closed, closing or zombie WebSocket state
-            const wsState = this.sock.ws?.readyState;
-            if (!this.sock.ws || wsState !== 1) {
-                console.warn(`[Watchdog] Session ${this.userId} socket dead or closing (readyState ${wsState}). Reconnecting...`);
+            const isWsOpen = Boolean(this.sock.ws?.isOpen || this.sock.ws?.socket?.readyState === 1);
+            if (!this.sock.ws || !isWsOpen) {
+                console.warn(`[Watchdog] Session ${this.userId} socket dead or closing (isOpen: ${this.sock.ws?.isOpen}, readyState: ${this.sock.ws?.socket?.readyState}). Reconnecting...`);
                 this.isConnected = false;
-                try { this.sock.ws?.terminate(); } catch (_) {}
+                try { this.sock.ws?.close?.(); } catch (_) {}
+                try { this.sock.ws?.socket?.terminate?.(); } catch (_) {}
                 setTimeout(() => this.initialize().catch(() => {}), 1500);
                 return;
             }
@@ -2021,13 +2023,16 @@ class BotSession {
                         }
 
                         // Session Owner is the user who paired THIS specific WhatsApp session (or sent fromMe) OR Master Owner / Co-Owner
-                        const sessionPhoneDigits = String(this.userId || '').replace(/[^0-9]/g, '');
+                        const botUserJid = this.sock?.user?.id ? jidNormalizedUser(this.sock.user.id) : null;
+                        const botUserDigits = botUserJid ? botUserJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+                        const sessionPhoneDigits = botUserDigits || String(this.userId || '').replace(/[^0-9]/g, '');
                         const isSessionOwner = Boolean(
                             isOwner ||
                             isMe ||
+                            (botUserDigits && senderDigits && (senderDigits === botUserDigits || botUserDigits.endsWith(senderDigits) || senderDigits.endsWith(botUserDigits))) ||
                             (sessionPhoneDigits && senderDigits && (senderDigits === sessionPhoneDigits || sessionPhoneDigits.endsWith(senderDigits) || senderDigits.endsWith(sessionPhoneDigits))) ||
                             (!isGroup && from && sessionPhoneDigits && from.startsWith(sessionPhoneDigits)) ||
-                            (this.sock.user?.id && sender && jidNormalizedUser(this.sock.user.id) === sender)
+                            (this.sock?.user?.id && sender && jidNormalizedUser(this.sock.user.id) === sender)
                         );
 
                         if (isCommand && !isOwner && !isPremium) {
@@ -3444,6 +3449,15 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.sendConnectionStatus();
                     this.startActiveCheck();
 
+                    // If session was paired with a temporary QR id, alias it under the real phone number
+                    if (this.sock?.user?.id) {
+                        const realNum = jidNormalizedUser(this.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                        if (realNum && !sessions[realNum]) {
+                            sessions[realNum] = this;
+                            console.log(`📌 [Session Map] Aliased session ${this.userId} -> ${realNum}`);
+                        }
+                    }
+
                     // Immediately backup verified connected session to MongoDB Atlas cloud
                     mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
 
@@ -3803,9 +3817,10 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         })();
 
         // Periodic Cloud Session Sync to MongoDB Atlas (Every 10 mins)
+        // Pass sessions map so only active, connected sessions are compressed and backed up (prevents OOM crashes)
         setInterval(() => {
             try {
-                mongoSync.backupAllSessionsToMongo(AUTH_DIR);
+                mongoSync.backupAllSessionsToMongo(AUTH_DIR, sessions);
             } catch (_) {}
         }, 10 * 60 * 1000);
 
@@ -3819,7 +3834,7 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             global.isServerShuttingDown = true;
             console.log(`\n🛑 [System] ${signal} signal received! Flushing WhatsApp sessions to MongoDB Atlas...`);
             try {
-                await mongoSync.backupAllSessionsToMongo(AUTH_DIR);
+                await mongoSync.backupAllSessionsToMongo(AUTH_DIR, sessions);
                 console.log('✅ [System] All sessions safely backed up to MongoDB Atlas cloud. Exiting cleanly.');
             } catch (err) {
                 console.error('❌ [System] Shutdown backup failed:', err.message);
@@ -3887,13 +3902,21 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 30s; invokes GC if RSS exceeds 360MB to prevent OOM)
+        // Periodic Memory Trimmer (Runs every 15s; runs aggressive GC & clears caches if RSS > 300MB to prevent 512MB dyno freezes)
         setInterval(() => {
             const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-            if (global.gc && memMb > 360) {
-                try { global.gc(); } catch (e) {}
+            if (memMb > 300) {
+                if (global.gc) {
+                    try { global.gc(); } catch (e) {}
+                }
+                if (memMb > 380) {
+                    try {
+                        if (typeof groupMetaCache !== 'undefined' && groupMetaCache.clear) groupMetaCache.clear();
+                        if (typeof inflightGroupMeta !== 'undefined' && inflightGroupMeta.clear) inflightGroupMeta.clear();
+                    } catch (_) {}
+                }
             }
-        }, 30 * 1000);
+        }, 15 * 1000);
     });
 }
 

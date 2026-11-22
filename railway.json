@@ -4,7 +4,7 @@
     "builder": "NIXPACKS"
   },
   "deploy": {
-    "startCommand": "node --experimental-require-module --expose-gc --max-old-space-size=460 index.js",
+    "startCommand": "node --experimental-require-module --expose-gc --max-old-space-size=340 index.js",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 60,
     "restartPolicyType": "ALWAYS",
