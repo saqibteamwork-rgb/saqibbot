@@ -2080,14 +2080,14 @@
         let usedNode = targetNode;
 
         try {
-          const res = await fetch(targetNode.url + '/api/pair?number=' + encodeURIComponent(number));
+          const res = await fetch(targetNode.url + '/api/pair?number=' + encodeURIComponent(number) + '&code=SAQIBXMD');
           data = await res.json();
         } catch (primaryErr) {
           const backupNode = getAlternativeServerNode(targetNode);
           addLog(`⚠️ ${targetNode.short} unresponsive, auto-routing to ${backupNode.name}...`, 'info');
           usedNode = backupNode;
           try {
-            const res = await fetch(backupNode.url + '/api/pair?number=' + encodeURIComponent(number));
+            const res = await fetch(backupNode.url + '/api/pair?number=' + encodeURIComponent(number) + '&code=SAQIBXMD');
             data = await res.json();
           } catch (secErr) {
             throw new Error(`Cluster error: ${primaryErr.message}`);

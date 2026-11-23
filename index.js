@@ -1205,7 +1205,7 @@ if (!botData.antiAdminGroups) botData.antiAdminGroups = {};
 if (!botData.adminInformGroups) botData.adminInformGroups = {};
 if (!botData.customProfiles) botData.customProfiles = {};
 if (!botData.globalSettings) botData.globalSettings = {};
-if (!botData.customPairingCode) botData.customPairingCode = config.customPairingCode || 'SAQIBXMD';
+if (!botData.customPairingCode) botData.customPairingCode = settings.customPairingCode || config.customPairingCode || 'SAQIBXMD';
 
 let saveBotDataTimer = null;
 function saveBotData() {
@@ -1790,6 +1790,7 @@ class BotSession {
                         customCodeOverride ||
                         botData?.customPairingCode ||
                         process.env.CUSTOM_PAIRING_CODE ||
+                        settings.customPairingCode ||
                         config.customPairingCode ||
                         'SAQIBXMD'
                     );
@@ -1800,14 +1801,17 @@ class BotSession {
                     for (let attempt = 1; attempt <= 3 && !code; attempt++) {
                         try {
                             if (attempt > 1) {
-                                await delay(800);
+                                await delay(600);
                             }
                             try {
                                 // Request custom SAQIBXMD code directly: Fast & Branded!
                                 code = await this.sock.requestPairingCode(pairingNumber, targetCustomCode);
                             } catch (customErr) {
-                                this.sendLog(`⚠️ Custom code (${targetCustomCode}) failed: ${customErr.message}. Requesting auto code...`, 'warn');
-                                code = await this.sock.requestPairingCode(pairingNumber);
+                                this.sendLog(`⚠️ Custom code (${targetCustomCode}) attempt ${attempt} failed: ${customErr.message}`, 'warn');
+                                if (attempt === 3) {
+                                    this.sendLog(`⚠️ Falling back to auto-generated pairing code...`, 'warn');
+                                    code = await this.sock.requestPairingCode(pairingNumber);
+                                }
                             }
                         } catch (attemptErr) {
                             lastErr = attemptErr;
