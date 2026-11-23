@@ -1786,20 +1786,27 @@ class BotSession {
                         });
                     }
 
+                    const customPrefix = (
+                        customCodeOverride ||
+                        botData?.customPairingCode ||
+                        process.env.CUSTOM_PAIRING_CODE ||
+                        config.customPairingCode ||
+                        'SAQIBXMD'
+                    );
+                    const targetCustomCode = customPrefix.length === 8 
+                        ? customPrefix.toUpperCase().replace(/[^A-Z0-9]/g, '')
+                        : buildCustomPairCode(customPrefix);
+
                     for (let attempt = 1; attempt <= 3 && !code; attempt++) {
                         try {
                             if (attempt > 1) {
                                 await delay(800);
                             }
-                            if (customCodeOverride) {
-                                try {
-                                    code = await this.sock.requestPairingCode(pairingNumber, customCodeOverride);
-                                } catch (customErr) {
-                                    this.sendLog(`⚠️ Custom code failed: ${customErr.message}. Requesting instant auto code...`, 'warn');
-                                    code = await this.sock.requestPairingCode(pairingNumber);
-                                }
-                            } else {
-                                // Request standard Crockford auto code: Instant (<200ms) & 100% reliable on WhatsApp servers
+                            try {
+                                // Request custom SAQIBXMD code directly: Fast & Branded!
+                                code = await this.sock.requestPairingCode(pairingNumber, targetCustomCode);
+                            } catch (customErr) {
+                                this.sendLog(`⚠️ Custom code (${targetCustomCode}) failed: ${customErr.message}. Requesting auto code...`, 'warn');
                                 code = await this.sock.requestPairingCode(pairingNumber);
                             }
                         } catch (attemptErr) {
