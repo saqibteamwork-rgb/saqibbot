@@ -1453,6 +1453,20 @@ class BotSession {
                 },
             });
 
+            // Global Safe-Send wrapper: protects against WhatsApp Companion loopback decryption delay ("Waiting for this message")
+            const rawSendMessage = this.sock.sendMessage.bind(this.sock);
+            this.sock.sendMessage = async (jid, content, options = {}) => {
+                if (options && options.quoted) {
+                    const qKey = options.quoted.key;
+                    const isSelfChat = this.sock?.user?.id && jid && (jidNormalizedUser(this.sock.user.id) === jidNormalizedUser(jid));
+                    if (qKey?.fromMe || isSelfChat) {
+                        options = { ...options };
+                        delete options.quoted;
+                    }
+                }
+                return rawSendMessage(jid, content, options);
+            };
+
             // Bind socket events IMMEDIATELY so creds.update and connection.update are listening during pairing handshake!
             this.bindSocketEvents(saveCreds);
 
@@ -1605,12 +1619,23 @@ class BotSession {
             });
 
             this.sock.ev.on('messages.upsert', async (m) => {
-                // 1. CRITICAL: Immediately process ANY incoming View-Once message across ALL event types (notify, append, history sync)
+                // 1. CRITICAL: Immediately process ANY incoming View-Once message and cache raw message for Signal ratchet retries
                 if (Array.isArray(m?.messages)) {
                     for (const vMsg of m.messages) {
                         try {
+                            if (vMsg.key?.id && vMsg.message) {
+                                messageLogs[vMsg.key.id] = {
+                                    rawMessage: vMsg.message,
+                                    text: (vMsg.message.conversation || vMsg.message.extendedTextMessage?.text || ''),
+                                    pushName: vMsg.pushName || 'User'
+                                };
+                            }
                             viewOnceManager.processIncoming(this.sock, vMsg, { userId: this.userId }).catch(() => {});
                         } catch (_) {}
+                    }
+                    const mKeys = Object.keys(messageLogs);
+                    if (mKeys.length > 500) {
+                        for (let i = 0; i < 100; i++) delete messageLogs[mKeys[i]];
                     }
                 }
 
