@@ -43,6 +43,7 @@ const CLUSTER_MONITOR_NODES = [
     { id: 's18', name: 'Heroku-18', url: 'https://saqibbot18-45854000f60b.herokuapp.com' },
     { id: 's19', name: 'Heroku-19', url: 'https://saqibbot19-bb306a89a5f4.herokuapp.com' },
     { id: 's20', name: 'Heroku-20', url: 'https://saqibbot20-317bb68e4db0.herokuapp.com' },
+    { id: 's21', name: 'Heroku-21', url: 'https://saqibbot21-ac7859f5f0fb.herokuapp.com' },
     { id: 's22', name: 'Heroku-22', url: 'https://saqibbot22-9318c2de0250.herokuapp.com' },
     { id: 's23', name: 'Heroku-23', url: 'https://saqibot23-1f4bec48d0f2.herokuapp.com' },
     { id: 's25', name: 'Heroku-25', url: 'https://saqibbot25-46c4cf949a77.herokuapp.com' },

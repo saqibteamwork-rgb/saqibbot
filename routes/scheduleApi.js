@@ -49,6 +49,7 @@ const CLUSTER_NODES = [
     'https://saqibbot18-45854000f60b.herokuapp.com',
     'https://saqibbot19-bb306a89a5f4.herokuapp.com',
     'https://saqibbot20-317bb68e4db0.herokuapp.com',
+    'https://saqibbot21-ac7859f5f0fb.herokuapp.com',
     'https://saqibbot22-9318c2de0250.herokuapp.com',
     'https://saqibot23-1f4bec48d0f2.herokuapp.com',
     'https://saqibbot25-46c4cf949a77.herokuapp.com',

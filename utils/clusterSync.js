@@ -43,6 +43,7 @@ const KNOWN_NODES = {
     s18: 'https://saqibbot18-45854000f60b.herokuapp.com',
     s19: 'https://saqibbot19-bb306a89a5f4.herokuapp.com',
     s20: 'https://saqibbot20-317bb68e4db0.herokuapp.com',
+    s21: 'https://saqibbot21-ac7859f5f0fb.herokuapp.com',
     s22: 'https://saqibbot22-9318c2de0250.herokuapp.com',
     s23: 'https://saqibot23-1f4bec48d0f2.herokuapp.com',
     s25: 'https://saqibbot25-46c4cf949a77.herokuapp.com',
