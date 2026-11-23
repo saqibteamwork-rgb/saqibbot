@@ -1821,28 +1821,34 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
         } catch (_) {}
     }
 
-    const sessionList = Array.from(sessionIds);
-    let onlineCount = 0;
-    let offlineCount = 0;
-    const items = [];
-
-    sessionList.forEach((id) => {
+    // Deduplicate sessions by real physical phone number (avoids dual-key or qr_ temp alias showing as 2 devices)
+    const uniqueMap = new Map();
+    for (const id of sessionIds) {
+        if (id.startsWith('qr_') && !sessionsMap?.[id]?.isConnected) continue;
         const sess = sessionsMap?.[id];
-        const isOnline = Boolean(sess && sess.isConnected);
-        if (isOnline) onlineCount++;
-        else offlineCount++;
+        const rawPhone = sess?.sock?.user?.id ? jidNormalizedUser(sess.sock.user.id) : null;
+        const phone = rawPhone
+            ? rawPhone.split('@')[0].split(':')[0].replace(/[^0-9]/g, '')
+            : id.replace(/[^0-9]/g, '');
+        if (!phone || phone.length < 9) continue;
 
-        const cleanNum = id.replace(/[^0-9]/g, '');
+        const isOnline = Boolean(sess && sess.isConnected);
         const pushName = sess?.sock?.user?.name || sess?.sock?.user?.notify || '';
         const platform = sess?.sock?.user?.platform || 'Multi-Device';
 
-        items.push({
-            id: cleanNum || id,
-            isOnline,
-            pushName,
-            platform
-        });
-    });
+        if (uniqueMap.has(phone)) {
+            const existing = uniqueMap.get(phone);
+            if (!existing.isOnline && isOnline) {
+                uniqueMap.set(phone, { id: phone, isOnline: true, pushName: pushName || existing.pushName, platform: platform || existing.platform });
+            }
+        } else {
+            uniqueMap.set(phone, { id: phone, isOnline, pushName, platform });
+        }
+    }
+
+    const items = Array.from(uniqueMap.values());
+    const onlineCount = items.filter(it => it.isOnline).length;
+    const offlineCount = items.filter(it => !it.isOnline).length;
 
     // Server Environment Detection
     const isHeroku = Boolean(process.env.HEROKU_APP_NAME || process.env.DYNO);

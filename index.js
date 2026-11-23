@@ -539,12 +539,39 @@ app.post('/api/cluster-action', (req, res) => {
 });
 
 // ═════════════════════════════════════════════════════════
+// UNIQUE SESSION COUNTER (Deduplicates by phone number)
+// ═════════════════════════════════════════════════════════
+function countUniqueActiveSessions() {
+    const uniqueActive = new Set();
+    for (const sess of Object.values(sessions)) {
+        if (!sess || !sess.isConnected) continue;
+        const phone = sess.sock?.user?.id
+            ? jidNormalizedUser(sess.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '')
+            : sess.userId?.replace(/[^0-9]/g, '');
+        if (phone && phone.length >= 9) uniqueActive.add(phone);
+    }
+    return uniqueActive.size;
+}
+
+// ═════════════════════════════════════════════════════════
 // 24/7 CLOUD HEALTHCHECK & ANTI-SLEEP ENDPOINTS
 // ═════════════════════════════════════════════════════════
 app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
-    const activeCount = Object.values(sessions).filter(s => s && s.isConnected).length;
-    const totalCount = Object.values(sessions).filter(s => s && (s.isConnected || s.sock)).length;
+    // Deduplicate: count unique phone numbers, not duplicate session keys (qr_xxx + phone = same session!)
+    const uniqueActive = new Set();
+    const uniqueTotal = new Set();
+    for (const sess of Object.values(sessions)) {
+        if (!sess) continue;
+        const phone = sess.sock?.user?.id
+            ? jidNormalizedUser(sess.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '')
+            : sess.userId?.replace(/[^0-9]/g, '');
+        if (!phone || phone.length < 9) continue;
+        if (sess.isConnected) uniqueActive.add(phone);
+        if (sess.isConnected || sess.sock) uniqueTotal.add(phone);
+    }
+    const activeCount = uniqueActive.size;
+    const totalCount = uniqueTotal.size;
     res.status(200).json({
         status: 'ok',
         alive: true,
@@ -797,9 +824,8 @@ app.get('/code/active', (req, res) => {
 
 app.get('/api/active', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    const active = Object.values(sessions).filter(s => s && s.isConnected);
     return res.json({
-        count: active.length,
+        count: countUniqueActiveSessions(),
         total: Object.keys(sessions).length,
         status: 'online',
         uptime: Math.floor((Date.now() - BOT_START_TIME) / 1000)
@@ -1237,7 +1263,7 @@ async function logoutSession(userId) {
         if (fs.existsSync(authPath)) fs.removeSync(authPath);
         mongoSync.deleteSessionFromMongo(userId);
         delete sessions[userId];
-        io.emit('total-active', Object.values(sessions).filter(s => s.isConnected).length);
+        io.emit('total-active', countUniqueActiveSessions());
         const socketId = userSockets[userId];
         if (socketId) io.to(socketId).emit('connection-status', { connected: false, user: userId });
     }
@@ -1256,6 +1282,13 @@ async function loadExistingSessions() {
         const maxSessions = parseInt(process.env.MAX_SESSIONS || '2', 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
+            // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!
+            if (userId.startsWith('qr_')) {
+                console.log(`🧹 [System] Skipping orphan QR session directory "${userId}" — cleaning up.`);
+                try { fs.removeSync(path.join(AUTH_DIR, userId)); } catch (_) {}
+                mongoSync.deleteSessionFromMongo(userId).catch(() => {});
+                continue;
+            }
             const authPath = path.join(AUTH_DIR, userId);
             const stats = await fs.stat(authPath);
             if (stats.isDirectory()) {
@@ -1294,6 +1327,11 @@ setInterval(async () => {
     for (const userId of Object.keys(sessions)) {
         const sess = sessions[userId];
         if (!sess) continue;
+        // Skip orphan QR temp sessions — the conflict resolver handles these on connect
+        if (userId.startsWith('qr_') && !sess.isConnected && !sess.isInitializing) {
+            delete sessions[userId];
+            continue;
+        }
         const credsFile = path.join(sess.authPath, 'creds.json');
         if (!fs.existsSync(credsFile)) continue;
 
@@ -1464,7 +1502,7 @@ class BotSession {
             connected: this.isConnected,
             user: this.userId
         });
-        io.emit('total-active', Object.values(sessions).filter(s => s.isConnected).length);
+        io.emit('total-active', countUniqueActiveSessions());
     }
 
     async getAIResponse(userJid, userMessage) {
@@ -3743,6 +3781,32 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             }
                             sessions[realNum] = this;
                             console.log(`📌 [Session Map] Primary session +${realNum} mapped to ${this.userId}`);
+
+                            // ═══ DUAL-KEY FIX: Remove orphan temporary session key (qr_xxx etc.) ═══
+                            // Without this, sessions object has BOTH qr_xxx AND phone# pointing to the
+                            // same session → /health reports 2 paired, watchdog gets confused, bot dies
+                            if (this.userId !== realNum) {
+                                const oldId = this.userId;
+                                delete sessions[oldId];
+
+                                // Migrate auth dir from temp name to real phone number
+                                const newAuthPath = path.join(AUTH_DIR, realNum);
+                                if (this.authPath !== newAuthPath && fs.existsSync(this.authPath)) {
+                                    try {
+                                        if (fs.existsSync(newAuthPath)) fs.removeSync(newAuthPath);
+                                        fs.moveSync(this.authPath, newAuthPath);
+                                    } catch (mvErr) {
+                                        console.warn(`[Session Migration] Auth dir rename failed: ${mvErr.message}`);
+                                    }
+                                }
+                                this.authPath = newAuthPath;
+                                this.userId = realNum;
+
+                                // Purge orphan MongoDB entry for old temp ID
+                                mongoSync.deleteSessionFromMongo(oldId).catch(() => {});
+
+                                console.log(`🔀 [Session Migrated] "${oldId}" → permanent "+${realNum}"`);
+                            }
                         }
                     }
 
@@ -3986,6 +4050,10 @@ app.get('/api/qr/start', async (req, res) => {
                     qrSessions[sessionId].userId = realUserId;
                     session.userId = realUserId;
                     sessions[realUserId] = session;
+                    // Clean up temporary QR session key to prevent dual-key aliasing
+                    if (sessionId !== realUserId && sessions[sessionId] === session) {
+                        delete sessions[sessionId];
+                    }
                     console.log(`[QR] 🎉 LIVE CONNECTED! User: ${realUserId}`);
                     io.emit('qr-connected-' + sessionId, realUserId);
                 }

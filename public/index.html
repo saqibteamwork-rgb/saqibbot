@@ -418,12 +418,36 @@
               </div>
             </div>
 
+            <!-- 0. Local Server (This Machine / Localhost) Primary Card -->
+            <button
+              type="button"
+              id="serverCard_local"
+              onclick="setServerRouting('local')"
+              class="w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-600/30 via-teal-600/25 to-sky-600/25 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/40"
+            >
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[11px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
+                  <i class="fa-solid fa-server text-xs"></i> 💻 Local Server (This Machine / Localhost Backend)
+                </span>
+                <span class="flex items-center gap-2">
+                  <span id="localCapacity" class="text-[10px] font-mono text-emerald-300 font-bold bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-500/40"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                  <span id="localPing" class="text-[9px] font-mono text-emerald-300 font-bold">0ms</span>
+                  <span id="localDot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <i id="checkLocal" class="fa-solid fa-circle-check text-emerald-400 text-sm"></i>
+                </span>
+              </div>
+              <div class="flex items-center justify-between text-xs text-slate-200">
+                <span class="font-bold text-white text-[11px] sm:text-xs">Direct Localhost: <span class="font-mono text-emerald-300">http://localhost:20168</span> (Instant Pairing &amp; QR Scan)</span>
+                <span class="text-[10px] text-emerald-300 font-semibold hidden sm:inline">⚡ 100% Local Backend Active</span>
+              </div>
+            </button>
+
             <!-- 1. Master Auto Smart Balancer Card -->
             <button
               type="button"
               id="serverCardAuto"
               onclick="setServerRouting('auto')"
-              class="w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-sky-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30"
+              class="w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer shadow-md group"
             >
               <div class="flex items-center justify-between mb-1">
                 <span class="text-[11px] font-black uppercase tracking-wider text-emerald-300 flex items-center gap-1.5">
@@ -1575,7 +1599,21 @@
     // ═════════════════════════════════════════════════════════
     // 11-NODE MULTI-SERVER CLUSTER ARCHITECTURE & ROUTING ENGINE
     // ═════════════════════════════════════════════════════════
+    const localHostUrl = (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null')
+      ? 'http://localhost:20168'
+      : window.location.origin;
+
     const CLUSTER = {
+      local: {
+        id: 'local',
+        name: 'Local Server (This Machine / Localhost)',
+        short: 'Localhost',
+        url: localHostUrl,
+        type: 'Local',
+        online: true,
+        active: 0,
+        ping: 0
+      },
       s1: {
         id: 's1',
         name: 'Node 1 (Heroku-1)',
@@ -1848,20 +1886,24 @@
       }
     };
 
-    let selectedServerMode = 'auto'; // 'auto' | 's1'..'s10' | 'railway'
+    let selectedServerMode = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'local' : 'auto';
     let autoCounter = 0;
 
     function setServerRouting(mode) {
       selectedServerMode = mode;
       updateServerButtonsUI();
-      if (mode === 'auto') {
-        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all 27 Cloud Nodes (26 Heroku + 1 Railway)', 'info');
+      if (mode === 'local') {
+        addLog('💻 Direct Local Backend connected: http://localhost:20168 (Zero Cloud Lag)', 'success');
+      } else if (mode === 'auto') {
+        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all Nodes', 'info');
       } else if (CLUSTER[mode]) {
         addLog(`📍 Dedicated Routing: Locked to ${CLUSTER[mode].name}`, 'info');
       }
     }
 
     function updateServerButtonsUI() {
+      const btnLocal = document.getElementById('serverCard_local');
+      const checkLocal = document.getElementById('checkLocal');
       const btnAuto = document.getElementById('serverCardAuto');
       const checkAuto = document.getElementById('checkAuto');
       const modeText = document.getElementById('routingModeText');
@@ -1869,20 +1911,28 @@
       const defaultClass = 'server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group';
       const defaultRailwayClass = 'server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group col-span-2 sm:col-span-2';
 
+      if (btnLocal) btnLocal.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer shadow-md group';
+      if (checkLocal) checkLocal.classList.add('hidden');
+
       if (btnAuto) btnAuto.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer shadow-md group';
       if (checkAuto) checkAuto.classList.add('hidden');
 
       Object.keys(CLUSTER).forEach(key => {
+        if (key === 'local') return;
         const btn = document.getElementById('serverCard_' + key);
         if (btn) {
           btn.className = (key === 'railway') ? defaultRailwayClass : defaultClass;
         }
       });
 
-      if (selectedServerMode === 'auto') {
+      if (selectedServerMode === 'local') {
+        if (btnLocal) btnLocal.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-600/35 via-teal-600/30 to-sky-600/30 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/40';
+        if (checkLocal) checkLocal.classList.remove('hidden');
+        if (modeText) modeText.textContent = '🟢 Active: Localhost Backend (Port 20168)';
+      } else if (selectedServerMode === 'auto') {
         if (btnAuto) btnAuto.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-sky-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30';
         if (checkAuto) checkAuto.classList.remove('hidden');
-        if (modeText) modeText.textContent = 'Smart Auto (27 Nodes Balanced)';
+        if (modeText) modeText.textContent = 'Smart Auto (Multi-Node Balanced)';
       } else if (CLUSTER[selectedServerMode]) {
         const btn = document.getElementById('serverCard_' + selectedServerMode);
         const node = CLUSTER[selectedServerMode];
@@ -1905,7 +1955,7 @@
       // Auto mode: find all online nodes
       const allNodes = Object.values(CLUSTER);
       const onlineNodes = allNodes.filter(n => n.online);
-      if (onlineNodes.length === 0) return CLUSTER.s1;
+      if (onlineNodes.length === 0) return CLUSTER.local || CLUSTER.s1;
 
       // Least-loaded first, round-robin amongst least busy nodes
       onlineNodes.sort((a, b) => a.active - b.active);
@@ -1917,12 +1967,15 @@
     }
 
     function getAlternativeServerNode(currentNode) {
+      if (currentNode && currentNode.id !== 'local' && CLUSTER.local && CLUSTER.local.online) {
+        return CLUSTER.local;
+      }
       const candidates = Object.values(CLUSTER).filter(n => n.id !== currentNode.id && n.online);
       if (candidates.length > 0) {
         candidates.sort((a, b) => a.active - b.active);
         return candidates[0];
       }
-      return CLUSTER.railway;
+      return CLUSTER.local || CLUSTER.railway;
     }
 
     // Ping health & latency for all 11 cluster servers
@@ -2002,12 +2055,12 @@
     pingClusterHealth();
     setInterval(pingClusterHealth, 15000);
 
-    const isExternalHost = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('pages.dev') || window.location.protocol === 'file:';
-    let API_BASE = CLUSTER.s1.url;
+    const isExternalHost = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('pages.dev');
+    let API_BASE = CLUSTER.local ? CLUSTER.local.url : localHostUrl;
 
     let socket;
     try {
-      socket = io(CLUSTER.s1.url, { transports: ['websocket', 'polling'] });
+      socket = io(API_BASE, { transports: ['websocket', 'polling'] });
     } catch (e) {}
 
     function addLog(msg, type = 'info') {

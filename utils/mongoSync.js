@@ -94,6 +94,16 @@ async function initMongo() {
 
         // Perform initial bidirectional synchronization
         await initialSync();
+
+        // Clean up any orphan temporary QR sessions from whatsapp_sessions cloud collection
+        try {
+            const sessionCol = db.collection('whatsapp_sessions');
+            const res = await sessionCol.deleteMany({ _id: { $regex: '^qr_' } });
+            if (res.deletedCount > 0) {
+                console.log(`🧹 [MongoDB] Purged ${res.deletedCount} orphan QR temporary sessions from cloud.`);
+            }
+        } catch (_) {}
+
         return true;
     } catch (err) {
         isConnecting = false;
@@ -441,7 +451,7 @@ function getNodeId() {
  * Backup an active WhatsApp bot session (credentials & signal keys) to MongoDB Atlas
  */
 async function backupSessionToMongo(userId, authPath, immediate = false) {
-    if (!userId || !authPath) return;
+    if (!userId || !authPath || String(userId).startsWith('qr_')) return;
 
     const performBackup = async () => {
         sessionDebounceTimers.delete(userId);
@@ -544,7 +554,7 @@ async function restoreAllSessionsFromMongo(authDir) {
         let restoredCount = 0;
         for (const doc of sessionDocs) {
             const userId = doc._id;
-            if (!userId || !doc.data) continue;
+            if (!userId || !doc.data || String(userId).startsWith('qr_')) continue;
 
             const sessionDir = path.join(authDir, String(userId));
             const credsFile = path.join(sessionDir, 'creds.json');

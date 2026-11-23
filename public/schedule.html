@@ -299,9 +299,14 @@
         let selectedDestMode = 'all';
 
         // ═════════════════════════════════════════════════════════════
-        // PARALLEL PING DISCOVERY (11 Cluster Nodes)
+        // PARALLEL PING DISCOVERY (Local Server + Cluster Nodes)
         // ═════════════════════════════════════════════════════════════
+        const localHostUrl = (window.location.protocol === 'file:' || !window.location.origin || window.location.origin === 'null')
+            ? 'http://localhost:20168'
+            : window.location.origin;
+
         const ALL_CLUSTER_NODES = [
+            localHostUrl,
             'https://web-production-08da5300.up.railway.app',
             'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
             'https://saqib-bot-s2-1cceb03e9698.herokuapp.com',
