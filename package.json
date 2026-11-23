@@ -4,12 +4,15 @@
   "description": "Professional WhatsApp Automation Tool with Baileys",
   "main": "index.js",
   "engines": {
-    "node": "22.x"
+    "node": ">=20.0.0"
   },
   "scripts": {
-    "start": "node --experimental-require-module --expose-gc --max-old-space-size=460 index.js",
+    "start": "node --experimental-require-module --expose-gc --max-old-space-size=340 index.js",
     "pm2": "pm2 start ecosystem.config.js",
     "dev": "nodemon index.js"
+  },
+  "overrides": {
+    "sharp": "^0.34.5"
   },
   "dependencies": {
     "@distube/ytdl-core": "^5.2.1",
