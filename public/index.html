@@ -2112,7 +2112,7 @@
                   onConnectedSuccess(number, usedNode.short);
                 }
               } catch (e) {}
-            }, 2500);
+            }, 1000);
 
             try {
               const nodeSocket = io(usedNode.url, { transports: ['websocket', 'polling'] });

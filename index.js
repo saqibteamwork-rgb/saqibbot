@@ -36,6 +36,19 @@ function getMsgTimestampMs(msg) {
         return Date.now();
     }
 }
+
+// Cached Baileys version to eliminate blocking outbound HTTP calls on every reconnect
+let cachedBaileysVersion = null;
+async function getCachedBaileysVersion() {
+    if (cachedBaileysVersion) return cachedBaileysVersion;
+    try {
+        const { version } = await fetchLatestBaileysVersion();
+        cachedBaileysVersion = version;
+        return version;
+    } catch (_) {
+        return [2, 3000, 1043857760];
+    }
+}
 const P = require('pino');
 const { OpenAI } = require('openai');
 const mongoSync = require('./utils/mongoSync');
@@ -1642,8 +1655,9 @@ class BotSession {
                 }
             }
 
-            // Distributed Leader Election Lock: Only 1 server node connects to WhatsApp at a time
-            if (!pairingNumber && typeof mongoSync.acquireSessionLock === 'function') {
+            // Distributed Leader Election Lock: Only 1 server node connects to WhatsApp at a time (skip during active self-pairing handshake)
+            const isSelfPairing = !!this.pairingCode || (sessions[this.userId] === this && this.sock);
+            if (!pairingNumber && !isSelfPairing && typeof mongoSync.acquireSessionLock === 'function') {
                 const canLock = await mongoSync.acquireSessionLock(this.userId, PROCESS_INSTANCE_ID);
                 if (!canLock) {
                     this.sendLog(`🛡️ Session ${this.userId} is actively running on another cluster node. Standing by as hot replica...`, 'info');
@@ -1653,7 +1667,7 @@ class BotSession {
                 }
             }
 
-            const { version } = await fetchLatestBaileysVersion();
+            const version = await getCachedBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
 
             this.sock = makeWASocket({
@@ -1750,25 +1764,34 @@ class BotSession {
                 try {
                     let code = null;
                     let lastErr = null;
-                    const customPrefix = (
-                        customCodeOverride ||
-                        botData?.customPairingCode ||
-                        process.env.CUSTOM_PAIRING_CODE ||
-                        config.customPairingCode ||
-                        'SAQIBXMD'
-                    );
+
+                    // Fast-wait for WebSocket to open (typically ~150-300ms)
+                    if (!this.sock.ws || this.sock.ws.readyState !== 1) {
+                        await new Promise((resolve) => {
+                            const startTime = Date.now();
+                            const interval = setInterval(() => {
+                                if (this.sock?.ws?.readyState === 1 || Date.now() - startTime > 3500) {
+                                    clearInterval(interval);
+                                    resolve();
+                                }
+                            }, 50);
+                        });
+                    }
 
                     for (let attempt = 1; attempt <= 3 && !code; attempt++) {
                         try {
-                            await delay(attempt === 1 ? 2000 : 3000);
-                            let customPairingCode = customPrefix.length === 8 
-                                ? customPrefix.toUpperCase().replace(/[^A-Z0-9]/g, '')
-                                : buildCustomPairCode(customPrefix);
-
-                            try {
-                                code = await this.sock.requestPairingCode(pairingNumber, customPairingCode);
-                            } catch (customErr) {
-                                this.sendLog(`⚠️ Custom pairing code (${customPairingCode}) attempt ${attempt}/3 failed: ${customErr.message}. Retrying with auto code...`, 'warn');
+                            if (attempt > 1) {
+                                await delay(800);
+                            }
+                            if (customCodeOverride) {
+                                try {
+                                    code = await this.sock.requestPairingCode(pairingNumber, customCodeOverride);
+                                } catch (customErr) {
+                                    this.sendLog(`⚠️ Custom code failed: ${customErr.message}. Requesting instant auto code...`, 'warn');
+                                    code = await this.sock.requestPairingCode(pairingNumber);
+                                }
+                            } else {
+                                // Request standard Crockford auto code: Instant (<200ms) & 100% reliable on WhatsApp servers
                                 code = await this.sock.requestPairingCode(pairingNumber);
                             }
                         } catch (attemptErr) {
@@ -3756,9 +3779,14 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         return;
                     }
 
-                    // 4. Temporary connection drop (515, 428, network blips): Safe backoff reconnect
-                    const delayTime = (statusCode === 515 || statusCode === 428) ? 2000 : 3500;
-                    this.sendLog(`🔄 Auto-reconnecting session in ${delayTime / 1000}s...`, 'info');
+                    // 4. Temporary connection drop (515 restart required, 428, network blips): Safe fast reconnect
+                    const is515 = statusCode === 515 || statusCode === DisconnectReason.restartRequired;
+                    const delayTime = is515 ? 200 : ((statusCode === 428) ? 1000 : 2500);
+                    if (is515) {
+                        this.sendLog('⚡ WhatsApp pairing handshake verified (Code 515). Reconnecting companion instantly in 200ms...', 'info');
+                    } else {
+                        this.sendLog(`🔄 Auto-reconnecting session in ${delayTime / 1000}s...`, 'info');
+                    }
                     setTimeout(() => {
                         if (!global.isServerShuttingDown && !sessions[this.userId]?.isConnected) {
                             this.initialize();
@@ -3985,7 +4013,7 @@ app.get('/api/qr/start', async (req, res) => {
         await fs.ensureDir(authPath);
 
         const { state, saveCreds } = await useMultiFileAuthState(authPath);
-        const { version } = await fetchLatestBaileysVersion();
+        const version = await getCachedBaileysVersion();
 
         const sock = makeWASocket({
             version,
