@@ -1395,7 +1395,8 @@ setInterval(async () => {
         const isWsOpen = Boolean(sess.sock?.ws?.isOpen || sess.sock?.ws?.socket?.readyState === 1);
         const isSocketHealthy = sess.isConnected && sess.sock && isWsOpen;
 
-        if (!isSocketHealthy && !sess.isInitializing) {
+        // Skip watchdog heal if session is actively in pairing handshake (pairingCode set means code was just generated and WA handshake is pending)
+        if (!isSocketHealthy && !sess.isInitializing && !sess.pairingCode) {
             // Check if another session is already actively connected with this same phone number
             const myPhone = sess.sock?.user?.id 
                 ? jidNormalizedUser(sess.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '')
@@ -1827,6 +1828,8 @@ class BotSession {
                     this.pairingCode = code;
                     this.isInitializing = false;
                     this.sendLog("🔑 Pairing Code Generated: " + code, 'success');
+                    // Auto-clear pairingCode after 90s so watchdog resumes normal healing
+                    setTimeout(() => { if (this.pairingCode === code) this.pairingCode = null; }, 90000);
 
                     // Send to Telegram if chat ID exists and telegram bot is enabled
                     if (this.tgChatId && tgBot) {
