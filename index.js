@@ -516,20 +516,26 @@ app.get('/api/node-identify', (req, res) => {
 // MULTI-SERVER CLUSTER MESH WEBHOOK ENDPOINT
 // ═════════════════════════════════════════════════════════
 const clusterSync = require('./utils/clusterSync');
-app.post('/api/cluster-action', async (req, res) => {
-    try {
-        const result = await clusterSync.handleIncomingClusterAction(req.body, {
-            botData,
-            saveBotData,
-            sessions
-        });
-        res.json({ ok: true, ...result });
-    } catch (err) {
-        res.status(err.message.includes('Unauthorized') ? 401 : 500).json({
-            ok: false,
-            error: err.message
-        });
+app.post('/api/cluster-action', (req, res) => {
+    const { secret, action, fromNode } = req.body || {};
+    if (!secret || secret !== clusterSync.CLUSTER_SECRET) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized cluster secret' });
     }
+    // Acknowledge immediately within 1ms so Heroku router NEVER times out (0 timeouts!)
+    res.json({ ok: true, queued: true, timestamp: Date.now() });
+
+    // Process heavy cluster actions asynchronously in background without blocking the Node event loop
+    setImmediate(async () => {
+        try {
+            await clusterSync.handleIncomingClusterAction(req.body, {
+                botData,
+                saveBotData,
+                sessions
+            });
+        } catch (err) {
+            // Silently handle error in background
+        }
+    });
 });
 
 // ═════════════════════════════════════════════════════════
@@ -840,6 +846,91 @@ app.get('/api/session/transfer', async (req, res) => {
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }
+});
+
+// Autonomous Session Removal & Disk Cleaner
+app.get('/api/session/delete', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const { id } = req.query;
+    if (!id) return res.status(400).json({ error: 'Missing session id' });
+    try {
+        const sid = String(id);
+        const sess = sessions[sid];
+        if (sess) {
+            sess.isConnected = false;
+            try { sess.sock?.ev?.removeAllListeners(); } catch (_) {}
+            try { sess.sock?.ws?.close?.(); } catch (_) {}
+            try { sess.sock?.ws?.terminate?.(); } catch (_) {}
+            delete sessions[sid];
+        }
+        const authPath = path.join(AUTH_DIR, sid);
+        if (fs.existsSync(authPath)) {
+            try { fs.removeSync(authPath); } catch (_) {}
+        }
+        const col = mongoSync.getDb()?.collection('whatsapp_sessions');
+        if (col) {
+            await col.deleteOne({ _id: sid });
+        }
+        return res.json({ success: true, deleted: sid, remaining: Object.keys(sessions) });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// Purge any stale/duplicate sessions for the same physical phone number
+app.get('/api/session/purge-duplicates', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+        const purged = [];
+        const seenNumbers = new Map();
+        for (const [id, sess] of Object.entries(sessions)) {
+            const rawPhone = sess?.sock?.user?.id ? jidNormalizedUser(sess.sock.user.id) : null;
+            const phone = rawPhone ? rawPhone.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : id.replace(/[^0-9]/g, '');
+            if (!phone || phone.length < 9) continue;
+
+            if (seenNumbers.has(phone)) {
+                const existingId = seenNumbers.get(phone);
+                const existingSess = sessions[existingId];
+                // Keep the connected session, discard the disconnected/stale one
+                let toPurgeId, toKeepId;
+                if (sess.isConnected && !existingSess?.isConnected) {
+                    toPurgeId = existingId;
+                    toKeepId = id;
+                } else {
+                    toPurgeId = id;
+                    toKeepId = existingId;
+                }
+                seenNumbers.set(phone, toKeepId);
+
+                const deadSess = sessions[toPurgeId];
+                if (deadSess) {
+                    deadSess.isConnected = false;
+                    try { deadSess.sock?.ev?.removeAllListeners(); } catch (_) {}
+                    try { deadSess.sock?.ws?.close?.(); } catch (_) {}
+                    try { deadSess.sock?.ws?.terminate?.(); } catch (_) {}
+                    if (deadSess.authPath && fs.existsSync(deadSess.authPath) && toPurgeId !== toKeepId) {
+                        try { fs.removeSync(deadSess.authPath); } catch (_) {}
+                    }
+                    delete sessions[toPurgeId];
+                    purged.push(toPurgeId);
+                }
+            } else {
+                seenNumbers.set(phone, id);
+            }
+        }
+        return res.json({ success: true, purged, remaining: Object.keys(sessions) });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// Controlled Dyno Process Flush
+app.get('/api/dyno-restart', (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.json({ success: true, message: 'Dyno restarting in 1 second...' });
+    setTimeout(() => {
+        process.exit(0);
+    }, 1000);
 });
 
 app.get('/api/sessions/reload', async (req, res) => {
@@ -1211,6 +1302,32 @@ setInterval(async () => {
         const isSocketHealthy = sess.isConnected && sess.sock && isWsOpen;
 
         if (!isSocketHealthy && !sess.isInitializing) {
+            // Check if another session is already actively connected with this same phone number
+            const myPhone = sess.sock?.user?.id 
+                ? jidNormalizedUser(sess.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '')
+                : (userId.startsWith('qr_') ? null : userId.replace(/[^0-9]/g, ''));
+
+            if (myPhone) {
+                const activeDuplicate = Object.values(sessions).find(s => 
+                    s && s !== sess && s.isConnected && s.sock?.user?.id && 
+                    jidNormalizedUser(s.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') === myPhone
+                );
+                if (activeDuplicate) {
+                    console.log(`🧹 [Watchdog] Session "${userId}" is an obsolete zombie duplicate of active connected session "${activeDuplicate.userId}" for +${myPhone}. Purging.`);
+                    try {
+                        sess.isConnected = false;
+                        sess.sock?.ev?.removeAllListeners();
+                        sess.sock?.ws?.close?.();
+                        sess.sock?.ws?.terminate?.();
+                        if (sess.authPath && fs.existsSync(sess.authPath) && userId !== activeDuplicate.userId) {
+                            fs.removeSync(sess.authPath);
+                        }
+                    } catch (_) {}
+                    delete sessions[userId];
+                    continue;
+                }
+            }
+
             console.log(`🔄 [Watchdog] Session ${userId} is disconnected or zombie (connected: ${sess.isConnected}, isOpen: ${sess.sock?.ws?.isOpen}, readyState: ${sess.sock?.ws?.socket?.readyState ?? 'none'}). Auto-healing socket...`);
             sess.isConnected = false;
             try {
@@ -1539,7 +1656,17 @@ class BotSession {
                         delete options.quoted;
                     }
                 }
-                return rawSendMessage(jid, content, options);
+                const sentMsg = await rawSendMessage(jid, content, options);
+                // CRITICAL: Cache outgoing sent message in messageLogs so Signal Ratchet retries (getMessage) can re-encrypt it!
+                if (sentMsg?.key?.id && sentMsg.message) {
+                    messageLogs[sentMsg.key.id] = {
+                        rawMessage: sentMsg.message,
+                        text: (sentMsg.message.conversation || sentMsg.message.extendedTextMessage?.text || ''),
+                        fromMe: true,
+                        timestamp: Date.now()
+                    };
+                }
+                return sentMsg;
             };
 
             // Bind socket events IMMEDIATELY so creds.update and connection.update are listening during pairing handshake!
@@ -1728,9 +1855,18 @@ class BotSession {
                 if (!isNotify && !isAppend && !hasNewsletter && !hasStub && !hasFresh) return;
 
                 await Promise.all(m.messages.map(async (msg) => {
-                    // Check for decryption errors
+                    // Check for decryption errors & auto-reset corrupted ratchet key for this sender
                     if (msg.messageStubType === 1 || msg.messageStubType === 2) {
-                        this.sendLog('⚠️ Received undecryptable message. Possible session conflict.', 'warning');
+                        this.sendLog(`⚠️ Received undecryptable message (Stub ${msg.messageStubType}) from ${msg.key?.remoteJid || 'peer'}. Auto-healing ratchet session...`, 'warning');
+                        const senderKey = msg.key?.participant || msg.key?.remoteJid;
+                        if (senderKey && !senderKey.endsWith('@newsletter')) {
+                            try {
+                                const sFile = path.join(this.authPath, `session-${senderKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
+                                if (fs.existsSync(sFile)) {
+                                    fs.unlinkSync(sFile);
+                                }
+                            } catch (_) {}
+                        }
                     }
 
                     try {
@@ -3570,12 +3706,43 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.sendConnectionStatus();
                     this.startActiveCheck();
 
-                    // If session was paired with a temporary QR id, alias it under the real phone number
+                    // Dedicated Conflict Resolver: Clean up any obsolete/duplicate session for this physical phone number
                     if (this.sock?.user?.id) {
                         const realNum = jidNormalizedUser(this.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                        if (realNum && !sessions[realNum]) {
+                        if (realNum) {
+                            for (const sid of Object.keys(sessions)) {
+                                if (sid !== this.userId && sid !== realNum) {
+                                    const oldSess = sessions[sid];
+                                    const oldPhone = oldSess?.sock?.user?.id 
+                                        ? jidNormalizedUser(oldSess.sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') 
+                                        : sid.replace(/[^0-9]/g, '');
+                                    if (oldPhone === realNum) {
+                                        console.log(`🧹 [Conflict Shield] Purging old duplicate session "${sid}" for +${realNum} to eliminate session collisions!`);
+                                        try {
+                                            oldSess.isConnected = false;
+                                            oldSess.sock?.ev?.removeAllListeners();
+                                            oldSess.sock?.ws?.close?.();
+                                            oldSess.sock?.ws?.terminate?.();
+                                        } catch (_) {}
+                                        if (oldSess?.authPath && fs.existsSync(oldSess.authPath)) {
+                                            try { fs.removeSync(oldSess.authPath); } catch (_) {}
+                                        }
+                                        delete sessions[sid];
+                                    }
+                                }
+                            }
+                            // Reassign realNum to point to this active session
+                            if (sessions[realNum] && sessions[realNum] !== this) {
+                                try {
+                                    const prev = sessions[realNum];
+                                    prev.isConnected = false;
+                                    prev.sock?.ev?.removeAllListeners();
+                                    prev.sock?.ws?.close?.();
+                                    prev.sock?.ws?.terminate?.();
+                                } catch (_) {}
+                            }
                             sessions[realNum] = this;
-                            console.log(`📌 [Session Map] Aliased session ${this.userId} -> ${realNum}`);
+                            console.log(`📌 [Session Map] Primary session +${realNum} mapped to ${this.userId}`);
                         }
                     }
 
@@ -3760,6 +3927,29 @@ app.get('/api/qr/start', async (req, res) => {
                 return undefined;
             },
         });
+
+        // Global Safe-Send wrapper: protects QR sessions against WhatsApp Companion loopback decryption delay & caches for retries
+        const rawQrSendMessage = sock.sendMessage.bind(sock);
+        sock.sendMessage = async (jid, content, options = {}) => {
+            if (options && options.quoted) {
+                const qKey = options.quoted.key;
+                const isSelfChat = sock?.user?.id && jid && (jidNormalizedUser(sock.user.id) === jidNormalizedUser(jid));
+                if (qKey?.fromMe || isSelfChat) {
+                    options = { ...options };
+                    delete options.quoted;
+                }
+            }
+            const sentMsg = await rawQrSendMessage(jid, content, options);
+            if (sentMsg?.key?.id && sentMsg.message) {
+                messageLogs[sentMsg.key.id] = {
+                    rawMessage: sentMsg.message,
+                    text: (sentMsg.message.conversation || sentMsg.message.extendedTextMessage?.text || ''),
+                    fromMe: true,
+                    timestamp: Date.now()
+                };
+            }
+            return sentMsg;
+        };
 
         // Initialize BotSession immediately on this live socket
         const session = new BotSession(sessionId);
