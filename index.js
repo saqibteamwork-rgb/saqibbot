@@ -407,6 +407,46 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(__dirname)));
 
 // ═════════════════════════════════════════════════════════
+// 24/7 AUTONOMOUS DIAGNOSTICS & LIVE LOG RECORDER
+// ═════════════════════════════════════════════════════════
+const MAX_LOG_BUFFER = 300;
+const systemLogBuffer = [];
+const diagnosticEvents = [];
+
+function recordDiagnosticEvent(event) {
+    diagnosticEvents.unshift({ ...event, time: new Date().toLocaleTimeString() });
+    if (diagnosticEvents.length > 50) diagnosticEvents.pop();
+}
+
+function appendToLogBuffer(level, msg) {
+    const time = new Date().toLocaleTimeString();
+    systemLogBuffer.unshift(`[${time}] [${level}] ${msg}`);
+    if (systemLogBuffer.length > MAX_LOG_BUFFER) systemLogBuffer.pop();
+}
+
+const originalConsoleLog = console.log;
+const originalConsoleWarn = console.warn;
+const originalConsoleError = console.error;
+
+console.log = function(...args) {
+    const line = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+    appendToLogBuffer('INFO', line);
+    originalConsoleLog.apply(console, args);
+};
+
+console.warn = function(...args) {
+    const line = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+    appendToLogBuffer('WARN', line);
+    originalConsoleWarn.apply(console, args);
+};
+
+console.error = function(...args) {
+    const line = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+    appendToLogBuffer('ERROR', line);
+    originalConsoleError.apply(console, args);
+};
+
+// ═════════════════════════════════════════════════════════
 // 24/7 CLOUD MESH REGISTRY & ANTI-SLEEP ENGINE
 // ═════════════════════════════════════════════════════════
 const registeredMeshNodes = new Map();
@@ -845,6 +885,41 @@ app.get('/api/ip', (req, res) => {
         os: 'Windows 11 (x64)',
         node: process.version,
         platform: process.platform
+    });
+});
+
+// 24/7 Live Diagnostics & Remote Log Inspection Endpoints
+app.get(['/api/logs', '/logs'], (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    if (req.query.format === 'text' || req.headers.accept?.includes('text/plain')) {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        return res.send(systemLogBuffer.slice().reverse().join('\n'));
+    }
+    return res.json({
+        total: systemLogBuffer.length,
+        logs: systemLogBuffer
+    });
+});
+
+app.get(['/api/diagnostics', '/diagnostics', '/debug'], (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const mem = process.memoryUsage();
+    return res.json({
+        node: mongoSync.getNodeId() || 'default',
+        uptimeSec: Math.floor((Date.now() - BOT_START_TIME) / 1000),
+        memory: {
+            rssMb: Math.round(mem.rss / (1024 * 1024)),
+            heapUsedMb: Math.round(mem.heapUsed / (1024 * 1024)),
+            heapTotalMb: Math.round(mem.heapTotal / (1024 * 1024))
+        },
+        sessions: Object.keys(sessions).map(id => ({
+            id,
+            connected: Boolean(sessions[id]?.isConnected),
+            isInit: Boolean(sessions[id]?.isInitializing),
+            phone: sessions[id]?.sock?.user?.id || null
+        })),
+        events: diagnosticEvents,
+        recentLogs: systemLogBuffer.slice(0, 30)
     });
 });
 
@@ -3423,6 +3498,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     if (typeof mongoSync.releaseSessionLock === 'function') {
                         mongoSync.releaseSessionLock(this.userId, PROCESS_INSTANCE_ID).catch(() => {});
                     }
+
+                    recordDiagnosticEvent({
+                        type: 'disconnect',
+                        userId: this.userId,
+                        statusCode,
+                        reason: isReplaced ? 'Replaced by another session (440)' : (isExplicitLogout ? 'Logged out from WhatsApp (401)' : 'Connection closed'),
+                        error: (lastDisconnect?.error)?.message || 'Socket closed',
+                        memMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
+                    });
+
                     this.sendLog(`⚠️ Connection closed (code ${statusCode || 'unknown'}).`, 'warning');
                     this.sendConnectionStatus();
 
@@ -3473,6 +3558,14 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                 } else if (connection === 'open') {
                     this.isConnected = true;
                     this.isInitializing = false;
+
+                    recordDiagnosticEvent({
+                        type: 'connect',
+                        userId: this.userId,
+                        phone: this.sock?.user?.id || 'unknown',
+                        memMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
+                    });
+
                     this.sendLog('✅ Connected successfully!', 'success');
                     this.sendConnectionStatus();
                     this.startActiveCheck();
