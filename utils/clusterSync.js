@@ -412,7 +412,7 @@ function startPeriodicClusterSync(botData, saveBotData) {
                 }
             }
         } catch (_) {}
-    }, 60 * 1000);
+    }, 5 * 60 * 1000); // Optimized to 5 minutes to prevent Mongo Atlas query hammering & RAM spikes
 }
 
 module.exports = {

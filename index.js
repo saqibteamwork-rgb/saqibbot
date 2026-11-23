@@ -1087,6 +1087,7 @@ async function loadExistingSessions() {
     try {
         const authDirs = await fs.readdir(AUTH_DIR);
         let started = 0;
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || '2', 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             const authPath = path.join(AUTH_DIR, userId);
@@ -1094,6 +1095,10 @@ async function loadExistingSessions() {
             if (stats.isDirectory()) {
                 const credsFile = path.join(authPath, 'creds.json');
                 if (fs.existsSync(credsFile)) {
+                    if (started >= maxSessions) {
+                        console.log(`⚠️ [RAM Shield] Max session limit (${maxSessions}) reached on this dyno. Skipping extra session "${userId}" to protect Heroku 512MB RAM.`);
+                        continue;
+                    }
                     console.log('📂 [System] Found existing session for: ' + userId + '. Initializing...');
                     if (!sessions[userId]) {
                         sessions[userId] = new BotSession(userId);
@@ -3898,14 +3903,14 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 15s; runs aggressive GC & clears caches if RSS > 300MB to prevent 512MB dyno freezes)
+        // Periodic Memory Trimmer (Runs every 15s; runs aggressive GC & clears caches if RSS > 200MB to prevent 512MB dyno freezes)
         setInterval(() => {
             const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-            if (memMb > 300) {
+            if (memMb > 200) {
                 if (global.gc) {
                     try { global.gc(); } catch (e) {}
                 }
-                if (memMb > 380) {
+                if (memMb > 280) {
                     try {
                         if (typeof groupMetaCache !== 'undefined' && groupMetaCache.clear) groupMetaCache.clear();
                         if (typeof inflightGroupMeta !== 'undefined' && inflightGroupMeta.clear) inflightGroupMeta.clear();
