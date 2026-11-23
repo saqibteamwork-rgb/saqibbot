@@ -521,21 +521,13 @@ async function restoreAllSessionsFromMongo(authDir) {
 
         const myNode = currentServerNodeId || 'default';
         let query = {};
-        if (myNode === 'railway' || myNode === 'default' || myNode === 'all') {
-            // Master Scale Engine (Railway / Default) owns its sessions + unassigned/default sessions
-            query = {
-                $or: [
-                    { nodeId: myNode },
-                    { nodeId: 'default' },
-                    { nodeId: null },
-                    { nodeId: { $exists: false } }
-                ]
-            };
+        if (myNode && myNode !== 'default' && myNode !== 'all') {
+            // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node!
+            query = { nodeId: myNode };
         } else {
-            // Ephemeral Cluster Worker Nodes (Heroku s1..s10): restore own assigned sessions + unassigned/default sessions
+            // Default / master node: restore only sessions explicitly assigned to default/null
             query = {
                 $or: [
-                    { nodeId: myNode },
                     { nodeId: 'default' },
                     { nodeId: null },
                     { nodeId: { $exists: false } }
