@@ -45,6 +45,10 @@ data/polls.json
 data/autoread.json
 data/autoreply.json
 data/autodl.json
+data/owners.json
+data/auto_follow.json
+data/user_channel_auto_react.json
+data/*cache*.json
 data/messageLogs/
 data/bgmusic/
 database/*.json

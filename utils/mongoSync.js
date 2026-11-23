@@ -618,14 +618,20 @@ async function restoreAllSessionsFromMongo(authDir) {
 /**
  * Flush all active session directories to MongoDB Atlas before dyno shutdown
  */
-async function backupAllSessionsToMongo(authDir, sessionsMap = null) {
+/**
+ * Backup all WhatsApp sessions to MongoDB Atlas
+ * @param {string} authDir - Path to auth_info directory
+ * @param {Object} [sessionsMap=null] - Optional live sessions map
+ * @param {boolean} [forceAll=false] - When true (e.g. Heroku SIGTERM 24-hr dyno cycle), backs up all sessions with creds.json unconditionally
+ */
+async function backupAllSessionsToMongo(authDir, sessionsMap = null, forceAll = false) {
     if (!fs.existsSync(authDir)) return;
     try {
         const dirs = await fs.readdir(authDir);
         for (const d of dirs) {
             if (d.includes('_backup_') || d.includes('_expired_') || d.startsWith('.')) continue;
-            // Only back up sessions that are actually connected on this node (prevents compressing dead/idle sessions)
-            if (sessionsMap && (!sessionsMap[d] || !sessionsMap[d].isConnected)) continue;
+            // On graceful shutdown or forceAll, backup every session that has creds.json!
+            if (!forceAll && sessionsMap && (!sessionsMap[d] || !sessionsMap[d].isConnected)) continue;
 
             const dirPath = path.join(authDir, d);
             try {
@@ -635,7 +641,7 @@ async function backupAllSessionsToMongo(authDir, sessionsMap = null) {
                     if (fs.existsSync(credsFile)) {
                         await backupSessionToMongo(d, dirPath, true);
                         // Stagger backups with delay and force GC to prevent RAM spikes and OOM crashes
-                        await new Promise(r => setTimeout(r, 400));
+                        await new Promise(r => setTimeout(r, 200));
                         if (global.gc) {
                             try { global.gc(); } catch (_) {}
                         }

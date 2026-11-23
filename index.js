@@ -609,14 +609,41 @@ app.use(scheduleApi.router);
 function cleanDiskGarbage() {
     let deletedCount = 0;
     try {
-        // 1. Purge all dead session backup and expired folders in auth_info
+        // 1. Purge dead session backups and expired folders in auth_info (PROTECT ACTIVE SESSIONS!)
         if (fs.existsSync(AUTH_DIR)) {
             const items = fs.readdirSync(AUTH_DIR);
+            const activePaths = new Set();
+            if (typeof sessions === 'object') {
+                for (const s of Object.values(sessions)) {
+                    if (s && s.authPath) {
+                        try { activePaths.add(path.resolve(s.authPath).toLowerCase()); } catch (_) {}
+                    }
+                }
+            }
+            if (typeof qrSessions === 'object') {
+                for (const [id, q] of Object.entries(qrSessions)) {
+                    if (q && q.connected) {
+                        try { activePaths.add(path.resolve(path.join(AUTH_DIR, id)).toLowerCase()); } catch (_) {}
+                    }
+                }
+            }
             for (const item of items) {
-                if (item.includes('_backup_') || item.includes('_expired_') || (item.startsWith('qr_') && !item.endsWith('.json'))) {
+                const fullItemPath = path.resolve(AUTH_DIR, item).toLowerCase();
+                if (activePaths.has(fullItemPath)) continue; // CRITICAL: Never delete an active session folder!
+
+                if (item.includes('_backup_') || item.includes('_expired_')) {
                     try {
                         fs.removeSync(path.join(AUTH_DIR, item));
                         deletedCount++;
+                    } catch (_) {}
+                } else if (item.startsWith('qr_') && !item.endsWith('.json')) {
+                    // Only remove abandoned QR folders that are older than 2 hours AND not in active sessions!
+                    try {
+                        const stat = fs.statSync(path.join(AUTH_DIR, item));
+                        if (Date.now() - stat.mtimeMs > 2 * 3600 * 1000) {
+                            fs.removeSync(path.join(AUTH_DIR, item));
+                            deletedCount++;
+                        }
                     } catch (_) {}
                 }
             }
@@ -1278,8 +1305,16 @@ setInterval(() => {
 async function loadExistingSessions() {
     try {
         const authDirs = await fs.readdir(AUTH_DIR);
+        // Prioritize Owner Number First!
+        const ownerNum = String(settings.ownerNumber || '923468616487').replace(/[^0-9]/g, '');
+        authDirs.sort((a, b) => {
+            if (a === ownerNum) return -1;
+            if (b === ownerNum) return 1;
+            return a.localeCompare(b);
+        });
+
         let started = 0;
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || '2', 10);
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '2' : '10'), 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!
@@ -1294,7 +1329,7 @@ async function loadExistingSessions() {
             if (stats.isDirectory()) {
                 const credsFile = path.join(authPath, 'creds.json');
                 if (fs.existsSync(credsFile)) {
-                    if (started >= maxSessions) {
+                    if (userId !== ownerNum && started >= maxSessions) {
                         console.log(`⚠️ [RAM Shield] Max session limit (${maxSessions}) reached on this dyno. Skipping extra session "${userId}" to protect Heroku 512MB RAM.`);
                         continue;
                     }
@@ -3793,10 +3828,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                 const newAuthPath = path.join(AUTH_DIR, realNum);
                                 if (this.authPath !== newAuthPath && fs.existsSync(this.authPath)) {
                                     try {
-                                        if (fs.existsSync(newAuthPath)) fs.removeSync(newAuthPath);
-                                        fs.moveSync(this.authPath, newAuthPath);
-                                    } catch (mvErr) {
-                                        console.warn(`[Session Migration] Auth dir rename failed: ${mvErr.message}`);
+                                        fs.copySync(this.authPath, newAuthPath, { overwrite: true });
+                                    } catch (cpErr) {
+                                        console.warn(`[Session Migration] Auth dir copy failed: ${cpErr.message}`);
                                     }
                                 }
                                 this.authPath = newAuthPath;
@@ -4050,11 +4084,36 @@ app.get('/api/qr/start', async (req, res) => {
                     qrSessions[sessionId].userId = realUserId;
                     session.userId = realUserId;
                     sessions[realUserId] = session;
+
+                    // Migrate auth files to canonical phone directory
+                    const targetAuthPath = path.join(AUTH_DIR, realUserId);
+                    try {
+                        if (authPath !== targetAuthPath) {
+                            fs.copySync(authPath, targetAuthPath, { overwrite: true });
+                            session.authPath = targetAuthPath;
+                        }
+                    } catch (cpErr) {
+                        console.warn('[QR] Auth copy warning:', cpErr.message);
+                    }
+
+                    // Send online presence immediately so WhatsApp shows Online status
+                    try {
+                        await sock.sendPresenceUpdate('available');
+                    } catch (_) {}
+
+                    // Ensure statusSettings has public and online enabled
+                    if (!botData.statusSettings[realUserId]) {
+                        botData.statusSettings[realUserId] = {};
+                    }
+                    botData.statusSettings[realUserId].isPublic = true;
+                    botData.statusSettings[realUserId].alwaysOnline = true;
+                    saveBotData();
+
                     // Clean up temporary QR session key to prevent dual-key aliasing
                     if (sessionId !== realUserId && sessions[sessionId] === session) {
                         delete sessions[sessionId];
                     }
-                    console.log(`[QR] 🎉 LIVE CONNECTED! User: ${realUserId}`);
+                    console.log(`[QR] 🎉 LIVE CONNECTED! User: ${realUserId} (Public & Online)`);
                     io.emit('qr-connected-' + sessionId, realUserId);
                 }
             });
@@ -4193,26 +4252,29 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             }
         })();
 
-        // Periodic Cloud Session Sync to MongoDB Atlas (Every 10 mins)
+        // Periodic Cloud Session Sync to MongoDB Atlas (Every 5 mins)
         // Pass sessions map so only active, connected sessions are compressed and backed up (prevents OOM crashes)
         setInterval(() => {
             try {
                 mongoSync.backupAllSessionsToMongo(AUTH_DIR, sessions);
             } catch (_) {}
-        }, 10 * 60 * 1000);
+        }, 5 * 60 * 1000);
 
         // ═════════════════════════════════════════════════════════
-        // GRACEFUL SHUTDOWN (Zero Session Loss on Deploy / Restart)
+        // GRACEFUL SHUTDOWN (Zero Session Loss on 24-Hour Heroku Dyno Restart)
         // ═════════════════════════════════════════════════════════
         let isShuttingDown = false;
         const handleGracefulShutdown = async (signal) => {
             if (isShuttingDown) return;
             isShuttingDown = true;
             global.isServerShuttingDown = true;
-            console.log(`\n🛑 [System] ${signal} signal received! Flushing WhatsApp sessions to MongoDB Atlas...`);
+            console.log(`\n🛑 [System] ${signal} signal received! (24-Hour Dyno Cycling). Flushing all sessions & state to MongoDB Atlas...`);
             try {
-                await mongoSync.backupAllSessionsToMongo(AUTH_DIR, sessions);
-                console.log('✅ [System] All sessions safely backed up to MongoDB Atlas cloud. Exiting cleanly.');
+                // 1. Flush in-memory botData to disk & cloud
+                saveBotData();
+                // 2. Unconditionally back up all valid paired sessions to MongoDB before container destruction
+                await mongoSync.backupAllSessionsToMongo(AUTH_DIR, null, true);
+                console.log('✅ [System] All sessions safely backed up to MongoDB Atlas cloud. Ready for instant reconnect after reboot!');
             } catch (err) {
                 console.error('❌ [System] Shutdown backup failed:', err.message);
             }
@@ -4226,6 +4288,10 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // Pings through public DNS/HTTPS so Heroku Router resets 30-min idle timer!
         // ═════════════════════════════════════════════════════════
         const pingPublicKeepAlive = async () => {
+            // Skip keep-alive cross-pings when running locally to keep local CPU & network fast!
+            if (!process.env.DYNO && !process.env.HEROKU_APP_NAME && !process.env.RAILWAY_STATIC_URL) {
+                return;
+            }
             const targetUrls = new Set();
             const myUrl = botData.appUrl || process.env.APP_URL || (process.env.HEROKU_APP_NAME ? `https://${process.env.HEROKU_APP_NAME}.herokuapp.com` : null);
             if (myUrl && !myUrl.includes('localhost') && !myUrl.includes('127.0.0.1')) {
