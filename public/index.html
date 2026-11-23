@@ -1895,7 +1895,22 @@
       }
     }
 
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.hostname === '';
+    const localNode = {
+      id: 'local',
+      name: 'Local Server (This Machine)',
+      short: 'Localhost',
+      url: (window.location.origin && window.location.origin !== 'null') ? window.location.origin : 'http://localhost:20168',
+      type: 'Local',
+      online: true,
+      active: 0,
+      ping: 1
+    };
+
     function getTargetServerNode() {
+      if (isLocal) {
+        return localNode;
+      }
       if (selectedServerMode !== 'auto' && CLUSTER[selectedServerMode]) {
         const node = CLUSTER[selectedServerMode];
         if (node.online) return node;
@@ -1917,6 +1932,9 @@
     }
 
     function getAlternativeServerNode(currentNode) {
+      if (isLocal) {
+        return localNode;
+      }
       const candidates = Object.values(CLUSTER).filter(n => n.id !== currentNode.id && n.online);
       if (candidates.length > 0) {
         candidates.sort((a, b) => a.active - b.active);
@@ -2003,11 +2021,11 @@
     setInterval(pingClusterHealth, 15000);
 
     const isExternalHost = window.location.hostname.includes('vercel.app') || window.location.hostname.includes('pages.dev') || window.location.protocol === 'file:';
-    let API_BASE = CLUSTER.s1.url;
+    let API_BASE = isLocal ? localNode.url : CLUSTER.s1.url;
 
     let socket;
     try {
-      socket = io(CLUSTER.s1.url, { transports: ['websocket', 'polling'] });
+      socket = io(isLocal ? localNode.url : CLUSTER.s1.url, { transports: ['websocket', 'polling'] });
     } catch (e) {}
 
     function addLog(msg, type = 'info') {
@@ -2021,6 +2039,12 @@
       el.textContent = `[${time}] ${msg}`;
       out.appendChild(el);
       out.scrollTop = out.scrollHeight;
+    }
+
+    if (isLocal) {
+      setTimeout(() => {
+        addLog(`🏠 Localhost Mode Active: Directly connected to Local Bot Backend (${localNode.url})`, 'success');
+      }, 500);
     }
 
     function switchPairTab(tab) {
