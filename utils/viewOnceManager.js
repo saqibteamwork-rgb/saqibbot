@@ -52,29 +52,65 @@ function addLog(type, msgId, details = {}) {
     if (debugLogs.length > 80) debugLogs.shift();
 }
 
-const MAX_CACHE_ENTRIES = 300;
+const MAX_CACHE_ENTRIES = 3000;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * Robust 6-level recursive unwrap for all WhatsApp wrappers
+ * Handles: viewOnceMessage, viewOnceMessageV2, viewOnceMessageV2Extension (Voice Notes!),
+ * ephemeralMessage, documentWithCaptionMessage, groupStatusMessageV2, deviceSentMessage
+ */
+function unwrapMessage(message) {
+    let cur = message;
+    let isViewOnce = false;
+
+    for (let i = 0; i < 6 && cur; i++) {
+        const vo =
+            cur.viewOnceMessage ||
+            cur.viewOnceMessageV2 ||
+            cur.viewOnceMessageV2Extension;
+
+        if (vo?.message) {
+            isViewOnce = true;
+            cur = vo.message;
+            continue;
+        }
+
+        const wrap =
+            cur.ephemeralMessage ||
+            cur.documentWithCaptionMessage ||
+            cur.groupStatusMessageV2 ||
+            cur.deviceSentMessage;
+
+        if (wrap?.message) {
+            cur = wrap.message;
+            continue;
+        }
+
+        break;
+    }
+
+    const type = cur?.imageMessage
+        ? 'image'
+        : cur?.videoMessage
+            ? 'video'
+            : cur?.audioMessage
+                ? 'audio'
+                : null;
+
+    const media = type ? cur[`${type}Message`] : null;
+
+    return { cur, type, media, isViewOnce };
+}
 
 /**
  * Checks if a message is a View-Once message across all known WhatsApp wrappers
  */
 function isViewOnceMessage(msg) {
     if (!msg || !msg.message) return false;
-    const m = msg.message;
-    if (m.viewOnceMessage || m.viewOnceMessageV2 || m.viewOnceMessageV2Extension) return true;
-    if (m.ephemeralMessage?.message?.viewOnceMessage || m.ephemeralMessage?.message?.viewOnceMessageV2 || m.ephemeralMessage?.message?.viewOnceMessageV2Extension) return true;
-    if (m.documentWithCaptionMessage?.message?.viewOnceMessageV2 || m.documentWithCaptionMessage?.message?.viewOnceMessage) return true;
-    if (m.deviceSentMessage?.message?.viewOnceMessageV2 || m.deviceSentMessage?.message?.viewOnceMessage) return true;
-
-    // Check inside normalized content
-    try {
-        const norm = normalizeMessageContent(m);
-        if (norm) {
-            const type = getContentType(norm);
-            if (type && norm[type]?.viewOnce === true) return true;
-        }
-    } catch (_) {}
-
+    const { isViewOnce, type, media } = unwrapMessage(msg.message);
+    if (isViewOnce) return true;
+    if (type && media?.viewOnce === true) return true;
     return false;
 }
 
@@ -84,18 +120,17 @@ function isViewOnceMessage(msg) {
 function extractMediaDetails(msg) {
     if (!msg || !msg.message) return null;
     try {
-        const norm = normalizeMessageContent(msg.message);
-        if (!norm) return null;
-        const type = getContentType(norm);
-        if (!type || !['imageMessage', 'videoMessage', 'audioMessage'].includes(type)) return null;
+        const unwrapped = unwrapMessage(msg.message);
+        if (!unwrapped.type || !unwrapped.media) return null;
 
-        const mediaObj = norm[type];
-        const mediaType = type.replace('Message', '');
+        const mediaObj = unwrapped.media;
+        const mediaType = unwrapped.type;
         return {
             mediaType,
             mediaObj,
             caption: mediaObj.caption || '',
-            mimetype: mediaObj.mimetype || (mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'audio/mp4')
+            mimetype: mediaObj.mimetype || (mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'audio/ogg; codecs=opus'),
+            ptt: !!mediaObj.ptt
         };
     } catch (_) {
         return null;
@@ -325,9 +360,9 @@ async function autoForwardToOwner(sock, msg, cachedItem, opts = {}) {
 
 /**
  * Universal multi-layer resolver for View-Once media
- * Checks: Layer 1 (Cache) -> Layer 2 (Raw Store) -> Layer 3 (Quoted Message)
+ * Checks: Layer 1 (Cache) -> Multi-Source Unwrapped Stream & Download (Layer 2 & 3)
  */
-async function resolveMedia({ quoted, stanzaId, from, sock }) {
+async function resolveMedia({ quoted, stanzaId, from, sock, participant, rawQuotedMessage }) {
     console.log(`[ViewOnceManager] Resolving media for stanzaId: ${stanzaId || 'none'}`);
 
     // ===== LAYER 1: Check In-Memory Buffer Cache =====
@@ -342,6 +377,7 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                 mimetype: item.mimetype,
                 caption: item.caption,
                 sender: item.sender,
+                ptt: !!item.ptt,
                 source: 'cache_memory'
             };
         }
@@ -362,8 +398,9 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
                             layer: 1,
                             buffer: buf,
                             mediaType: mType,
-                            mimetype: mType === 'image' ? 'image/jpeg' : mType === 'video' ? 'video/mp4' : 'audio/mp4',
+                            mimetype: mType === 'image' ? 'image/jpeg' : mType === 'video' ? 'video/mp4' : 'audio/ogg; codecs=opus',
                             caption: '',
+                            ptt: ext === 'opus' || ext === 'mp3',
                             source: 'cache_disk'
                         };
                     }
@@ -372,96 +409,85 @@ async function resolveMedia({ quoted, stanzaId, from, sock }) {
         }
     }
 
-    // ===== LAYER 2: Check Raw Store (Original intact WAMessage) =====
-    if (stanzaId && rawStore.has(stanzaId)) {
-        const rawItem = rawStore.get(stanzaId);
-        if (rawItem && rawItem.msg) {
-            try {
-                console.log(`[ViewOnceManager] 🎯 Layer 2 HIT: Attempting downloadMediaMessage on raw intact message for ${stanzaId}`);
-                let buffer = null;
-                try {
-                    buffer = await downloadMediaMessage(rawItem.msg, 'buffer', {}, {
-                        logger: sock?.logger,
-                        reuploadRequest: typeof sock?.updateMediaMessage === 'function' ? sock.updateMediaMessage.bind(sock) : undefined
-                    });
-                } catch (e1) {
-                    if (rawItem.details?.mediaObj) {
-                        const stream = await downloadContentFromMessage(rawItem.details.mediaObj, rawItem.details.mediaType);
-                        const chunks = [];
-                        for await (const chunk of stream) chunks.push(chunk);
-                        buffer = Buffer.concat(chunks);
-                    }
-                }
+    // ===== MULTI-SOURCE RETRIEVAL (xlicon-v2-md Technique) =====
+    const vvKey = {
+        remoteJid: from,
+        id: stanzaId || 'unknown',
+        ...(participant ? { participant } : {})
+    };
 
-                if (buffer && buffer.length > 0) {
-                    addLog('resolve_layer2_hit_store', stanzaId);
-                    mediaCache.set(stanzaId, {
-                        id: stanzaId,
-                        mediaType: rawItem.details?.mediaType || 'image',
-                        buffer,
-                        caption: rawItem.details?.caption || '',
-                        mimetype: rawItem.details?.mimetype || 'image/jpeg',
-                        timestamp: Date.now()
-                    });
-                    return {
-                        layer: 2,
-                        buffer,
-                        mediaType: rawItem.details?.mediaType || 'image',
-                        mimetype: rawItem.details?.mimetype || 'image/jpeg',
-                        caption: rawItem.details?.caption || '',
-                        sender: rawItem.sender,
-                        source: 'raw_store'
-                    };
-                }
-            } catch (err) {
-                addLog('resolve_layer2_error', stanzaId, { error: err.message });
-            }
-        }
-    }
+    const storedRaw = stanzaId ? rawStore.get(stanzaId)?.msg : null;
+    const storedCopy = storedRaw?.message || (typeof global.getMessage === 'function' ? global.getMessage(vvKey) : null);
 
-    // ===== LAYER 3: Quoted Message Fallback =====
-    if (quoted) {
+    const sources = [
+        storedCopy,
+        rawQuotedMessage,
+        quoted,
+        quoted?.viewOnceMessage?.message,
+        quoted?.viewOnceMessageV2?.message,
+        quoted?.viewOnceMessageV2Extension?.message,
+        quoted?.message
+    ].filter(Boolean);
+
+    for (const source of sources) {
+        const unwrapped = unwrapMessage(source);
+        if (!unwrapped.type || !unwrapped.media) continue;
+
+        const media = unwrapped.media;
+        let downloadedBuffer = null;
+
+        // 1. Primary: downloadMediaMessage with vvKey (triggers sock.updateMediaMessage if reupload needed)
         try {
-            const fakeWAMessage = {
-                key: { id: stanzaId || 'unknown' },
-                message: quoted
-            };
-            let buffer = null;
-            try {
-                buffer = await downloadMediaMessage(fakeWAMessage, 'buffer', {}, {
+            downloadedBuffer = await downloadMediaMessage(
+                {
+                    key: vvKey,
+                    message: unwrapped.cur
+                },
+                'buffer',
+                {},
+                {
                     logger: sock?.logger,
                     reuploadRequest: typeof sock?.updateMediaMessage === 'function' ? sock.updateMediaMessage.bind(sock) : undefined
-                });
-            } catch (_) {}
-
-            if (!buffer) {
-                const norm = normalizeMessageContent(quoted);
-                const type = getContentType(norm);
-                if (type && norm[type]) {
-                    const media = norm[type];
-                    const stream = await downloadContentFromMessage(media, type.replace('Message', ''));
-                    const chunks = [];
-                    for await (const chunk of stream) chunks.push(chunk);
-                    buffer = Buffer.concat(chunks);
                 }
+            );
+        } catch (_) {}
+
+        // 2. Secondary: direct stream downloadContentFromMessage
+        if ((!downloadedBuffer || downloadedBuffer.length === 0) && media.mediaKey && (media.directPath || media.url)) {
+            try {
+                const stream = await downloadContentFromMessage(media, unwrapped.type);
+                const chunks = [];
+                for await (const chunk of stream) chunks.push(chunk);
+                downloadedBuffer = Buffer.concat(chunks);
+            } catch (_) {}
+        }
+
+        if (Buffer.isBuffer(downloadedBuffer) && downloadedBuffer.length > 0) {
+            addLog('resolve_multisource_success', stanzaId);
+            const ext = unwrapped.type === 'image' ? 'jpg' : unwrapped.type === 'video' ? 'mp4' : 'mp3';
+            if (stanzaId) {
+                const diskPath = path.join(TEMP_VO_DIR, `${stanzaId}.${ext}`);
+                try { await fs.promises.writeFile(diskPath, downloadedBuffer); } catch (_) {}
+                mediaCache.set(stanzaId, {
+                    id: stanzaId,
+                    mediaType: unwrapped.type,
+                    buffer: downloadedBuffer,
+                    caption: media.caption || '',
+                    mimetype: media.mimetype || (unwrapped.type === 'image' ? 'image/jpeg' : unwrapped.type === 'video' ? 'video/mp4' : 'audio/ogg; codecs=opus'),
+                    ptt: !!media.ptt,
+                    timestamp: Date.now()
+                });
             }
 
-            if (buffer && buffer.length > 0) {
-                addLog('resolve_layer3_hit_quoted', stanzaId);
-                const norm = normalizeMessageContent(quoted);
-                const type = getContentType(norm) || 'imageMessage';
-                const mediaType = type.replace('Message', '');
-                return {
-                    layer: 3,
-                    buffer,
-                    mediaType,
-                    mimetype: mediaType === 'image' ? 'image/jpeg' : mediaType === 'video' ? 'video/mp4' : 'audio/mp4',
-                    caption: norm?.[type]?.caption || '',
-                    source: 'quoted_context'
-                };
-            }
-        } catch (err) {
-            addLog('resolve_layer3_error', stanzaId, { error: err.message });
+            return {
+                layer: 2,
+                buffer: downloadedBuffer,
+                mediaType: unwrapped.type,
+                mimetype: media.mimetype || (unwrapped.type === 'image' ? 'image/jpeg' : unwrapped.type === 'video' ? 'video/mp4' : 'audio/ogg; codecs=opus'),
+                caption: media.caption || '',
+                ptt: !!media.ptt,
+                source: 'multisource_unwrapped'
+            };
         }
     }
 

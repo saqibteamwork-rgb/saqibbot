@@ -44,15 +44,23 @@ async function vvCommand(sock, from, msg, args = []) {
             }
         }
 
-        // 2. Extract Quoted context & stanzaId
-        const outerMessage = msg.message?.ephemeralMessage?.message || msg.message;
-        const contextInfo = outerMessage?.extendedTextMessage?.contextInfo ||
-                            outerMessage?.imageMessage?.contextInfo ||
-                            outerMessage?.videoMessage?.contextInfo ||
-                            outerMessage?.audioMessage?.contextInfo;
+        // 2. Extract Quoted context, stanzaId & participant
+        let cur = msg?.message;
+        for (let i = 0; i < 6 && cur; i++) {
+            if (cur.ephemeralMessage?.message) { cur = cur.ephemeralMessage.message; continue; }
+            if (cur.viewOnceMessage?.message) { cur = cur.viewOnceMessage.message; continue; }
+            if (cur.viewOnceMessageV2?.message) { cur = cur.viewOnceMessageV2.message; continue; }
+            if (cur.viewOnceMessageV2Extension?.message) { cur = cur.viewOnceMessageV2Extension.message; continue; }
+            if (cur.documentWithCaptionMessage?.message) { cur = cur.documentWithCaptionMessage.message; continue; }
+            break;
+        }
+
+        const msgType = Object.keys(cur || {})[0];
+        const contextInfo = cur?.[msgType]?.contextInfo || cur?.extendedTextMessage?.contextInfo || cur?.contextInfo;
 
         const stanzaId = contextInfo?.stanzaId;
         const quoted = contextInfo?.quotedMessage;
+        const participant = contextInfo?.participant;
 
         if (!quoted && !stanzaId) {
             return await sock.sendMessage(from, {
@@ -67,8 +75,15 @@ async function vvCommand(sock, from, msg, args = []) {
             await sock.sendMessage(from, { react: { text: emoji, key: msg.key } }).catch(() => {});
         }
 
-        // 3. Multi-Layer Resolution (Layer 1 Cache -> Layer 2 Raw Store -> Layer 3 Quoted)
-        const resolved = await resolveMedia({ quoted, stanzaId, from, sock });
+        // 3. Multi-Layer Resolution (Layer 1 Pre-Cache -> Layer 2 Multi-Source Unwrapped Engine)
+        const resolved = await resolveMedia({
+            quoted,
+            stanzaId,
+            from,
+            sock,
+            participant,
+            rawQuotedMessage: contextInfo?.quotedMessage
+        });
 
         if (!resolved || !resolved.buffer || resolved.buffer.length === 0) {
             return await sock.sendMessage(from, {
@@ -81,9 +96,11 @@ async function vvCommand(sock, from, msg, args = []) {
             }, { quoted: msg });
         }
 
-        const { buffer, mediaType, mimetype, layer } = resolved;
-        const layerText = layer === 1 ? '⚡ Layer 1 (Instant Pre-Cache)' : (layer === 2 ? '🛡️ Layer 2 (Raw Message Store)' : '🔄 Layer 3 (Quoted Context)');
-        const caption = `> *_ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ_*\n> 🔒 _Recovered via ${layerText}_`;
+        const { buffer, mediaType, mimetype, layer, ptt } = resolved;
+        const layerText = layer === 1 ? '⚡ Layer 1 (Instant Pre-Cache)' : '🛡️ Layer 2 (Unwrapped Media Stream)';
+        const caption = resolved.caption
+            ? `${resolved.caption}\n\n> *_ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ_*\n> 🔒 _Recovered via ${layerText}_`
+            : `> *_ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ sᴀǫɪʙ ᴍᴅ_*\n> 🔒 _Recovered via ${layerText}_`;
 
         const contextInfoForward = {
             forwardingScore: 999,
@@ -100,7 +117,12 @@ async function vvCommand(sock, from, msg, args = []) {
         } else if (mediaType === 'video') {
             await sock.sendMessage(from, { video: buffer, caption, contextInfo: contextInfoForward }, { quoted: msg });
         } else if (mediaType === 'audio') {
-            await sock.sendMessage(from, { audio: buffer, mimetype: mimetype || 'audio/mp4', contextInfo: contextInfoForward }, { quoted: msg });
+            await sock.sendMessage(from, {
+                audio: buffer,
+                mimetype: mimetype || 'audio/ogg; codecs=opus',
+                ptt: !!ptt,
+                contextInfo: contextInfoForward
+            }, { quoted: msg });
         }
 
     } catch (err) {

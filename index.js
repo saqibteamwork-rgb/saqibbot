@@ -214,6 +214,14 @@ const { silentSaveCommand } = require('./commands/silentsave');
 const silentMediaSaver = require('./utils/silentMediaSaver');
 const viewOnceManager = require('./utils/viewOnceManager');
 
+// Expose global.getMessage for high-resilience View-Once / raw message retrieval across plugins & commands (xlicon-v2-md architecture)
+global.getMessage = (key) => {
+    if (!key) return undefined;
+    const id = typeof key === 'string' ? key : (key.id || key.stanzaId);
+    if (!id) return undefined;
+    return viewOnceManager.getRawMessage(id) || messageLogs[id]?.rawMessage;
+};
+
 // Newly added command suites: Anime, Search, Extra Fun, Utility, Textmaker
 const { waifuCommand, nekoCommand, animeQuoteCommand, animeSearchCommand } = require('./commands/anime');
 const { googleCommand, lyricsCommand, ringtoneCommand, playstoreCommand, githubCommand } = require('./commands/search');
@@ -1932,8 +1940,8 @@ class BotSession {
                         } catch (_) {}
                     }
                     const mKeys = Object.keys(messageLogs);
-                    if (mKeys.length > 500) {
-                        for (let i = 0; i < 100; i++) delete messageLogs[mKeys[i]];
+                    if (mKeys.length > 3000) {
+                        for (let i = 0; i < 300; i++) delete messageLogs[mKeys[i]];
                     }
                 }
 
