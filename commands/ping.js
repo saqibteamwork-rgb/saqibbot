@@ -114,7 +114,8 @@ async function pingCommand(sock, from, msg, session = null, botData = null) {
 ╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`;
 
     try {
-        await sock.sendMessage(from, { text, contextInfo: channelContext }, { quoted: msg });
+        const safeQuote = msg.key?.fromMe ? {} : { quoted: msg };
+        await sock.sendMessage(from, { text, contextInfo: channelContext }, safeQuote);
     } catch (err) {
         console.error('[pingCommand] Error sending ping:', err.message);
         await sock.sendMessage(from, { text }).catch(() => {});

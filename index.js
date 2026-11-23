@@ -3890,8 +3890,8 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // Fire initial wake-up sweep 5s after server boot
         setTimeout(pingPublicKeepAlive, 5000);
 
-        // Every 45 seconds: resets Heroku's 20-30 min inactivity timer continuously across the cluster!
-        setInterval(pingPublicKeepAlive, 45 * 1000);
+        // Every 25 seconds: resets Heroku's 20-30 min inactivity timer continuously across the cluster!
+        setInterval(pingPublicKeepAlive, 25 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {
