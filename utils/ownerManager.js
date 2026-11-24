@@ -16,6 +16,7 @@
 const fs = require('fs-extra');
 const path = require('path');
 const axios = require('axios');
+const { jidNormalizedUser } = require('@whiskeysockets/baileys');
 
 const OWNERS_FILE = path.join(__dirname, '..', 'data', 'owners.json');
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info');

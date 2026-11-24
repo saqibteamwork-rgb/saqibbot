@@ -1191,8 +1191,8 @@ async function relayChreactToArcTarget(sock, originFrom, targetInfo = {}) {
 
         const { targetDestJid } = resolveEffectiveTarget(targetInfo?.jid, targetInfo?.code);
 
-        // If the command was already sent inside the target group/chat, no need to relay again
-        if (originFrom === targetDestJid) return null;
+        // If no target group is configured, or command was already sent inside target group, no need to relay
+        if (!targetDestJid || originFrom === targetDestJid) return null;
 
         // 1. Prefer the exact raw channel post URL given by the user!
         let postLink = null;
@@ -1292,8 +1292,8 @@ async function relayChvoteToArcTarget(sock, originFrom, targetInfo = {}, optionA
 
         const { targetDestJid } = resolveEffectiveTarget(targetInfo?.jid, targetInfo?.code);
 
-        // If the command was already sent inside the target group/chat, no need to relay again
-        if (originFrom === targetDestJid) return null;
+        // If no target group is configured, or command was already sent inside target group, no need to relay
+        if (!targetDestJid || originFrom === targetDestJid) return null;
 
         // 1. Prefer the exact raw channel post URL given by the user!
         let postLink = null;
