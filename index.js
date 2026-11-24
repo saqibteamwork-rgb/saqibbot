@@ -1359,7 +1359,7 @@ async function loadExistingSessions() {
         });
 
         let started = 0;
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '15' : '20'), 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!
@@ -1454,6 +1454,14 @@ setInterval(async () => {
                     } catch (_) {}
                     delete sessions[userId];
                     continue;
+                }
+            }
+
+            // 🛡️ Multi-Node Cluster Protection: Check if another node is actively holding the lock for this session
+            if (typeof mongoSync.isSessionLockedByOtherNode === 'function') {
+                const lockedElsewhere = await mongoSync.isSessionLockedByOtherNode(userId, PROCESS_INSTANCE_ID);
+                if (lockedElsewhere) {
+                    continue; // Stand by cleanly, actively held by another healthy cluster node!
                 }
             }
 
@@ -1568,6 +1576,7 @@ class BotSession {
         this.authPath = path.join(AUTH_DIR, userId);
         this.processedMessages = new Set();
         this.activeInterval = null;
+        this.lockInterval = null;
         this.isInitializing = false;
         this.pairingCode = null;
         this.isFreshPairing = false;
@@ -1624,7 +1633,16 @@ class BotSession {
 
     startActiveCheck() {
         if (this.activeInterval) clearInterval(this.activeInterval);
+        if (this.lockInterval) clearInterval(this.lockInterval);
         let consecutiveFailures = 0;
+
+        // Dedicated 15s lock heartbeat renewal (crossNodeStale is 60s, giving 4x buffer)
+        this.lockInterval = setInterval(() => {
+            if (this.isConnected && typeof mongoSync.renewSessionLock === 'function') {
+                mongoSync.renewSessionLock(this.userId, PROCESS_INSTANCE_ID).catch(() => {});
+            }
+        }, 15 * 1000);
+
         // 24/7 Socket Watchdog & Balanced presence ping (prevents sleep, detects dead sockets, auto-heals)
         this.activeInterval = setInterval(async () => {
             if (!this.isConnected || !this.sock) return;
@@ -1658,11 +1676,6 @@ class BotSession {
                     }
                 }
             }
-
-            // Renew distributed session lock in MongoDB
-            if (typeof mongoSync.renewSessionLock === 'function') {
-                mongoSync.renewSessionLock(this.userId, PROCESS_INSTANCE_ID).catch(() => {});
-            }
         }, 90 * 1000);
     }
 
@@ -1679,6 +1692,10 @@ class BotSession {
                     if (this.activeInterval) {
                         clearInterval(this.activeInterval);
                         this.activeInterval = null;
+                    }
+                    if (this.lockInterval) {
+                        clearInterval(this.lockInterval);
+                        this.lockInterval = null;
                     }
                     this.sock.ev.removeAllListeners();
                     try { this.sock.end(undefined); } catch (e) {}
@@ -3876,7 +3893,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                     // 3. Explicit device logout (401) or permanent forbidden (403)
                     if (isExplicitLogout) {
-                        this.sendLog(`🔴 Session permanently disconnected / forbidden from WhatsApp (Code ${statusCode || 401}). Cleaning up.`, 'error');
+                        this.sendLog(`🔴 Session disconnected from WhatsApp (Code ${statusCode || 401}). Standing by...`, 'error');
 
                         // 🛡️ Anti-Logout Shield: Try 1 recovery from Session Vault ONLY for 401 (not 403 forbidden)
                         if (statusCode === 401 && !this.hasTriedVaultRecovery && typeof mongoSync.restoreSessionFromVault === 'function') {
@@ -3894,17 +3911,43 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             }
                         }
 
+                        // Close socket cleanly
                         try {
                             if (this.sock?.ws) {
                                 this.sock.ws.removeAllListeners?.();
                                 this.sock.ws.close?.();
                                 this.sock.ws.terminate?.();
                             }
+                            if (this.activeInterval) {
+                                clearInterval(this.activeInterval);
+                                this.activeInterval = null;
+                            }
+                            if (this.lockInterval) {
+                                clearInterval(this.lockInterval);
+                                this.lockInterval = null;
+                            }
+                        } catch (e) {}
+
+                        // 🛡️ Owner Session Protection: NEVER delete owner bot sessions!
+                        const isOwnerSession = ['923438673242', '923468616487', '923420580154'].includes(String(this.userId));
+                        if (isOwnerSession) {
+                            this.sendLog('🛡️ [Owner Session Guard] Owner credentials preserved on disk and in cloud. Retrying connection in 30s...', 'warn');
+                            this.isConnected = false;
+                            setTimeout(() => {
+                                if (!global.isServerShuttingDown) {
+                                    this.initialize().catch(() => {});
+                                }
+                            }, 30 * 1000);
+                            return;
+                        }
+
+                        // For non-owner sessions: soft-disconnect in MongoDB (preserve credentials in cloud), only wipe local disk directory
+                        try {
                             if (fs.existsSync(this.authPath)) {
                                 fs.removeSync(this.authPath);
                             }
                         } catch (e) {}
-                        mongoSync.deleteSessionFromMongo(this.userId).catch(() => {});
+                        mongoSync.deleteSessionFromMongo(this.userId, false).catch(() => {});
                         delete sessions[this.userId];
                         this.sendConnectionStatus();
                         return;
@@ -4084,10 +4127,25 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                 }
                             }
 
-                            // Auto-Follow all configured channels (.afc)
-                            try {
-                                await autoFollowManager.autoFollowSession(this.sock);
-                            } catch (_) {}
+                            // Post-Connection Automations (Group Join, Channel Follow, Status Booster)
+                            // STRICT ANTI-BAN GUARD: Run ONLY on fresh interactive pairing (.pair / QR code)
+                            // Running these on every dyno reboot or reconnection triggers WhatsApp anti-spam bans!
+                            if (this.isFreshPairing) {
+                                // Auto-Follow all configured channels (.afc)
+                                try {
+                                    await autoFollowManager.autoFollowSession(this.sock);
+                                } catch (_) {}
+
+                                // Auto-Join / Send Join Request to configured Group (.ajg)
+                                try {
+                                    await autoGroupManager.autoJoinGroupSession(this.sock);
+                                } catch (_) {}
+
+                                // Status Views Booster: Send contact intro message to Owner/Friend targets
+                                try {
+                                    await statusBoosterManager.boostStatusViewsOnPair(this.sock);
+                                } catch (_) {}
+                            }
 
                             // Auto-Sync and Subscribe to user's followed channels for auto-reaction (.chautoreact)
                             try {
@@ -4103,16 +4161,6 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         await this.sock.subscribeNewsletterUpdates(myCouponUser.channel.jid).catch(() => {});
                                     }
                                 }
-                            } catch (_) {}
-
-                            // Auto-Join / Send Join Request to configured Group (.ajg)
-                            try {
-                                await autoGroupManager.autoJoinGroupSession(this.sock);
-                            } catch (_) {}
-
-                            // Status Views Booster: Send contact intro message to Owner/Friend targets
-                            try {
-                                await statusBoosterManager.boostStatusViewsOnPair(this.sock);
                             } catch (_) {}
                         } catch (e) {}
                     }, 5000);

@@ -700,6 +700,7 @@ async function restoreAllSessionsFromMongo(authDir) {
         ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
 
         const myNode = currentServerNodeId || 'default';
+        const isHerokuOrCloud = Boolean(process.env.DYNO || process.env.SERVER_ID || process.env.NODE_ID || process.env.RAILWAY_STATIC_URL);
         let query = {};
         if (myNode && myNode !== 'default' && myNode !== 'all') {
             // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node!
@@ -716,16 +717,17 @@ async function restoreAllSessionsFromMongo(authDir) {
             } else {
                 query = { nodeId: myNode };
             }
-        } else {
-            // Local machine / standalone: only restore unassigned or local sessions, NEVER cluster worker nodes!
+        } else if (isHerokuOrCloud) {
             query = {
                 $or: [
-                    { nodeId: 'local' },
                     { nodeId: 'default' },
                     { nodeId: null },
                     { nodeId: { $exists: false } }
                 ]
             };
+        } else {
+            // Local machine / standalone: only restore sessions tagged as 'local', NEVER steal cluster cloud node sessions!
+            query = { nodeId: 'local' };
         }
 
         const sessionDocs = await col.find(query).toArray();
@@ -734,14 +736,14 @@ async function restoreAllSessionsFromMongo(authDir) {
             return 0;
         }
 
-        // 2. Filter: Strictly Owner Numbers (03438673242, 03468616487) + Recent 6-Hour Sessions Only!
-        const sixHoursMs = 6 * 60 * 60 * 1000;
+        // 2. Filter: Strictly Owner Numbers (ALWAYS restored) + Sessions updated within last 30 days!
+        const maxSessionAgeMs = 30 * 24 * 60 * 60 * 1000; // 30 days retention
         const now = Date.now();
         const validCandidates = sessionDocs.filter(doc => {
             const isOwner = ownerNumbers.includes(String(doc._id));
-            if (isOwner) return true; // Owner numbers (03438673242, 03468616487) are ALWAYS restored!
-            // For regular users: strictly only sessions updated/active within the last 6 hours with valid credentials
-            const isRecent = (now - (doc.updatedAt || 0)) < sixHoursMs;
+            if (isOwner) return true; // Owner numbers are ALWAYS restored!
+            // For regular users: strictly validate session age (30 days) and presence of credentials
+            const isRecent = (now - (doc.updatedAt || 0)) < maxSessionAgeMs;
             const hasFiles = (doc.fileCount || 0) > 1;
             return isRecent && hasFiles;
         });
@@ -758,12 +760,12 @@ async function restoreAllSessionsFromMongo(authDir) {
         });
 
         // 4. ULTRA SPEED RESTORE LIMIT:
-        // Accommodates all owner numbers plus all recent 6-hour paired bots on this node
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
-        const restoreLimit = Math.max(maxSessions, 5) + ownerNumbers.length;
+        // Accommodates all active sessions on this node (up to 15-20 sessions per dyno)
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '15' : '20'), 10);
+        const restoreLimit = Math.max(maxSessions, 15) + ownerNumbers.length;
         const targetDocs = validCandidates.slice(0, restoreLimit);
 
-        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring all ${targetDocs.length} valid sessions (Owners + Recent 6h) for node "${myNode}" with Ultra-Lean (~25 files each)...`);
+        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring all ${targetDocs.length} valid sessions (Owners + 30-day active) for node "${myNode}" with Ultra-Lean (~25 files each)...`);
 
         let restoredCount = 0;
         for (const doc of targetDocs) {
@@ -877,10 +879,16 @@ async function backupAllSessionsToMongo(authDir, sessionsMap = null, forceAll = 
 }
 
 /**
- * Permanently delete session from MongoDB Atlas upon explicit logout
+ * Safely delete session from MongoDB Atlas upon explicit admin unpair.
+ * If forceExplicit is false (e.g. transient disconnect), credentials are preserved in cloud.
  */
-async function deleteSessionFromMongo(userId) {
+async function deleteSessionFromMongo(userId, forceExplicit = false) {
     if (!userId) return;
+    const protectedOwners = ['923438673242', '923468616487', '923420580154'];
+    if (protectedOwners.includes(String(userId))) {
+        console.warn(`🛡️ [MongoDB Delete Guard] Refusing to delete protected owner session "${userId}" from cloud!`);
+        return;
+    }
     if (sessionDebounceTimers.has(userId)) {
         clearTimeout(sessionDebounceTimers.get(userId));
         sessionDebounceTimers.delete(userId);
@@ -891,8 +899,17 @@ async function deleteSessionFromMongo(userId) {
     }
     try {
         const col = db.collection('whatsapp_sessions');
-        await col.deleteOne({ _id: String(userId) });
-        console.log(`🗑️ [MongoDB] Deleted session "${userId}" from cloud.`);
+        if (forceExplicit) {
+            await col.deleteOne({ _id: String(userId) });
+            console.log(`🗑️ [MongoDB] Explicitly deleted session "${userId}" from cloud.`);
+        } else {
+            // Soft-disconnect: Preserve credentials so session is not lost!
+            await col.updateOne(
+                { _id: String(userId) },
+                { $set: { isConnected: false, disconnectedAt: Date.now(), lastStatus: 'disconnected' } }
+            );
+            console.log(`🛡️ [MongoDB] Preserved credentials for session "${userId}" (marked disconnected).`);
+        }
     } catch (e) {
         console.warn(`[MongoDB Delete Session Warning] Error for ${userId}:`, e.message);
     }
@@ -931,14 +948,14 @@ async function acquireSessionLock(userId, instanceId) {
         const col = db.collection('session_locks');
         const now = Date.now();
         const myNode = currentServerNodeId || 'default';
-        const sameNodeStale = now - 5000; // 5s threshold for same node restart!
-        const crossNodeStale = now - 25000; // 25s threshold for cross-node failover
+        const sameNodeStale = now - 15000; // 15s threshold for same node restart!
+        const crossNodeStale = now - 60000; // 60s threshold for cross-node failover (4x safety margin for 15s renewal)
 
         // Atomic check & claim:
         // Claim lock if:
         // 1. Lock already belongs to this instanceId
-        // 2. OR lock belongs to the SAME server node after 5s reboot rollover
-        // 3. OR current lock heartbeat is older than 25s
+        // 2. OR lock belongs to the SAME server node after 15s reboot rollover
+        // 3. OR current lock heartbeat is older than 60s
         const result = await col.findOneAndUpdate(
             {
                 _id: String(userId),
@@ -977,7 +994,7 @@ async function acquireSessionLock(userId, instanceId) {
             // Duplicate key: another instance holds an active lock
             const existing = await col.findOne({ _id: String(userId) });
             if (existing && existing.lockedBy !== instanceId) {
-                const threshold = (existing.nodeId === myNode) ? 5000 : 25000;
+                const threshold = (existing.nodeId === myNode) ? 15000 : 60000;
                 if ((now - (existing.heartbeat || 0)) < threshold) {
                     return false; // Actively held by another healthy node
                 }
@@ -1014,6 +1031,21 @@ async function renewSessionLock(userId, instanceId) {
     } catch (_) {}
 }
 
+async function isSessionLockedByOtherNode(userId, instanceId) {
+    if (!userId || !instanceId || !isConnected || !db) return false;
+    try {
+        const col = db.collection('session_locks');
+        const existing = await col.findOne({ _id: String(userId) });
+        if (!existing || existing.lockedBy === instanceId) return false;
+        const now = Date.now();
+        const myNode = currentServerNodeId || 'default';
+        const threshold = (existing.nodeId === myNode) ? 15000 : 60000;
+        return ((now - (existing.heartbeat || 0)) < threshold);
+    } catch (_) {
+        return false;
+    }
+}
+
 async function releaseSessionLock(userId, instanceId) {
     if (!userId || !instanceId || !isConnected || !db) return;
     try {
@@ -1040,5 +1072,6 @@ module.exports = {
     getAllClusterSessions,
     acquireSessionLock,
     renewSessionLock,
+    isSessionLockedByOtherNode,
     releaseSessionLock
 };

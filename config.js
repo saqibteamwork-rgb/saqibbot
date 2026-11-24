@@ -38,7 +38,7 @@ const config = {
   WORK_TYPE: 'public',
   timezone: 'Asia/Karachi',
   channelSettings: {
-    pollMs: 5 * 60 * 1000,
+    pollMs: 25 * 60 * 1000,
     fetchWindow: 40,
     logDeletes: true,
     allSessionsNumber: settings.ownerNumber
