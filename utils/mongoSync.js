@@ -705,18 +705,7 @@ async function restoreAllSessionsFromMongo(authDir) {
         if (myNode && myNode !== 'default' && myNode !== 'all') {
             // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node!
             // This guarantees zero duplicate logins and zero Code 440 collisions across cluster dynos.
-            if (myNode === 's1') {
-                query = {
-                    $or: [
-                        { nodeId: 's1' },
-                        { nodeId: 'default' },
-                        { nodeId: null },
-                        { nodeId: { $exists: false } }
-                    ]
-                };
-            } else {
-                query = { nodeId: myNode };
-            }
+            query = { nodeId: myNode };
         } else if (isHerokuOrCloud) {
             query = {
                 $or: [
