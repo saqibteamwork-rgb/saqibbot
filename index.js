@@ -1359,7 +1359,7 @@ async function loadExistingSessions() {
         });
 
         let started = 0;
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '15' : '20'), 10);
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!
@@ -4550,21 +4550,25 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 2 mins; runs GC only if RSS > 380MB to prevent 512MB dyno freezes)
+        // Periodic Memory Trimmer (Runs every 1 min; runs GC if RSS > 340MB to strictly guarantee dyno never hits 512MB OOM)
         setInterval(() => {
             const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-            if (memMb > 380) {
+            if (memMb > 340) {
                 if (global.gc) {
                     try { global.gc(); } catch (e) {}
                 }
-                if (memMb > 420) {
+                if (memMb > 380) {
                     try {
                         if (typeof groupMetaCache !== 'undefined' && groupMetaCache.clear) groupMetaCache.clear();
                         if (typeof inflightGroupMeta !== 'undefined' && inflightGroupMeta.clear) inflightGroupMeta.clear();
+                        const mKeys = Object.keys(messageLogs);
+                        if (mKeys.length > 50) {
+                            for (let i = 0; i < mKeys.length - 50; i++) delete messageLogs[mKeys[i]];
+                        }
                     } catch (_) {}
                 }
             }
-        }, 2 * 60 * 1000);
+        }, 60 * 1000);
     });
 }
 
