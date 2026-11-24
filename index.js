@@ -1889,7 +1889,7 @@ class BotSession {
         this.sock.ev.on('creds.update', async () => {
             try {
                 await saveCreds();
-                mongoSync.backupSessionToMongo(this.userId, this.authPath);
+                mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
             } catch (e) {
                 console.warn('[creds.update Error]:', e.message);
             }
@@ -3798,7 +3798,24 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                     // 3. Explicit device logout (401)
                     if (isExplicitLogout) {
-                        this.sendLog('🔴 Session disconnected from WhatsApp.', 'error');
+                        this.sendLog('🔴 Session disconnected from WhatsApp (Code 401).', 'error');
+
+                        // 🛡️ Anti-Logout Shield: Try 1 recovery from Session Vault before dropping
+                        if (!this.hasTriedVaultRecovery && typeof mongoSync.restoreSessionFromVault === 'function') {
+                            this.hasTriedVaultRecovery = true;
+                            this.sendLog('🛡️ [Anti-Logout Shield] Checking Session Vault for healthy backup snapshot...', 'info');
+                            const restored = await mongoSync.restoreSessionFromVault(this.userId, this.authPath).catch(() => false);
+                            if (restored) {
+                                this.sendLog('🛡️ [Anti-Logout Shield] Restored clean snapshot from Vault! Re-authenticating with WhatsApp in 3s...', 'info');
+                                setTimeout(() => {
+                                    if (!global.isServerShuttingDown) {
+                                        this.initialize().catch(() => {});
+                                    }
+                                }, 3000);
+                                return;
+                            }
+                        }
+
                         try {
                             if (fs.existsSync(this.authPath)) {
                                 fs.removeSync(this.authPath);
@@ -3826,6 +3843,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                 } else if (connection === 'open') {
                     this.isConnected = true;
                     this.isInitializing = false;
+                    this.hasTriedVaultRecovery = false;
 
                     recordDiagnosticEvent({
                         type: 'connect',
@@ -3837,6 +3855,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.sendLog('✅ Connected successfully!', 'success');
                     this.sendConnectionStatus();
                     this.startActiveCheck();
+
+                    // Instantly sync & snapshot healthy session into MongoDB Atlas & Vault
+                    mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
 
                     // Dedicated Conflict Resolver: Clean up any obsolete/duplicate session for this physical phone number
                     if (this.sock?.user?.id) {

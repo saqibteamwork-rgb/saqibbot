@@ -543,6 +543,23 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
                 },
                 { upsert: true }
             );
+
+            // 🛡️ Anti-Logout Vault Snapshot: Maintain rolling 3 healthy backups per session in MongoDB
+            try {
+                const vaultCol = db.collection('whatsapp_sessions_vault');
+                await vaultCol.insertOne({
+                    userId: String(userId),
+                    nodeId: nodeId,
+                    data: compressed,
+                    fileCount: Object.keys(filesMap).length,
+                    timestamp: Date.now()
+                });
+                const oldSnapshots = await vaultCol.find({ userId: String(userId) }).sort({ timestamp: -1 }).toArray();
+                if (oldSnapshots.length > 3) {
+                    const toDelete = oldSnapshots.slice(3).map(s => s._id);
+                    await vaultCol.deleteMany({ _id: { $in: toDelete } });
+                }
+            } catch (_) {}
         } catch (err) {
             console.warn(`[MongoDB Session Backup Warning] Failed for ${userId}:`, err.message);
         }
@@ -557,6 +574,57 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
     } else {
         const timer = setTimeout(performBackup, 2000);
         sessionDebounceTimers.set(userId, timer);
+    }
+}
+
+/**
+ * Auto-recover a damaged or 401 session from the rolling Session Vault in MongoDB
+ */
+async function restoreSessionFromVault(userId, sessionDir) {
+    if (!userId || !sessionDir) return false;
+    if (!isConnected || !db) {
+        const ok = await initMongo().catch(() => false);
+        if (!ok || !db) return false;
+    }
+    try {
+        const vaultCol = db.collection('whatsapp_sessions_vault');
+        const snapshots = await vaultCol.find({ userId: String(userId) }).sort({ timestamp: -1 }).limit(3).toArray();
+        if (!snapshots || snapshots.length === 0) return false;
+
+        for (const snap of snapshots) {
+            try {
+                let buffer;
+                if (Buffer.isBuffer(snap.data)) {
+                    buffer = snap.data;
+                } else if (snap.data && snap.data.buffer) {
+                    buffer = Buffer.from(snap.data.buffer);
+                } else if (typeof snap.data === 'string') {
+                    buffer = Buffer.from(snap.data, 'base64');
+                } else {
+                    buffer = Buffer.from(snap.data);
+                }
+
+                const jsonStr = zlib.gunzipSync(buffer).toString('utf8');
+                const filesMap = JSON.parse(jsonStr);
+                if (!filesMap['creds.json']) continue;
+
+                await fs.ensureDir(sessionDir);
+                const allowedFiles = filterUltraLeanSessionFiles(Object.keys(filesMap));
+                for (const [filename, content] of Object.entries(filesMap)) {
+                    if (!allowedFiles.has(filename)) continue;
+                    if (filename.startsWith('tctoken-') || filename.startsWith('lid-mapping-') || filename.endsWith('.tmp')) continue;
+                    await fs.writeFile(path.join(sessionDir, filename), content, 'utf8');
+                }
+                console.log(`🛡️ [Session Vault] Auto-recovered session "${userId}" from healthy vault snapshot (${new Date(snap.timestamp).toISOString()})!`);
+                return true;
+            } catch (snapErr) {
+                console.warn(`[Session Vault] Snapshot unpack error for ${userId}:`, snapErr.message);
+            }
+        }
+        return false;
+    } catch (e) {
+        console.warn(`[Session Vault Error] Failed for ${userId}:`, e.message);
+        return false;
     }
 }
 
@@ -900,6 +968,7 @@ module.exports = {
     restoreAllSessionsFromMongo,
     backupAllSessionsToMongo,
     deleteSessionFromMongo,
+    restoreSessionFromVault,
     getAllClusterSessions,
     acquireSessionLock,
     renewSessionLock,
