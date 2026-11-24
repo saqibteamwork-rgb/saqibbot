@@ -1298,7 +1298,8 @@ const messageLogs = {};
 // Expose active sessions to channelHub and multi-session plugins
 global.ProBoySessionManager = {
     getActiveSocks: () => Object.values(sessions).filter(s => s && s.sock && s.isConnected && channelHub.isOpen(s.sock)).map(s => s.sock),
-    getSessions: () => sessions
+    getSessions: () => sessions,
+    loadExistingSessions: () => loadExistingSessions()
 };
 scheduleApi.setSessions(sessions);
 
@@ -2008,12 +2009,20 @@ class BotSession {
                 await Promise.all(m.messages.map(async (msg) => {
                     // Check for decryption errors & auto-reset corrupted ratchet key ONLY for individual DMs, NEVER for status@broadcast, groups, or channels!
                     if (msg.messageStubType === 1 || msg.messageStubType === 2) {
-                        const senderKey = msg.key?.participant || msg.key?.remoteJid;
-                        if (senderKey && senderKey.endsWith('@s.whatsapp.net') && !senderKey.includes('status')) {
+                        const rawSender = msg.key?.participant || msg.key?.remoteJid || '';
+                        if (rawSender && !rawSender.includes('status') && !rawSender.endsWith('@newsletter') && !rawSender.endsWith('@g.us')) {
                             try {
-                                const sFile = path.join(this.authPath, `session-${senderKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
-                                if (fs.existsSync(sFile)) {
-                                    fs.unlinkSync(sFile);
+                                const senderDigits = rawSender.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                if (senderDigits && senderDigits.length >= 5 && fs.existsSync(this.authPath)) {
+                                    const existingFiles = fs.readdirSync(this.authPath);
+                                    for (const file of existingFiles) {
+                                        if (file.startsWith(`session-${senderDigits}`) || file.startsWith(`session-${rawSender.split('@')[0]}`)) {
+                                            try {
+                                                fs.unlinkSync(path.join(this.authPath, file));
+                                                console.log(`[Ratchet Reset] 🔄 Cleared corrupted ratchet session file "${file}" for ${rawSender}`);
+                                            } catch (_) {}
+                                        }
+                                    }
                                 }
                             } catch (_) {}
                         }
@@ -3801,7 +3810,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error)?.output?.statusCode || (lastDisconnect?.error)?.statusCode;
-                    const isExplicitLogout = statusCode === DisconnectReason.loggedOut;
+                    const isExplicitLogout = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403 || statusCode === DisconnectReason.forbidden;
                     const isReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
                     this.isConnected = false;
                     this.isInitializing = false;
@@ -3813,7 +3822,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         type: 'disconnect',
                         userId: this.userId,
                         statusCode,
-                        reason: isReplaced ? 'Replaced by another session (440)' : (isExplicitLogout ? 'Logged out from WhatsApp (401)' : 'Connection closed'),
+                        reason: isReplaced ? 'Replaced by another session (440)' : (isExplicitLogout ? `Logged out / Forbidden from WhatsApp (${statusCode || 401})` : 'Connection closed'),
                         error: (lastDisconnect?.error)?.message || 'Socket closed',
                         memMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
                     });
@@ -3843,12 +3852,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         return;
                     }
 
-                    // 3. Explicit device logout (401)
+                    // 3. Explicit device logout (401) or permanent forbidden (403)
                     if (isExplicitLogout) {
-                        this.sendLog('🔴 Session disconnected from WhatsApp (Code 401).', 'error');
+                        this.sendLog(`🔴 Session permanently disconnected / forbidden from WhatsApp (Code ${statusCode || 401}). Cleaning up.`, 'error');
 
-                        // 🛡️ Anti-Logout Shield: Try 1 recovery from Session Vault before dropping
-                        if (!this.hasTriedVaultRecovery && typeof mongoSync.restoreSessionFromVault === 'function') {
+                        // 🛡️ Anti-Logout Shield: Try 1 recovery from Session Vault ONLY for 401 (not 403 forbidden)
+                        if (statusCode === 401 && !this.hasTriedVaultRecovery && typeof mongoSync.restoreSessionFromVault === 'function') {
                             this.hasTriedVaultRecovery = true;
                             this.sendLog('🛡️ [Anti-Logout Shield] Checking Session Vault for healthy backup snapshot...', 'info');
                             const restored = await mongoSync.restoreSessionFromVault(this.userId, this.authPath).catch(() => false);
@@ -3864,11 +3873,16 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         }
 
                         try {
+                            if (this.sock?.ws) {
+                                this.sock.ws.removeAllListeners?.();
+                                this.sock.ws.close?.();
+                                this.sock.ws.terminate?.();
+                            }
                             if (fs.existsSync(this.authPath)) {
                                 fs.removeSync(this.authPath);
                             }
                         } catch (e) {}
-                        // Do NOT aggressively wipe cloud MongoDB on deploy glitches to prevent permanent session loss!
+                        mongoSync.deleteSessionFromMongo(this.userId).catch(() => {});
                         delete sessions[this.userId];
                         this.sendConnectionStatus();
                         return;

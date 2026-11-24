@@ -417,8 +417,17 @@ function setDetectedHost(host) {
         const domain = url.replace('https://', '').replace('http://', '').toLowerCase();
         if (cleanHost.includes(domain) || cleanHost.includes(key)) {
             if (currentServerNodeId !== key) {
+                const wasUnknown = !currentServerNodeId || currentServerNodeId === 'default';
                 currentServerNodeId = key;
                 console.log(`🎯 [Cluster Node] Host detected: "${host}" ➜ Identified as Node "${key}"`);
+                if (wasUnknown && global.ProBoySessionManager) {
+                    const sessCount = Object.keys(global.ProBoySessionManager.getSessions?.() || {}).length;
+                    if (sessCount === 0 && typeof restoreAllSessionsFromMongo === 'function') {
+                        restoreAllSessionsFromMongo(path.join(__dirname, '..', 'auth_info'))
+                            .then(() => global.ProBoySessionManager?.loadExistingSessions?.())
+                            .catch(() => {});
+                    }
+                }
             }
             return key;
         }
@@ -461,7 +470,7 @@ async function determineServerNodeId(bootToken) {
         const probePromises = Object.entries(KNOWN_NODES)
             .filter(([k]) => k !== 'railway')
             .map(([key, url]) =>
-                axios.get(`${url}/api/node-identify?token=${bootToken}`, { timeout: 2500 })
+                axios.get(`${url}/api/node-identify?token=${bootToken}`, { timeout: 6000 })
                     .then(res => {
                         if (res.data && res.data.match === true) return key;
                         throw new Error('no match');
@@ -487,35 +496,34 @@ function getNodeId() {
 
 /**
  * Ultra-Lean Baileys Session Filter:
- * Keeps ONLY the ~18-22 essential files required for 100% stable connection:
+ * Keeps the essential files required for 100% stable connection and Signal ratchet decryption:
  * - creds.json (Mandatory login credentials - zero logout)
  * - app-state-sync-key-* (Account sync & anti-logout keys)
- * - Latest 5 pre-key-*.json (New incoming message handshake)
- * - Latest 5 sender-key-*.json (Group decryption keys)
- * - Latest 2 sender-key-memory-*.json
- * - Latest 3 session-*.json (Signal ratchets)
- * - Latest 3 identity-*.json
+ * - Numbered pre-key-*.json (New incoming message handshake)
+ * - sender-key-*.json (Group decryption keys)
+ * - session-*.json (Signal ratchets - essential for 1-on-1 chats and decryption)
+ * - identity-*.json
  */
 function filterUltraLeanSessionFiles(filenames) {
     const creds = filenames.filter(f => f === 'creds.json');
     const appState = filenames.filter(f => f.startsWith('app-state-sync-key-'));
     
-    // Sort numbered pre-keys descending and take top 5
+    // Sort numbered pre-keys descending and take top 60 (standard Baileys pool)
     const preKeys = filenames.filter(f => f.startsWith('pre-key-')).sort((a, b) => {
         const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
         return numB - numA;
-    }).slice(0, 5);
+    }).slice(0, 60);
 
-    // Group sender keys: take top 5
-    const senderKeys = filenames.filter(f => f.startsWith('sender-key-') && !f.startsWith('sender-key-memory-')).slice(0, 5);
-    const senderKeyMemories = filenames.filter(f => f.startsWith('sender-key-memory-')).slice(0, 2);
+    // Group sender keys: keep up to 120 groups
+    const senderKeys = filenames.filter(f => f.startsWith('sender-key-') && !f.startsWith('sender-key-memory-')).slice(0, 120);
+    const senderKeyMemories = filenames.filter(f => f.startsWith('sender-key-memory-')).slice(0, 15);
 
-    // Individual chat ratchet sessions: take top 3
-    const chatSessions = filenames.filter(f => f.startsWith('session-')).slice(0, 3);
+    // Individual chat ratchet sessions: keep up to 120 chats (CRITICAL: Never limit to 3! Limiting to 3 causes Bad MAC & decryption failure)
+    const chatSessions = filenames.filter(f => f.startsWith('session-')).slice(0, 120);
 
-    // Identity keys: take top 3
-    const identityKeys = filenames.filter(f => f.startsWith('identity-')).slice(0, 3);
+    // Identity keys: take top 60
+    const identityKeys = filenames.filter(f => f.startsWith('identity-')).slice(0, 60);
 
     return new Set([
         ...creds,
@@ -681,31 +689,49 @@ async function restoreAllSessionsFromMongo(authDir) {
         await fs.ensureDir(authDir);
         const col = db.collection('whatsapp_sessions');
 
+        // 1. Identify Owner Numbers to ALWAYS prioritize and include in query!
+        let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
+        try {
+            const settings = require('../settings');
+            const config = require('../config');
+            if (settings?.ownerNumber) ownerNumbers.push(String(settings.ownerNumber).replace(/[^0-9]/g, ''));
+            if (config?.OWNER_NUMBER) ownerNumbers.push(String(config.OWNER_NUMBER).replace(/[^0-9]/g, ''));
+        } catch (_) {}
+        ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
+        const ownerIdQueries = ownerNumbers.map(num => ({ _id: num }));
+
         const myNode = currentServerNodeId || 'default';
         let query = {};
         if (myNode && myNode !== 'default' && myNode !== 'all') {
-            // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node,
-            // or if node is s1, also support sessions marked default/null
+            // Specific Cluster Worker Node: strictly restore sessions explicitly assigned to this node,
+            // or if node is s1, also support sessions marked default/null, plus owner sessions unconditionally!
             if (myNode === 's1') {
                 query = {
                     $or: [
                         { nodeId: 's1' },
                         { nodeId: 'default' },
                         { nodeId: null },
-                        { nodeId: { $exists: false } }
+                        { nodeId: { $exists: false } },
+                        ...ownerIdQueries
                     ]
                 };
             } else {
-                query = { nodeId: myNode };
+                query = {
+                    $or: [
+                        { nodeId: myNode },
+                        ...ownerIdQueries
+                    ]
+                };
             }
         } else {
-            // Local machine / standalone: only restore unassigned or local sessions, NEVER s1 or other cluster nodes!
+            // Local machine / standalone: restore unassigned or local sessions + owner sessions unconditionally!
             query = {
                 $or: [
                     { nodeId: 'local' },
                     { nodeId: 'default' },
                     { nodeId: null },
-                    { nodeId: { $exists: false } }
+                    { nodeId: { $exists: false } },
+                    ...ownerIdQueries
                 ]
             };
         }
@@ -715,16 +741,6 @@ async function restoreAllSessionsFromMongo(authDir) {
             console.log(`📂 [MongoDB Session Restore] No cloud sessions found in MongoDB for node "${myNode}".`);
             return 0;
         }
-
-        // 1. Identify Owner Numbers to ALWAYS prioritize first
-        let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
-        try {
-            const settings = require('../settings');
-            const config = require('../config');
-            if (settings?.ownerNumber) ownerNumbers.push(String(settings.ownerNumber).replace(/[^0-9]/g, ''));
-            if (config?.OWNER_NUMBER) ownerNumbers.push(String(config.OWNER_NUMBER).replace(/[^0-9]/g, ''));
-        } catch (_) {}
-        ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
 
         // 2. Filter: Strictly Owner Numbers (03438673242, 03468616487) + Recent 6-Hour Sessions Only!
         const sixHoursMs = 6 * 60 * 60 * 1000;
