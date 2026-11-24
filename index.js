@@ -1366,9 +1366,9 @@ async function loadExistingSessions() {
                     console.log('📂 [System] Found existing session for: ' + userId + '. Initializing...');
                     if (!sessions[userId]) {
                         sessions[userId] = new BotSession(userId);
-                        // Stagger each session initialization by 2.5s so sessions boot cleanly without crashing
+                        // Stagger each session initialization by 1s so sessions boot cleanly & instantly
                         if (started > 0) {
-                            await new Promise(r => setTimeout(r, 2500));
+                            await new Promise(r => setTimeout(r, 1000));
                         }
                         started++;
                         sessions[userId].initialize().catch(err => {
@@ -1699,9 +1699,9 @@ class BotSession {
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
-                keepAliveIntervalMs: 15000,
-                connectTimeoutMs: 30000,
-                defaultQueryTimeoutMs: 25000,
+                keepAliveIntervalMs: 10000,
+                connectTimeoutMs: 20000,
+                defaultQueryTimeoutMs: 20000,
                 emitOwnEvents: true,
                 retryRequestDelayMs: 2000,
                 maxMsgRetryCount: 5,

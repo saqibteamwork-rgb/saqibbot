@@ -449,34 +449,35 @@ function getNodeId() {
 
 /**
  * Ultra-Lean Baileys Session Filter:
- * Keeps ONLY the ~20-30 essential files required for 100% stable connection:
+ * Keeps ONLY the ~18-22 essential files required for 100% stable connection:
  * - creds.json (Mandatory login credentials - zero logout)
  * - app-state-sync-key-* (Account sync & anti-logout keys)
- * - Latest 10 pre-key-*.json (New incoming message handshake)
- * - Latest 10 sender-key-*.json (Group decryption keys)
- * - Latest 5 session-*.json (Signal ratchets)
- * - Latest 5 identity-*.json
+ * - Latest 5 pre-key-*.json (New incoming message handshake)
+ * - Latest 5 sender-key-*.json (Group decryption keys)
+ * - Latest 2 sender-key-memory-*.json
+ * - Latest 3 session-*.json (Signal ratchets)
+ * - Latest 3 identity-*.json
  */
 function filterUltraLeanSessionFiles(filenames) {
     const creds = filenames.filter(f => f === 'creds.json');
     const appState = filenames.filter(f => f.startsWith('app-state-sync-key-'));
     
-    // Sort numbered pre-keys descending and take top 10
+    // Sort numbered pre-keys descending and take top 5
     const preKeys = filenames.filter(f => f.startsWith('pre-key-')).sort((a, b) => {
         const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
         const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
         return numB - numA;
-    }).slice(0, 10);
+    }).slice(0, 5);
 
-    // Group sender keys: take top 10
-    const senderKeys = filenames.filter(f => f.startsWith('sender-key-') && !f.startsWith('sender-key-memory-')).slice(0, 10);
-    const senderKeyMemories = filenames.filter(f => f.startsWith('sender-key-memory-')).slice(0, 5);
+    // Group sender keys: take top 5
+    const senderKeys = filenames.filter(f => f.startsWith('sender-key-') && !f.startsWith('sender-key-memory-')).slice(0, 5);
+    const senderKeyMemories = filenames.filter(f => f.startsWith('sender-key-memory-')).slice(0, 2);
 
-    // Individual chat ratchet sessions: take top 5
-    const chatSessions = filenames.filter(f => f.startsWith('session-')).slice(0, 5);
+    // Individual chat ratchet sessions: take top 3
+    const chatSessions = filenames.filter(f => f.startsWith('session-')).slice(0, 3);
 
-    // Identity keys: take top 5
-    const identityKeys = filenames.filter(f => f.startsWith('identity-')).slice(0, 5);
+    // Identity keys: take top 3
+    const identityKeys = filenames.filter(f => f.startsWith('identity-')).slice(0, 3);
 
     return new Set([
         ...creds,
@@ -659,10 +660,10 @@ async function restoreAllSessionsFromMongo(authDir) {
                 query = { nodeId: myNode };
             }
         } else {
-            // Default / master node: restore only sessions explicitly assigned to default/null/s1
+            // Local machine / standalone: only restore unassigned or local sessions, NEVER s1 or other cluster nodes!
             query = {
                 $or: [
-                    { nodeId: 's1' },
+                    { nodeId: 'local' },
                     { nodeId: 'default' },
                     { nodeId: null },
                     { nodeId: { $exists: false } }
@@ -882,24 +883,28 @@ async function acquireSessionLock(userId, instanceId) {
     try {
         const col = db.collection('session_locks');
         const now = Date.now();
-        const staleThreshold = now - 45000; // 45s heartbeat timeout
+        const myNode = currentServerNodeId || 'default';
+        const sameNodeStale = now - 5000; // 5s threshold for same node restart!
+        const crossNodeStale = now - 25000; // 25s threshold for cross-node failover
 
         // Atomic check & claim:
         // Claim lock if:
         // 1. Lock already belongs to this instanceId
-        // 2. OR current lock heartbeat is older than 45s (previous holder died or slept)
+        // 2. OR lock belongs to the SAME server node after 5s reboot rollover
+        // 3. OR current lock heartbeat is older than 25s
         const result = await col.findOneAndUpdate(
             {
                 _id: String(userId),
                 $or: [
                     { lockedBy: instanceId },
-                    { heartbeat: { $lt: staleThreshold } }
+                    { nodeId: myNode, heartbeat: { $lt: sameNodeStale } },
+                    { heartbeat: { $lt: crossNodeStale } }
                 ]
             },
             {
                 $set: {
                     lockedBy: instanceId,
-                    nodeId: currentServerNodeId || 'default',
+                    nodeId: myNode,
                     heartbeat: now,
                     updatedAt: now
                 }
@@ -916,7 +921,7 @@ async function acquireSessionLock(userId, instanceId) {
             await col.insertOne({
                 _id: String(userId),
                 lockedBy: instanceId,
-                nodeId: currentServerNodeId || 'default',
+                nodeId: myNode,
                 heartbeat: now,
                 updatedAt: now
             });
@@ -924,8 +929,24 @@ async function acquireSessionLock(userId, instanceId) {
         } catch (insertErr) {
             // Duplicate key: another instance holds an active lock
             const existing = await col.findOne({ _id: String(userId) });
-            if (existing && existing.lockedBy !== instanceId && (now - (existing.heartbeat || 0)) < 45000) {
-                return false; // Locked by another healthy living node
+            if (existing && existing.lockedBy !== instanceId) {
+                const threshold = (existing.nodeId === myNode) ? 5000 : 25000;
+                if ((now - (existing.heartbeat || 0)) < threshold) {
+                    return false; // Actively held by another healthy node
+                }
+                // Lock expired: claim immediately
+                await col.updateOne(
+                    { _id: String(userId) },
+                    {
+                        $set: {
+                            lockedBy: instanceId,
+                            nodeId: myNode,
+                            heartbeat: now,
+                            updatedAt: now
+                        }
+                    }
+                );
+                return true;
             }
             return true;
         }
