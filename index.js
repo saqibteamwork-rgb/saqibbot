@@ -4335,10 +4335,10 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 // 1. Identify cluster node
                 await mongoSync.determineServerNodeId(BOOT_TOKEN);
 
-                // 2. Connect and sync general collections with MongoDB Atlas
+                // 2. Connect to MongoDB Atlas (fast connection, non-blocking background collection sync)
                 await mongoSync.initMongo();
 
-                // 3. Restore all active WhatsApp bot sessions from MongoDB Atlas to disk
+                // 3. PRIORITY #1: Restore all active WhatsApp bot sessions from MongoDB Atlas to disk
                 await mongoSync.restoreAllSessionsFromMongo(AUTH_DIR);
 
                 // 4. Auto-load and initialize existing & restored sessions
@@ -4355,6 +4355,17 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 loadExistingSessions().catch(() => {});
             }
         })();
+
+        // 🛡️ ZERO-DOWNTIME SESSION WATCHDOG:
+        // If after 35s no session is active (e.g. dyno reboot recovery), auto-trigger reload!
+        setTimeout(async () => {
+            const activeCount = Object.values(sessions).filter(s => s && s.isConnected).length;
+            if (activeCount === 0 && !isShuttingDown) {
+                console.log('🔄 [Session Recovery Watchdog] No active sessions detected after boot. Auto-recovering from MongoDB...');
+                await mongoSync.restoreAllSessionsFromMongo(AUTH_DIR).catch(() => {});
+                await loadExistingSessions().catch(() => {});
+            }
+        }, 35000);
 
         // Periodic Cloud Session Sync to MongoDB Atlas (Every 5 mins)
         // Pass sessions map so only active, connected sessions are compressed and backed up (prevents OOM crashes)

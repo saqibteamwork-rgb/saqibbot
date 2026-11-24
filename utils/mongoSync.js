@@ -120,17 +120,11 @@ async function initMongo() {
 
         console.log(`✅ [MongoDB] Connected successfully to database: "${DB_NAME}"!`);
 
-        // Perform initial bidirectional synchronization
-        await initialSync();
+        // Run general collection synchronization in background so bot sessions restore immediately without delay!
+        initialSync().catch(err => console.warn('[Background initialSync Warning]:', err.message));
 
-        // Clean up any orphan temporary QR sessions from whatsapp_sessions cloud collection
-        try {
-            const sessionCol = db.collection('whatsapp_sessions');
-            const res = await sessionCol.deleteMany({ _id: { $regex: '^qr_' } });
-            if (res.deletedCount > 0) {
-                console.log(`🧹 [MongoDB] Purged ${res.deletedCount} orphan QR temporary sessions from cloud.`);
-            }
-        } catch (_) {}
+        // Clean up any orphan temporary QR sessions from whatsapp_sessions cloud collection in background
+        db.collection('whatsapp_sessions').deleteMany({ _id: { $regex: '^qr_' } }).catch(() => {});
 
         return true;
     } catch (err) {
@@ -166,10 +160,18 @@ async function initialSync() {
         { key: 'my_admin_channels', file: path.join(__dirname, '..', 'database', 'my_admin_channels.json') }
     ];
 
+    const queryTimeout = (prom, ms = 4000) => Promise.race([
+        prom,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Query timeout after ' + ms + 'ms')), ms))
+    ]);
+
     for (const target of syncTargets) {
         try {
             const col = db.collection(target.key);
-            const cloudDoc = await col.findOne({ _id: target.key });
+            const cloudDoc = await queryTimeout(col.findOne({ _id: target.key }), 4000).catch(err => {
+                console.warn(`[MongoDB Sync Warning] Fast skip on ${target.key}:`, err.message);
+                return null;
+            });
 
             const localExists = fs.existsSync(target.file);
             let localData = null;
@@ -188,18 +190,13 @@ async function initialSync() {
                     };
                     fs.writeJsonSync(target.file, mergedData, { spaces: 2 });
                     console.log(`📥 [MongoDB Sync] Permanently restored & merged "${target.key}" (${Object.keys(mergedChannels).length} channels) from cloud!`);
-                    await col.updateOne(
-                        { _id: target.key },
-                        { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
-                        { upsert: true }
-                    );
                     continue;
                 } else if (localData && Object.keys(localData).length > 0) {
-                    await col.updateOne(
+                    await queryTimeout(col.updateOne(
                         { _id: target.key },
                         { $set: { _id: target.key, payload: localData, updatedAt: Date.now() } },
                         { upsert: true }
-                    );
+                    ), 4000).catch(() => {});
                     console.log(`📤 [MongoDB Sync] Seeded "${target.key}" into MongoDB Atlas cloud!`);
                     continue;
                 }
@@ -217,11 +214,6 @@ async function initialSync() {
                     };
                     fs.writeJsonSync(target.file, mergedData, { spaces: 2 });
                     console.log(`📥 [MongoDB Sync] Permanently restored & merged "${target.key}" (${Object.keys(mergedChannels).length} channels) from cloud!`);
-                    await col.updateOne(
-                        { _id: target.key },
-                        { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
-                        { upsert: true }
-                    );
                     continue;
                 }
             }
@@ -250,18 +242,13 @@ async function initialSync() {
                     };
                     fs.writeJsonSync(target.file, mergedData, { spaces: 2 });
                     console.log(`📥 [MongoDB Sync] Permanently restored & merged "${target.key}" (${Object.keys(mergedAccounts).length} accounts) from cloud!`);
-                    await col.updateOne(
-                        { _id: target.key },
-                        { $set: { _id: target.key, payload: mergedData, updatedAt: Date.now() } },
-                        { upsert: true }
-                    );
                     continue;
                 } else if (localData && Object.keys(localData).length > 0) {
-                    await col.updateOne(
+                    await queryTimeout(col.updateOne(
                         { _id: target.key },
                         { $set: { _id: target.key, payload: localData, updatedAt: Date.now() } },
                         { upsert: true }
-                    );
+                    ), 4000).catch(() => {});
                     console.log(`📤 [MongoDB Sync] Seeded "${target.key}" into MongoDB Atlas cloud!`);
                     continue;
                 }
@@ -289,11 +276,11 @@ async function initialSync() {
                 }
             } else if (localData && Object.keys(localData).length > 0) {
                 // Cloud is empty: seed cloud with local data
-                await col.updateOne(
+                await queryTimeout(col.updateOne(
                     { _id: target.key },
                     { $set: { _id: target.key, payload: localData, updatedAt: Date.now() } },
                     { upsert: true }
-                );
+                ), 4000).catch(() => {});
                 console.log(`📤 [MongoDB Sync] Seeded "${target.key}" into MongoDB Atlas cloud!`);
             }
         } catch (syncErr) {
