@@ -1470,7 +1470,7 @@ setInterval(async () => {
             }
         }
     }
-}, 20 * 1000);
+}, 60 * 1000);
 
 const toBold = (text) => {
     const boldChars = {
@@ -1661,7 +1661,7 @@ class BotSession {
             if (typeof mongoSync.renewSessionLock === 'function') {
                 mongoSync.renewSessionLock(this.userId, PROCESS_INSTANCE_ID).catch(() => {});
             }
-        }, 25 * 1000);
+        }, 90 * 1000);
     }
 
     async initialize(pairingNumber = null, customCodeOverride = null) {
@@ -2006,11 +2006,10 @@ class BotSession {
                 if (!isNotify && !isAppend && !hasNewsletter && !hasStub && !hasFresh) return;
 
                 await Promise.all(m.messages.map(async (msg) => {
-                    // Check for decryption errors & auto-reset corrupted ratchet key for this sender
+                    // Check for decryption errors & auto-reset corrupted ratchet key ONLY for individual DMs, NEVER for status@broadcast, groups, or channels!
                     if (msg.messageStubType === 1 || msg.messageStubType === 2) {
-                        this.sendLog(`⚠️ Received undecryptable message (Stub ${msg.messageStubType}) from ${msg.key?.remoteJid || 'peer'}. Auto-healing ratchet session...`, 'warning');
                         const senderKey = msg.key?.participant || msg.key?.remoteJid;
-                        if (senderKey && !senderKey.endsWith('@newsletter')) {
+                        if (senderKey && senderKey.endsWith('@s.whatsapp.net') && !senderKey.includes('status')) {
                             try {
                                 const sFile = path.join(this.authPath, `session-${senderKey.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`);
                                 if (fs.existsSync(sFile)) {
@@ -4443,38 +4442,20 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 targetUrls.add(cleanBase);
             }
 
-            // Cluster peer nodes: Cross-ping all known Heroku cluster nodes so nodes keep each other awake!
-            const allNodes = clusterSync?.KNOWN_NODES || {};
-            for (const [nodeId, url] of Object.entries(allNodes)) {
-                if (url && url.includes('.herokuapp.com')) {
-                    targetUrls.add(`${url.replace(/\/+$/, '')}/health`);
-                }
+            // Self-KeepAlive: Only ping this node itself to reset Heroku 30-min idle timer (never spam 28 peer nodes)
+            targetUrls.add(`http://127.0.0.1:${PORT}/health`);
+            if (process.env.APP_URL) {
+                targetUrls.add(`${process.env.APP_URL.replace(/\/+$/, '')}/health`);
             }
 
-            // Dynamic mesh registered peer nodes
-            if (typeof registeredMeshNodes !== 'undefined') {
-                const now = Date.now();
-                for (const [nodeUrl, info] of registeredMeshNodes.entries()) {
-                    if (now - (info.time || 0) < 48 * 3600 * 1000) {
-                        targetUrls.add(`${nodeUrl}/health`);
-                    } else {
-                        registeredMeshNodes.delete(nodeUrl);
-                    }
-                }
-            }
-
-            // Concurrently ping targets in chunks of 5 with 6s timeout
+            // Concurrently ping targets with 6s timeout
             const urlList = Array.from(targetUrls);
-            const chunkSize = 5;
-            for (let i = 0; i < urlList.length; i += chunkSize) {
-                const chunk = urlList.slice(i, i + chunkSize);
-                await Promise.allSettled(chunk.map(url =>
-                    axios.get(url, {
-                        timeout: 6000,
-                        headers: { 'User-Agent': 'AntiSleep-HerokuKeepAlive/6.0' }
-                    }).catch(() => null)
-                ));
-            }
+            await Promise.allSettled(urlList.map(url =>
+                axios.get(url, {
+                    timeout: 6000,
+                    headers: { 'User-Agent': 'AntiSleep-SelfKeepAlive/6.0' }
+                }).catch(() => null)
+            ));
         };
 
         // Fire initial wake-up sweep 5s after server boot
@@ -4488,21 +4469,21 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 15s; runs aggressive GC & clears caches if RSS > 200MB to prevent 512MB dyno freezes)
+        // Periodic Memory Trimmer (Runs every 2 mins; runs GC only if RSS > 380MB to prevent 512MB dyno freezes)
         setInterval(() => {
             const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-            if (memMb > 200) {
+            if (memMb > 380) {
                 if (global.gc) {
                     try { global.gc(); } catch (e) {}
                 }
-                if (memMb > 280) {
+                if (memMb > 420) {
                     try {
                         if (typeof groupMetaCache !== 'undefined' && groupMetaCache.clear) groupMetaCache.clear();
                         if (typeof inflightGroupMeta !== 'undefined' && inflightGroupMeta.clear) inflightGroupMeta.clear();
                     } catch (_) {}
                 }
             }
-        }, 15 * 1000);
+        }, 2 * 60 * 1000);
     });
 }
 

@@ -41,6 +41,7 @@ const followedChannelsMap = new Map();
 const followedMetaMap = new Map();
 // Active keep-alive intervals per accountKey
 const keepAliveIntervals = new Map();
+const resyncIntervals = new Map();
 // Track when account was last synced (ms)
 const lastSyncTimes = new Map();
 
@@ -476,10 +477,14 @@ function onSessionConnected(sock) {
   const accountKey = getAccountKey(sock);
   if (!accountKey || accountKey === 'unknown') return;
 
-  // Clear any existing keepalive for this account
+  // Clear any existing keepalive and resync intervals for this account
   if (keepAliveIntervals.has(accountKey)) {
     clearInterval(keepAliveIntervals.get(accountKey));
     keepAliveIntervals.delete(accountKey);
+  }
+  if (resyncIntervals.has(accountKey)) {
+    clearInterval(resyncIntervals.get(accountKey));
+    resyncIntervals.delete(accountKey);
   }
 
   const accConf = getAccountConfig(accountKey);
@@ -526,13 +531,17 @@ function onSessionConnected(sock) {
   keepAliveIntervals.set(accountKey, intervalId);
 
   // Periodic Followed-Channels Resync every 10 minutes (to detect channels newly followed on mobile)
-  setInterval(async () => {
+  const resyncId = setInterval(async () => {
     try {
-      if (sock?.user) {
-        await syncUserFollowedChannels(sock, false).catch(() => {});
+      if (!sock?.user) {
+        clearInterval(resyncId);
+        resyncIntervals.delete(accountKey);
+        return;
       }
+      await syncUserFollowedChannels(sock, false).catch(() => {});
     } catch (_) {}
   }, 10 * 60 * 1000);
+  resyncIntervals.set(accountKey, resyncId);
 }
 
 /**

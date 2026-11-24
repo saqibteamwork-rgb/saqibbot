@@ -355,7 +355,7 @@ function ensureArcKeepAlive(primarySock) {
   }, 120 * 1000);
   if (typeof renewTimer.unref === 'function') renewTimer.unref();
 
-  // 2. Every 25 seconds: Heal invite-code JIDs & poll recent posts as a 100% reliable fallback
+  // 2. Periodic Fallback (Every 5 minutes, lightweight): Heal invite-code JIDs & catch any missed posts
   const pollTimer = setInterval(async () => {
     try {
       const data = loadArcData();
@@ -417,14 +417,14 @@ function ensureArcKeepAlive(primarySock) {
           }
         }
 
-        // Step B: Poll recent posts for activeJid to catch any post missed by live WebSocket
+        // Step B: Poll recent posts on primary socket only (never spam all sockets)
         let recentPosts = [];
-        for (const s of socks) {
+        const primary = socks[0];
+        if (primary) {
           try {
-            const posts = await withTimeout(hub.fetchRecent(s, activeJid, 3, 0), 4000);
+            const posts = await withTimeout(hub.fetchRecent(primary, activeJid, 3, 0), 4000);
             if (Array.isArray(posts) && posts.length > 0) {
               recentPosts = posts;
-              break;
             }
           } catch {}
         }
@@ -466,7 +466,7 @@ function ensureArcKeepAlive(primarySock) {
         saveArcData(data);
       }
     } catch {}
-  }, 25 * 1000);
+  }, 5 * 60 * 1000);
   if (typeof pollTimer.unref === 'function') pollTimer.unref();
 }
 

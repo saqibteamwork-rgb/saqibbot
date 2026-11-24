@@ -10,39 +10,27 @@ cmd({
 },
 async (conn, mek, m, { from, quoted, isGroup, isAdmins, isCreator, fromMe, reply }) => {
     try {
-        // Check if the command is used in a group
-        if (!isGroup) return reply("YEH COMMAND SIRF GROUPS ME USE KARE 😊*");
-
-        // Check if user is either creator or admin
+        if (!isGroup) return reply("*YEH COMMAND SIRF GROUPS ME USE KAREIN!*");
         if (!isCreator && !isAdmins && !fromMe) {
-            return reply("*YEH COMMAND SIRF MERE LIE HAI 😎 OR GROUP ADMINS BHI YE COMMAND USE KAR SAKTE HAI 😍❣️*");
+            return reply("*YEH COMMAND SIRF BOT OWNER OR GROUP ADMINS KE LIYE HAI!*");
         }
 
-        // Inform user that we're checking
-        await reply("*ONLINE MEMBERS KI LIST TAYAR HO RAHI HAI 😊*\n*THORA SA INTAZAR KAREIN...😊*");
+        await reply("*ONLINE MEMBERS CHECK HO RAHE HAIN... ⏳*\n*Kuch second intazar karein...*");
 
         const onlineMembers = new Set();
         const groupData = await conn.groupMetadata(from);
-        const presencePromises = [];
+        const participants = groupData.participants || [];
 
-        // Request presence updates for all participants
-        for (const participant of groupData.participants) {
-            presencePromises.push(
-                conn.presenceSubscribe(participant.id)
-                    .then(() => {
-                        // Additional check for better detection
-                        return conn.sendPresenceUpdate('composing', participant.id);
-                    })
-            );
+        // Safe presence subscribe in small batches without spamming WhatsApp
+        for (let i = 0; i < participants.length && i < 100; i += 10) {
+            const batch = participants.slice(i, i + 10);
+            await Promise.allSettled(batch.map(p => conn.presenceSubscribe(p.id).catch(() => {})));
+            await new Promise(r => setTimeout(r, 200));
         }
 
-        await Promise.all(presencePromises);
-
-        // Presence update handler
         const presenceHandler = (json) => {
             for (const id in json.presences) {
                 const presence = json.presences[id]?.lastKnownPresence;
-                // Check all possible online states
                 if (['available', 'composing', 'recording', 'online'].includes(presence)) {
                     onlineMembers.add(id);
                 }
@@ -51,40 +39,31 @@ async (conn, mek, m, { from, quoted, isGroup, isAdmins, isCreator, fromMe, reply
 
         conn.ev.on('presence.update', presenceHandler);
 
-        // Longer timeout and multiple checks
-        const checks = 3;
-        const checkInterval = 5000; // 5 seconds
-        let checksDone = 0;
-
-        const checkOnline = async () => {
-            checksDone++;
-            
-            if (checksDone >= checks) {
-                clearInterval(interval);
+        // Wait 6 seconds for presence events, then cleanly unsubscribe and reply
+        setTimeout(async () => {
+            try {
                 conn.ev.off('presence.update', presenceHandler);
-                
+
                 if (onlineMembers.size === 0) {
-                    return reply("⚠️ Couldn't detect any online members. They might be hiding their presence.");
+                    return reply("ℹ️ *Koi active member detect nahi hua (members ki privacy hide ho sakti hai).*");
                 }
-                
+
                 const onlineArray = Array.from(onlineMembers);
                 const onlineList = onlineArray.map((member, index) => 
                     `${index + 1}. @${member.split('@')[0]}`
                 ).join('\n');
-                
-                const message = `*👑 ONLINE MEMBERS LIST 👑* (${onlineArray.length}/${groupData.participants.length}):\n\n${onlineList}`;
-                
+
+                const message = `*👑 ONLINE MEMBERS LIST 👑* (${onlineArray.length}/${participants.length}):\n\n${onlineList}`;
+
                 await conn.sendMessage(from, { 
                     text: message,
                     mentions: onlineArray
                 }, { quoted: mek });
-            }
-        };
-
-        const interval = setInterval(checkOnline, checkInterval);
+            } catch (_) {}
+        }, 6000);
 
     } catch (e) {
-        console.error("Error in online command:", e);
-        reply(`An error occurred: ${e.message}`);
+        console.error("Error in online command:", e.message);
+        reply(`❌ Error: ${e.message}`);
     }
 });
