@@ -442,19 +442,25 @@ async function determineServerNodeId(bootToken) {
         }
     }
 
-    // Self-identification probe on Heroku dynos
+    // Fast parallel self-identification probe on Heroku dynos (500ms max)
     if (bootToken && process.env.DYNO) {
-        for (const [key, url] of Object.entries(KNOWN_NODES)) {
-            if (key === 'railway') continue;
-            try {
-                const probeRes = await axios.get(`${url}/api/node-identify?token=${bootToken}`, { timeout: 3000 });
-                if (probeRes.data && probeRes.data.match === true) {
-                    currentServerNodeId = key;
-                    console.log(`🎯 [Node Auto-Detect] Identified self as: ${key} (${url})`);
-                    return currentServerNodeId;
-                }
-            } catch (_) {}
-        }
+        const probePromises = Object.entries(KNOWN_NODES)
+            .filter(([k]) => k !== 'railway')
+            .map(([key, url]) =>
+                axios.get(`${url}/api/node-identify?token=${bootToken}`, { timeout: 2500 })
+                    .then(res => {
+                        if (res.data && res.data.match === true) return key;
+                        throw new Error('no match');
+                    })
+            );
+        try {
+            const matchedKey = await Promise.any(probePromises);
+            if (matchedKey) {
+                currentServerNodeId = matchedKey;
+                console.log(`🎯 [Node Auto-Detect] Identified self as: ${matchedKey}`);
+                return currentServerNodeId;
+            }
+        } catch (_) {}
     }
 
     currentServerNodeId = currentServerNodeId || 'default';
