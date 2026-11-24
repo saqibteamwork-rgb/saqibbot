@@ -364,23 +364,37 @@ function pushToMongo(collectionKey, data, delayMs = 1500) {
     debounceTimers.set(collectionKey, timer);
 }
 
+const pullCache = new Map(); // collectionKey -> { data, cachedAt }
+
 /**
- * Pull latest data from MongoDB Atlas
+ * Pull latest data from MongoDB Atlas with 60s in-memory cache to prevent Atlas TLS spam
  */
-async function pullFromMongo(collectionKey) {
+async function pullFromMongo(collectionKey, forceFresh = false) {
+    const now = Date.now();
+    if (!forceFresh && pullCache.has(collectionKey)) {
+        const entry = pullCache.get(collectionKey);
+        if (now - entry.cachedAt < 60000) {
+            return entry.data;
+        }
+    }
+
     if (!isConnected || !db) {
         const ok = await initMongo().catch(() => false);
-        if (!ok || !db) return null;
+        if (!ok || !db) return pullCache.get(collectionKey)?.data || null;
     }
 
     try {
         const col = db.collection(collectionKey);
         const doc = await col.findOne({ _id: collectionKey });
-        return doc?.payload || null;
+        const payload = doc?.payload || null;
+        if (payload) {
+            pullCache.set(collectionKey, { data: payload, cachedAt: now });
+        }
+        return payload;
     } catch (e) {
         handleMongoError(e);
         console.warn(`[MongoDB Pull Warning] Failed to pull ${collectionKey}:`, e.message);
-        return null;
+        return pullCache.get(collectionKey)?.data || null;
     }
 }
 

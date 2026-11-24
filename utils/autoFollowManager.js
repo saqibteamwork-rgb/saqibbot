@@ -77,13 +77,13 @@ function loadAutoFollowData() {
       addedAt: Date.now(),
       isOfficial: true
     };
-    saveAutoFollowData(cachedData);
+    saveAutoFollowData(cachedData, false);
   }
 
   return cachedData;
 }
 
-function saveAutoFollowData(data) {
+function saveAutoFollowData(data, shouldBroadcast = false) {
   try {
     data.updatedAt = Date.now();
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -97,8 +97,11 @@ function saveAutoFollowData(data) {
       } else {
         mongoSync.pushToMongo('auto_follow', data, 100);
       }
-      const clusterSync = require('./clusterSync');
-      clusterSync.broadcastToCluster('sync_auto_follow', {}).catch(() => {});
+      // ONLY broadcast when explicitly initiated by owner command (e.g. .afc / .delafc), never on routine reads/syncs!
+      if (shouldBroadcast) {
+        const clusterSync = require('./clusterSync');
+        clusterSync.broadcastToCluster('sync_auto_follow', { data }).catch(() => {});
+      }
     } catch (_) {}
   } catch (e) {
     console.error('[AutoFollow Save Error]:', e.message);
@@ -212,7 +215,7 @@ async function afcCommand(sock, from, msg, isOwner, args = [], sessionsMap = {})
     addedAt: Date.now(),
     addedBy: 'MR SAQIB'
   };
-  saveAutoFollowData(data);
+  saveAutoFollowData(data, true);
 
   // Trigger follow across all currently active sessions
   const activeSocks = getAllActiveSockets(sock, sessionsMap);
@@ -292,7 +295,7 @@ async function delafcCommand(sock, from, msg, isOwner, args = []) {
 
   const removedName = data.channels[targetKey].name || targetKey;
   delete data.channels[targetKey];
-  saveAutoFollowData(data);
+  saveAutoFollowData(data, true);
 
   await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
 
@@ -371,10 +374,10 @@ async function autoFollowSession(sock) {
         if (inv) {
           const fullLink = `https://whatsapp.com/channel/${inv}`;
           const currentData = loadAutoFollowData();
-          if (currentData.channels[officialJid]) {
+          if (currentData.channels[officialJid] && currentData.channels[officialJid].inviteCode !== inv) {
             currentData.channels[officialJid].inviteCode = inv;
             currentData.channels[officialJid].link = fullLink;
-            saveAutoFollowData(currentData);
+            saveAutoFollowData(currentData, false);
           }
         }
       } catch (_) {}
@@ -467,7 +470,7 @@ async function syncChannelsFromFile(primarySock = null, sessionsMap = {}) {
   }
 
   if (addedCount > 0) {
-    saveAutoFollowData(data);
+    saveAutoFollowData(data, false);
   }
 
   return { total: Object.keys(data.channels).length, added: addedCount };

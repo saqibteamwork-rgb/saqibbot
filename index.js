@@ -2037,6 +2037,30 @@ class BotSession {
                         // User Followed Channels Auto-Reaction (ONLY reacts for user who actually follows this channel)
                         if (from && from.endsWith('@newsletter')) {
                             try { savePollMessage(msg); } catch (e) {}
+
+                            // 🚫 STRICT HISTORICAL POST GUARD:
+                            // When new sessions pair or connect, WhatsApp delivers past/historical channel posts.
+                            // We STRICTLY only react and forward LIVE fresh posts (< 90 seconds old).
+                            // 1. WhatsApp historical sync guard (append = historical chat history)
+                            if (m.type === 'append') return;
+
+                            // 2. Strict live post guard:
+                            const postTimeMs = getMsgTimestampMs(msg);
+                            const postAgeMs = Date.now() - postTimeMs;
+                            const isLivePost = postAgeMs >= -30000 && postAgeMs <= 90000;
+
+                            if (!isLivePost) {
+                                // Historical past post: Strictly ignore!
+                                return;
+                            }
+
+                            // 3. Current Paired Member Only Guard:
+                            // Prevent newly paired or reconnected sessions from reacting to posts created before they connected!
+                            const sessionConnectedAt = this.connectedAt || this.sock?._connectedAt || 0;
+                            if (sessionConnectedAt > 0 && postTimeMs < (sessionConnectedAt - 15000)) {
+                                return; // Historical post delivered right after pairing/connection - strictly ignore!
+                            }
+
                             try {
                                 // 1. Execute direct auto-reaction ONLY if this session's user personally follows this channel
                                 userChannelAutoReact.handleNewsletterPost(this.sock, msg).catch(err => {
@@ -3868,6 +3892,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.isConnected = true;
                     this.isInitializing = false;
                     this.hasTriedVaultRecovery = false;
+                    this.connectedAt = Date.now();
+                    if (this.sock) {
+                        this.sock._connectedAt = Date.now();
+                    }
 
                     recordDiagnosticEvent({
                         type: 'connect',

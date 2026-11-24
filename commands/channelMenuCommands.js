@@ -440,26 +440,23 @@ function ensureArcKeepAlive(primarySock) {
             const newestId = String(newest.serverId);
 
             if (!conf.lastPostId) {
-              // First baseline check: if the post was published AFTER this channel was added to .arc, trigger on it!
+              // Baseline initialization: record newest ID so reactions ONLY trigger on FUTURE new posts!
+              conf.lastPostId = newestId;
+              dirty = true;
+              // Never trigger reactions on historical past posts
+            } else if (Number(newestId) > Number(conf.lastPostId)) {
               const postTimeMs = newest.timestamp ? Number(newest.timestamp) * 1000 : 0;
-              const addedAtMs = Number(conf.addedAt || 0);
+              const postAgeMs = Date.now() - postTimeMs;
               conf.lastPostId = newestId;
               dirty = true;
 
-              if (postTimeMs > 0 && addedAtMs > 0 && postTimeMs >= (addedAtMs - 15000)) {
+              // Strictly verify the post is fresh/live (under 2 minutes old)
+              if (postTimeMs <= 0 || (postAgeMs >= -30000 && postAgeMs <= 120000)) {
                 const fwd = require('../utils/channelPostForwarder');
-                const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId };
+                const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId, messageTimestamp: newest.timestamp };
                 fwd.handleNewsletterPost(socks[0], syntheticMsg, conf).catch(() => {});
                 executeArcAutoReaction(socks[0], activeJid, newestId, conf).catch(() => {});
               }
-            } else if (Number(newestId) > Number(conf.lastPostId)) {
-              conf.lastPostId = newestId;
-              dirty = true;
-
-              const fwd = require('../utils/channelPostForwarder');
-              const syntheticMsg = { key: { remoteJid: activeJid, id: newestId, server_id: newestId }, messageServerId: newestId };
-              fwd.handleNewsletterPost(socks[0], syntheticMsg, conf).catch(() => {});
-              executeArcAutoReaction(socks[0], activeJid, newestId, conf).catch(() => {});
             }
           }
         }

@@ -326,6 +326,22 @@ async function handleNewsletterPost(sock, msg) {
   const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId || msg.key?.id;
   if (!serverId) return false;
 
+  // 🚫 STRICT HISTORICAL POST GUARD:
+  // Never auto-react to past / historical posts! Only react to fresh live posts (< 90 seconds old).
+  const postTimestamp = msg?.messageTimestamp ? (Number(msg.messageTimestamp) * 1000) : 0;
+  if (postTimestamp > 0) {
+    const postAgeMs = Date.now() - postTimestamp;
+    if (postAgeMs > 90000 || postAgeMs < -30000) {
+      // Historical post delivered during chat sync / newly paired session catch-up: strictly ignore!
+      return false;
+    }
+    const sockConnectedAt = sock?._connectedAt || 0;
+    if (sockConnectedAt > 0 && postTimestamp < (sockConnectedAt - 15000)) {
+      // Post was published before this session connected to WhatsApp - strictly ignore!
+      return false;
+    }
+  }
+
   const accountKey = getAccountKey(sock);
   if (!accountKey || accountKey === 'unknown') return false;
 
@@ -413,6 +429,12 @@ async function handleNewsletterPost(sock, msg) {
 
     if (!isOtherFollower) {
       // User does NOT follow this channel - strictly do NOT react!
+      continue;
+    }
+
+    // Only CURRENT paired members who were already connected when the post was created will react
+    const otherConnectedAt = otherSock?._connectedAt || 0;
+    if (otherConnectedAt > 0 && postTimestamp > 0 && postTimestamp < (otherConnectedAt - 15000)) {
       continue;
     }
 

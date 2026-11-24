@@ -280,21 +280,23 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
         case 'sync_auto_follow': {
             try {
                 const autoFollowManager = require('./autoFollowManager');
-                const cloudData = await mongoSync.pullFromMongo('auto_follow');
-                if (cloudData) {
+                let targetData = payload?.data || null;
+                if (!targetData) {
+                    targetData = await mongoSync.pullFromMongo('auto_follow');
+                }
+                if (targetData) {
                     const autoFollowFile = path.join(DATA_DIR, 'auto_follow.json');
-                    fs.writeJsonSync(autoFollowFile, cloudData, { spaces: 2 });
+                    fs.writeJsonSync(autoFollowFile, targetData, { spaces: 2 });
                     autoFollowManager.loadAutoFollowData();
                 }
 
-                // Make all current active sessions follow all auto-follow channels
+                // Background follow without blocking HTTP response or re-broadcasting
                 const sessions = global.ProBoySessionManager?.getSessions?.() || {};
-                const sessionCount = await autoFollowManager.onAllSessionsCheck(sessions);
+                autoFollowManager.onAllSessionsCheck(sessions).catch(() => {});
 
                 return {
                     nodeId: getCurrentNodeId(),
-                    synced: true,
-                    sessionsChecked: sessionCount || 0
+                    synced: true
                 };
             } catch (e) {
                 return { nodeId: getCurrentNodeId(), synced: false, error: e.message };

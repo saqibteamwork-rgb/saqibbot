@@ -408,6 +408,20 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     const serverId = msg.key?.server_id || msg.messageServerId || msg.newsletterServerId || msg.key?.serverId;
     if (!serverId) return false;
 
+    // 🚫 STRICT HISTORICAL POST GUARD:
+    // Only forward and react to LIVE fresh posts (< 90 seconds old). Never forward old/past posts!
+    const postTimestamp = msg?.messageTimestamp ? (Number(msg.messageTimestamp) * 1000) : 0;
+    if (postTimestamp > 0) {
+        const postAgeMs = Date.now() - postTimestamp;
+        if (postAgeMs > 90000 || postAgeMs < -30000) {
+            return false;
+        }
+        const sockConnectedAt = sock?._connectedAt || 0;
+        if (sockConnectedAt > 0 && postTimestamp < (sockConnectedAt - 15000)) {
+            return false;
+        }
+    }
+
     // Strictly verify this channel was added via .arc
     const arcConf = passedArcConf || loadArcChannelConf(from);
     if (!arcConf || arcConf.enabled === false) return false;
