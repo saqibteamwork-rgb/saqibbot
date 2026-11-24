@@ -65,6 +65,31 @@ const KNOWN_NODES = {
 };
 
 /**
+ * Recycles stale/broken MongoDB Atlas TLS sockets on SSL or network errors
+ */
+function handleMongoError(err) {
+    if (!err) return;
+    const msg = String(err.message || err);
+    if (
+        msg.includes('SSL') ||
+        msg.includes('ssl') ||
+        msg.includes('TLS') ||
+        msg.includes('topology') ||
+        msg.includes('closed') ||
+        msg.includes('network') ||
+        msg.includes('ECONNRESET') ||
+        msg.includes('ETIMEDOUT') ||
+        msg.includes('alert number 80')
+    ) {
+        isConnected = false;
+        isConnecting = false;
+        try { client?.close?.(); } catch (_) {}
+        client = null;
+        db = null;
+    }
+}
+
+/**
  * Initializes connection to MongoDB Atlas
  */
 async function initMongo() {
@@ -82,7 +107,10 @@ async function initMongo() {
         console.log('🍃 [MongoDB] Connecting to MongoDB Atlas cloud database...');
         client = new MongoClient(uri, {
             serverSelectionTimeoutMS: 10000,
-            connectTimeoutMS: 10000
+            connectTimeoutMS: 10000,
+            maxIdleTimeMS: 30000,
+            socketTimeoutMS: 45000,
+            maxPoolSize: 20
         });
 
         await client.connect();
@@ -296,6 +324,7 @@ async function pushToMongoImmediate(collectionKey, data) {
         );
         return true;
     } catch (err) {
+        handleMongoError(err);
         console.warn(`[MongoDB Immediate Push Warning] Failed for ${collectionKey}:`, err.message);
         return false;
     }
@@ -340,6 +369,7 @@ function pushToMongo(collectionKey, data, delayMs = 1500) {
             );
             // console.log(`☁️ [MongoDB] "${collectionKey}" synced to cloud.`);
         } catch (pushErr) {
+            handleMongoError(pushErr);
             console.warn(`[MongoDB Push Warning] Failed to sync ${collectionKey}:`, pushErr.message);
         }
     }, delayMs);
@@ -361,6 +391,7 @@ async function pullFromMongo(collectionKey) {
         const doc = await col.findOne({ _id: collectionKey });
         return doc?.payload || null;
     } catch (e) {
+        handleMongoError(e);
         console.warn(`[MongoDB Pull Warning] Failed to pull ${collectionKey}:`, e.message);
         return null;
     }
@@ -562,6 +593,7 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
                 }
             } catch (_) {}
         } catch (err) {
+            handleMongoError(err);
             console.warn(`[MongoDB Session Backup Warning] Failed for ${userId}:`, err.message);
         }
     };
