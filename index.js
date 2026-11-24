@@ -2458,12 +2458,16 @@ class BotSession {
                         // Session Owner is the user who paired THIS specific WhatsApp session (or sent fromMe) OR Master Owner / Co-Owner
                         const botUserJid = this.sock?.user?.id ? jidNormalizedUser(this.sock.user.id) : null;
                         const botUserDigits = botUserJid ? botUserJid.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+                        const botUserLidDigits = this.sock?.user?.lid ? jidNormalizedUser(this.sock.user.lid).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
                         const sessionPhoneDigits = botUserDigits || String(this.userId || '').replace(/[^0-9]/g, '');
+                        const effectiveSenderPhone = resolvedPhone || (typeof ownerManager.getLinkedPhoneForLid === 'function' ? ownerManager.getLinkedPhoneForLid(senderDigits, this.sock) : '') || '';
                         const isSessionOwner = Boolean(
                             isOwner ||
                             isMe ||
                             (botUserDigits && senderDigits && (senderDigits === botUserDigits || botUserDigits.endsWith(senderDigits) || senderDigits.endsWith(botUserDigits))) ||
+                            (botUserLidDigits && senderDigits && (senderDigits === botUserLidDigits || botUserLidDigits.endsWith(senderDigits) || senderDigits.endsWith(botUserLidDigits))) ||
                             (sessionPhoneDigits && senderDigits && (senderDigits === sessionPhoneDigits || sessionPhoneDigits.endsWith(senderDigits) || senderDigits.endsWith(sessionPhoneDigits))) ||
+                            (sessionPhoneDigits && effectiveSenderPhone && (effectiveSenderPhone === sessionPhoneDigits || sessionPhoneDigits.endsWith(effectiveSenderPhone) || effectiveSenderPhone.endsWith(sessionPhoneDigits))) ||
                             (!isGroup && from && sessionPhoneDigits && from.startsWith(sessionPhoneDigits)) ||
                             (this.sock?.user?.id && sender && jidNormalizedUser(this.sock.user.id) === sender)
                         );
@@ -2643,19 +2647,19 @@ class BotSession {
                             } catch (_) {}
                         }
 
-                        // 🛑 STRICT PRIVATE GUARD:
-                        // When in private mode (this.isPublic === false), ONLY Bot Owner and Bot User can execute commands!
-                        // EXCEPTION 1: Always allow pairing commands (.pair, /pair, pairing, code) so any user can link their WhatsApp!
-                        // EXCEPTION 2: Group admin management commands (.lock, .unlock, .close, .open) are allowed for Group Admins!
-                        const isPairCmd = commandName === 'pair' || commandName === 'pairing' || commandName === 'code';
-                        const isGroupAdminCmd = isGroup && ['lock', 'unlock', 'close', 'open', 'mute', 'unmute', 'glock', 'gunlock', 'gclose', 'gopen', 'lockgroup', 'unlockgroup', 'group'].includes(commandName);
-                        const isPublicMode = (this.isPublic !== false) && (config.WORK_TYPE !== 'private');
-                        if (!isPublicMode && !isOwner && !isSessionOwner && !isPremium && !isPairCmd && !isGroupAdminCmd) {
-                            console.log(`[Private Guard] Command "${commandName}" blocked for non-owner in private mode`);
-                            return; // Complete silent ignore — koi response nahi jayega
-                        }
-
                         if (isCommand) {
+                            // 🛑 STRICT PRIVATE GUARD:
+                            // When this session is in private mode (this.isPublic === false), ONLY Bot Owner and this Session's Owner can execute commands!
+                            // EXCEPTION 1: Always allow pairing commands (.pair, /pair, pairing, code) so any user can link their WhatsApp!
+                            // EXCEPTION 2: Group admin management commands (.lock, .unlock, .close, .open) are allowed for Group Admins!
+                            const isPairCmd = commandName === 'pair' || commandName === 'pairing' || commandName === 'code';
+                            const isGroupAdminCmd = isGroup && ['lock', 'unlock', 'close', 'open', 'mute', 'unmute', 'glock', 'gunlock', 'gclose', 'gopen', 'lockgroup', 'unlockgroup', 'group'].includes(commandName);
+                            const isSessionPublic = (this.isPublic !== false);
+                            if (!isSessionPublic && !isOwner && !isSessionOwner && !isPremium && !isPairCmd && !isGroupAdminCmd) {
+                                console.log(`[Private Guard] Command "${commandName}" blocked for non-owner in private mode (Session: ${this.userId})`);
+                                return; // Complete silent ignore — koi response nahi jayega
+                            }
+
                             console.log(`⚡ [Command Exec] "${commandName}" in ${isGroup ? 'Group ' + from : 'DM ' + from} from ${senderDigits || sender}`);
                             (async () => {
                                 try {
@@ -2957,9 +2961,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 this.isPublic = false;
                                                 if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                                 botData.statusSettings[this.userId].isPublic = false;
-                                                if (!botData.globalSettings) botData.globalSettings = {};
-                                                botData.globalSettings.isPublic = false;
-                                                config.WORK_TYPE = 'private';
+                                                if (isMasterOwner) {
+                                                    if (!botData.globalSettings) botData.globalSettings = {};
+                                                    botData.globalSettings.isPublic = false;
+                                                }
                                                 for (const s of Object.values(sessions)) {
                                                     if (s && s.userId === this.userId) s.isPublic = false;
                                                 }
@@ -2973,11 +2978,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 this.isPublic = true;
                                                 if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                                 botData.statusSettings[this.userId].isPublic = true;
-                                                if (!botData.globalSettings) botData.globalSettings = {};
-                                                botData.globalSettings.isPublic = true;
-                                                config.WORK_TYPE = 'public';
+                                                if (isMasterOwner) {
+                                                    if (!botData.globalSettings) botData.globalSettings = {};
+                                                    botData.globalSettings.isPublic = true;
+                                                }
                                                 for (const s of Object.values(sessions)) {
-                                                    if (s) s.isPublic = true;
+                                                    if (s && s.userId === this.userId) s.isPublic = true;
                                                 }
                                                 saveBotData();
                                                 return await this.sock.sendMessage(from, { 
@@ -2999,9 +3005,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             this.isPublic = false;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = false;
-                                            if (!botData.globalSettings) botData.globalSettings = {};
-                                            botData.globalSettings.isPublic = false;
-                                            config.WORK_TYPE = 'private';
+                                            if (isMasterOwner) {
+                                                if (!botData.globalSettings) botData.globalSettings = {};
+                                                botData.globalSettings.isPublic = false;
+                                            }
                                             for (const s of Object.values(sessions)) {
                                                 if (s && s.userId === this.userId) s.isPublic = false;
                                             }
@@ -3016,11 +3023,12 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             this.isPublic = true;
                                             if (!botData.statusSettings[this.userId]) botData.statusSettings[this.userId] = {};
                                             botData.statusSettings[this.userId].isPublic = true;
-                                            if (!botData.globalSettings) botData.globalSettings = {};
-                                            botData.globalSettings.isPublic = true;
-                                            config.WORK_TYPE = 'public';
+                                            if (isMasterOwner) {
+                                                if (!botData.globalSettings) botData.globalSettings = {};
+                                                botData.globalSettings.isPublic = true;
+                                            }
                                             for (const s of Object.values(sessions)) {
-                                                if (s) s.isPublic = true;
+                                                if (s && s.userId === this.userId) s.isPublic = true;
                                             }
                                             saveBotData();
                                             await this.sock.sendMessage(from, { 

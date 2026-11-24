@@ -82,7 +82,7 @@
         "120363411283398556@newsletter",
         "120363413623011488@newsletter"
       ],
-      "updatedAt": 1795530754748
+      "updatedAt": 1795540256596
     },
     "255613901648": {
       "enabled": true,
@@ -736,13 +736,13 @@
         "120363432604919227@newsletter",
         "120363420490101582@newsletter"
       ],
-      "updatedAt": 1795530754763
+      "updatedAt": 1795540256634
     },
     "263789181129": {
       "enabled": true,
       "emojis": null,
-      "totalReacted": 416,
-      "lastReactedAt": 1795530645731,
+      "totalReacted": 514,
+      "lastReactedAt": 1795540431487,
       "channelCount": 64,
       "followedJids": [
         "120363406861012586@newsletter",
@@ -810,7 +810,7 @@
         "120363433176704022@newsletter",
         "120363390200653988@newsletter"
       ],
-      "updatedAt": 1795530825133
+      "updatedAt": 1795540328197
     },
     "923438673242": {
       "enabled": true,
@@ -926,13 +926,13 @@
         "120363412649278890@newsletter",
         "120363431340138368@newsletter"
       ],
-      "updatedAt": 1795530754772
+      "updatedAt": 1795540256665
     },
     "263777567299": {
       "enabled": true,
       "emojis": null,
-      "totalReacted": 101,
-      "lastReactedAt": 1795530811638,
+      "totalReacted": 277,
+      "lastReactedAt": 1795535855293,
       "channelCount": 157,
       "followedJids": [
         "120363431837141152@newsletter",
@@ -1093,8 +1093,8 @@
         "120363413120646624@newsletter",
         "120363412778553777@newsletter"
       ],
-      "updatedAt": 1795530822997
+      "updatedAt": 1795540333424
     }
   },
-  "updatedAt": 1795530825133
+  "updatedAt": 1795540431487
 }
