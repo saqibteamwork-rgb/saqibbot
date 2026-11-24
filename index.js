@@ -1343,7 +1343,7 @@ async function loadExistingSessions() {
         });
 
         let started = 0;
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '2' : '10'), 10);
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!

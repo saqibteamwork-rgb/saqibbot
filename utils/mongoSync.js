@@ -618,16 +618,13 @@ async function restoreAllSessionsFromMongo(authDir) {
         } catch (_) {}
         ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
 
-        // 2. Filter: Only restore Owner Numbers AND recent 6-hour active sessions
-        const sixHoursMs = 6 * 60 * 60 * 1000;
-        const now = Date.now();
+        // 2. Filter: Restore ALL valid paired sessions (skip only dead/empty records with <= 1 file)
         const validCandidates = sessionDocs.filter(doc => {
             const isOwner = ownerNumbers.includes(String(doc._id));
             if (isOwner) return true; // Owners are ALWAYS restored!
-            // For regular users, only restore if active/updated within the last 6 hours and has valid files
-            const isRecent = (now - (doc.updatedAt || 0)) < sixHoursMs;
-            const hasFiles = (doc.fileCount || 0) > 10;
-            return isRecent && hasFiles;
+            // Valid paired user bot: has data and valid credentials (not an unlinked 1-file orphan)
+            const hasValidData = doc.data && (doc.fileCount || 0) > 1;
+            return Boolean(hasValidData);
         });
 
         // 3. Smart Sort:
@@ -642,12 +639,12 @@ async function restoreAllSessionsFromMongo(authDir) {
         });
 
         // 4. ULTRA SPEED RESTORE LIMIT:
-        // Accommodates all owner numbers plus active sessions from the recent 6 hours
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '2' : '10'), 10);
-        const restoreLimit = Math.max(maxSessions, 3) + 1;
+        // Accommodates all owner numbers plus all active paired bots on this node
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
+        const restoreLimit = Math.max(maxSessions, 5) + ownerNumbers.length;
         const targetDocs = validCandidates.slice(0, restoreLimit);
 
-        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring top ${targetDocs.length} active sessions (Owners + Recent 6h from ${sessionDocs.length} cloud records)...`);
+        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring all ${targetDocs.length} valid paired sessions for node "${myNode}" with Ultra-Lean (~25 files each)...`);
 
         let restoredCount = 0;
         for (const doc of targetDocs) {
