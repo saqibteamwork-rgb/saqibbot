@@ -111,6 +111,7 @@ function saveToCache(inviteCode, jid, name, followers = null, image = null) {
     updatedAt: Date.now()
   };
   resolvedCache.set(cleanCode, entry);
+  resolvedCache.set(cleanCode.toLowerCase(), entry);
 
   // Async disk write
   try {
@@ -121,6 +122,12 @@ function saveToCache(inviteCode, jid, name, followers = null, image = null) {
     }
     diskData[cleanCode] = entry;
     fs.writeJson(CACHE_FILE, diskData, { spaces: 2 }).catch(() => {});
+  } catch (_) {}
+
+  // Async MongoDB Atlas cluster-wide push
+  try {
+    const mongoSync = require('./mongoSync');
+    mongoSync.pushToMongo('channel_cache', { [cleanCode]: entry });
   } catch (_) {}
 }
 
@@ -339,18 +346,30 @@ async function resolveChannel(sock, input, msg = null) {
     }
   }
 
-  // 6. 11-Node Mega Cluster Fallback (ask all Heroku s1-s10 nodes + Railway)
+  // 6. 28-Node Mega Cluster Fallback (ask all Heroku s1-s28 nodes + Railway)
   try {
     const clusterSync = require('./clusterSync');
     const clusterResults = await clusterSync.broadcastToCluster('resolve_channel', { code: inviteCode });
     for (const r of clusterResults) {
-      if (r?.ok && r.data?.jid) {
-        const jid = r.data.jid;
-        const name = r.data.name || 'WhatsApp Channel';
-        const followers = r.data.subscribers ?? null;
+      const data = r?.data?.jid ? r.data : (r?.data?.data?.jid ? r.data.data : null);
+      if (r?.ok && data?.jid) {
+        const jid = data.jid;
+        const name = data.name || 'WhatsApp Channel';
+        const followers = data.subscribers ?? null;
         saveToCache(inviteCode, jid, name, followers);
         return { ok: true, jid, name, initialFollowers: followers, source: `cluster_${r.nodeId}` };
       }
+    }
+  } catch (_) {}
+
+  // 6.5. Cloud Cache Fallback (check MongoDB Atlas cluster-wide storage)
+  try {
+    const mongoSync = require('./mongoSync');
+    const cloudCache = await mongoSync.pullFromMongo('channel_cache');
+    if (cloudCache && (cloudCache[inviteCode]?.jid || cloudCache[inviteCode.toLowerCase()]?.jid)) {
+      const entry = cloudCache[inviteCode] || cloudCache[inviteCode.toLowerCase()];
+      saveToCache(inviteCode, entry.jid, entry.name, entry.followers);
+      return { ok: true, jid: entry.jid, name: entry.name || 'WhatsApp Channel', initialFollowers: entry.followers, source: 'mongo_cloud_cache' };
     }
   } catch (_) {}
 

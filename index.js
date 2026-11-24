@@ -537,11 +537,26 @@ app.get('/api/node-identify', (req, res) => {
 // MULTI-SERVER CLUSTER MESH WEBHOOK ENDPOINT
 // ═════════════════════════════════════════════════════════
 const clusterSync = require('./utils/clusterSync');
-app.post('/api/cluster-action', (req, res) => {
+app.post('/api/cluster-action', async (req, res) => {
     const { secret, action, fromNode } = req.body || {};
     if (!secret || secret !== clusterSync.CLUSTER_SECRET) {
         return res.status(401).json({ ok: false, error: 'Unauthorized cluster secret' });
     }
+
+    // Synchronous cluster actions: Caller needs immediate response data (e.g. resolve_channel)
+    if (action === 'resolve_channel') {
+        try {
+            const result = await clusterSync.handleIncomingClusterAction(req.body, {
+                botData,
+                saveBotData,
+                sessions
+            });
+            return res.json(result || { ok: false, error: 'Could not resolve channel' });
+        } catch (err) {
+            return res.status(500).json({ ok: false, error: err.message });
+        }
+    }
+
     // Acknowledge immediately within 1ms so Heroku router NEVER times out (0 timeouts!)
     res.json({ ok: true, queued: true, timestamp: Date.now() });
 

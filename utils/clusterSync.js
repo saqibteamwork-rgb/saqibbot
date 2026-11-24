@@ -342,6 +342,23 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
             const { code } = payload || {};
             if (!code) throw new Error('Missing invite code');
 
+            // 1. Fast Cache Check first (0ms)
+            try {
+                const { resolvedCache } = require('./channelResolver');
+                if (resolvedCache && (resolvedCache.has(code) || resolvedCache.has(code.toLowerCase()))) {
+                    const c = resolvedCache.get(code) || resolvedCache.get(code.toLowerCase());
+                    if (c && c.jid) {
+                        return {
+                            ok: true,
+                            jid: c.jid,
+                            name: c.name || 'WhatsApp Channel',
+                            subscribers: c.followers || null,
+                            source: 'cached_node'
+                        };
+                    }
+                }
+            } catch (_) {}
+
             let activeSocks = [];
             try {
                 activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
