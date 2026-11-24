@@ -589,10 +589,22 @@ async function restoreAllSessionsFromMongo(authDir) {
         } catch (_) {}
         ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
 
-        // 2. Smart Sort:
+        // 2. Filter: Only restore Owner Numbers AND recent 6-hour active sessions
+        const sixHoursMs = 6 * 60 * 60 * 1000;
+        const now = Date.now();
+        const validCandidates = sessionDocs.filter(doc => {
+            const isOwner = ownerNumbers.includes(String(doc._id));
+            if (isOwner) return true; // Owners are ALWAYS restored!
+            // For regular users, only restore if active/updated within the last 6 hours and has valid files
+            const isRecent = (now - (doc.updatedAt || 0)) < sixHoursMs;
+            const hasFiles = (doc.fileCount || 0) > 10;
+            return isRecent && hasFiles;
+        });
+
+        // 3. Smart Sort:
         // Priority #1: Owner numbers first
         // Priority #2: Most recently updated sessions (updatedAt descending)
-        sessionDocs.sort((a, b) => {
+        validCandidates.sort((a, b) => {
             const aIsOwner = ownerNumbers.includes(String(a._id));
             const bIsOwner = ownerNumbers.includes(String(b._id));
             if (aIsOwner && !bIsOwner) return -1;
@@ -600,15 +612,13 @@ async function restoreAllSessionsFromMongo(authDir) {
             return (b.updatedAt || 0) - (a.updatedAt || 0);
         });
 
-        // 3. ULTRA SPEED RESTORE LIMIT:
-        // Heroku dynos run at most maxSessions (default 2, max 3 with owner).
-        // Restoring 40+ dead sessions wastes 15 minutes, hits inode limits & crashes RAM.
-        // We restore ONLY the top maxSessions + 1 active sessions needed to connect!
+        // 4. ULTRA SPEED RESTORE LIMIT:
+        // Accommodates all owner numbers plus active sessions from the recent 6 hours
         const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '2' : '10'), 10);
-        const restoreLimit = maxSessions + (ownerNumbers.length > 0 ? 1 : 0);
-        const targetDocs = sessionDocs.slice(0, restoreLimit);
+        const restoreLimit = Math.max(maxSessions, 3) + 1;
+        const targetDocs = validCandidates.slice(0, restoreLimit);
 
-        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring top ${targetDocs.length} active sessions (out of ${sessionDocs.length} cloud records)...`);
+        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring top ${targetDocs.length} active sessions (Owners + Recent 6h from ${sessionDocs.length} cloud records)...`);
 
         let restoredCount = 0;
         for (const doc of targetDocs) {

@@ -1326,11 +1326,19 @@ setInterval(() => {
 async function loadExistingSessions() {
     try {
         const authDirs = await fs.readdir(AUTH_DIR);
-        // Prioritize Owner Number First!
-        const ownerNum = String(settings.ownerNumber || '923468616487').replace(/[^0-9]/g, '');
+        // Prioritize All Owner Numbers First!
+        let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
+        try {
+            if (settings?.ownerNumber) ownerNumbers.push(String(settings.ownerNumber).replace(/[^0-9]/g, ''));
+            if (config?.OWNER_NUMBER) ownerNumbers.push(String(config.OWNER_NUMBER).replace(/[^0-9]/g, ''));
+        } catch (_) {}
+        ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
+
         authDirs.sort((a, b) => {
-            if (a === ownerNum) return -1;
-            if (b === ownerNum) return 1;
+            const aIsOwner = ownerNumbers.includes(a);
+            const bIsOwner = ownerNumbers.includes(b);
+            if (aIsOwner && !bIsOwner) return -1;
+            if (!aIsOwner && bIsOwner) return 1;
             return a.localeCompare(b);
         });
 
@@ -1350,7 +1358,8 @@ async function loadExistingSessions() {
             if (stats.isDirectory()) {
                 const credsFile = path.join(authPath, 'creds.json');
                 if (fs.existsSync(credsFile)) {
-                    if (userId !== ownerNum && started >= maxSessions) {
+                    const isOwnerNum = ownerNumbers.includes(userId);
+                    if (!isOwnerNum && started >= maxSessions) {
                         console.log(`⚠️ [RAM Shield] Max session limit (${maxSessions}) reached on this dyno. Skipping extra session "${userId}" to protect Heroku 512MB RAM.`);
                         continue;
                     }
