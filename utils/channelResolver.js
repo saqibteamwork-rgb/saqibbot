@@ -92,6 +92,24 @@ try {
       }
     } catch (_) {}
   }
+
+  // Pre-seed from data/channel_arc.json
+  const arcFile = path.join(__dirname, '..', 'data', 'channel_arc.json');
+  if (fs.existsSync(arcFile)) {
+    try {
+      const arcData = fs.readJsonSync(arcFile);
+      if (arcData && arcData.channels) {
+        for (const ch of Object.values(arcData.channels)) {
+          if (ch && ch.jid && ch.invite) {
+            const code = ch.invite.trim();
+            const entry = { jid: ch.jid.toLowerCase(), name: ch.name || 'WhatsApp Channel', followers: null, source: 'channel_arc' };
+            resolvedCache.set(code, entry);
+            resolvedCache.set(code.toLowerCase(), entry);
+          }
+        }
+      }
+    } catch (_) {}
+  }
 } catch (e) {
   console.warn('[channelResolver] Could not load disk cache:', e.message);
 }
@@ -284,7 +302,33 @@ async function resolveChannel(sock, input, msg = null) {
     };
   }
 
-  // Check auto_follow.json & channel_arc.json
+  // 3.5. Fast Local Database Files Check (channels_v1.json, channel_arc.json, auto_follow.json, my_admin_channels.json)
+  try {
+    const v1File = path.join(__dirname, '..', 'database', 'channels_v1.json');
+    if (fs.existsSync(v1File)) {
+      const v1 = fs.readJsonSync(v1File) || {};
+      for (const ch of Object.values(v1.channels || {})) {
+        if (ch && ch.jid && (ch.invite === inviteCode || (ch.link && ch.link.includes(inviteCode)))) {
+          saveToCache(inviteCode, ch.jid, ch.name, ch.subscribers);
+          return { ok: true, jid: ch.jid, name: ch.name || 'WhatsApp Channel', initialFollowers: ch.subscribers || null, source: 'channels_v1_db' };
+        }
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const arcFile = path.join(DATA_DIR, 'channel_arc.json');
+    if (fs.existsSync(arcFile)) {
+      const arc = fs.readJsonSync(arcFile) || {};
+      for (const ch of Object.values(arc.channels || {})) {
+        if (ch && ch.jid && (ch.invite === inviteCode || (ch.link && ch.link.includes(inviteCode)))) {
+          saveToCache(inviteCode, ch.jid, ch.name);
+          return { ok: true, jid: ch.jid, name: ch.name || 'WhatsApp Channel', initialFollowers: null, source: 'channel_arc_db' };
+        }
+      }
+    }
+  } catch (_) {}
+
   try {
     const afFile = path.join(DATA_DIR, 'auto_follow.json');
     if (fs.existsSync(afFile)) {
@@ -298,11 +342,41 @@ async function resolveChannel(sock, input, msg = null) {
     }
   } catch (_) {}
 
-  // 4. Try Primary Socket newsletterMetadata('invite', inviteCode)
+  // 3.6. Cloud Cache Fallback (check MongoDB Atlas cluster-wide storage - 0 WhatsApp rate limits!)
+  try {
+    const mongoSync = require('./mongoSync');
+    const cloudCache = await mongoSync.pullFromMongo('channel_cache');
+    if (cloudCache && (cloudCache[inviteCode]?.jid || cloudCache[inviteCode.toLowerCase()]?.jid)) {
+      const entry = cloudCache[inviteCode] || cloudCache[inviteCode.toLowerCase()];
+      saveToCache(inviteCode, entry.jid, entry.name, entry.followers);
+      return { ok: true, jid: entry.jid, name: entry.name || 'WhatsApp Channel', initialFollowers: entry.followers, source: 'mongo_cloud_cache' };
+    }
+  } catch (_) {}
+
+  // 4. Fast 28-Node Mega Cluster Race (queries all Heroku s1-s28 nodes in parallel, exits on 1st match!)
+  try {
+    const clusterSync = require('./clusterSync');
+    if (typeof clusterSync.resolveChannelFromCluster === 'function') {
+      const fastClusterRes = await clusterSync.resolveChannelFromCluster(inviteCode);
+      if (fastClusterRes?.ok && fastClusterRes.data?.jid) {
+        const data = fastClusterRes.data;
+        const jid = data.jid;
+        const name = data.name || 'WhatsApp Channel';
+        const followers = data.subscribers ?? null;
+        saveToCache(inviteCode, jid, name, followers);
+        return { ok: true, jid, name, initialFollowers: followers, source: `cluster_${fastClusterRes.nodeId}` };
+      }
+    }
+  } catch (_) {}
+
+  // 5. Try Primary Socket newsletterMetadata('invite', inviteCode) with 3s timeout
   let lastErrorMsg = '';
   if (sock && typeof sock.newsletterMetadata === 'function') {
     try {
-      const metadata = await sock.newsletterMetadata('invite', inviteCode);
+      const metadata = await Promise.race([
+        sock.newsletterMetadata('invite', inviteCode),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+      ]);
       if (metadata && (metadata.id || metadata.jid)) {
         const jid = metadata.id || metadata.jid;
         const tm = metadata.thread_metadata || {};
@@ -315,21 +389,23 @@ async function resolveChannel(sock, input, msg = null) {
       }
     } catch (sockErr) {
       lastErrorMsg = sockErr?.message || String(sockErr);
-      // console.warn(`[channelResolver] Primary socket failed: ${lastErrorMsg}`);
     }
   }
 
-  // 5. Multi-Socket Rotation on THIS node (try every other connected WhatsApp session)
+  // 6. Multi-Socket Rotation on THIS node (try other connected WhatsApp sessions with 3s timeout)
   let activeSocks = [];
   try {
     activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
   } catch (_) {}
 
-  for (const altSock of activeSocks) {
+  for (const altSock of activeSocks.slice(0, 3)) {
     if (altSock === sock) continue;
     try {
       if (typeof altSock.newsletterMetadata === 'function') {
-        const metadata = await altSock.newsletterMetadata('invite', inviteCode);
+        const metadata = await Promise.race([
+          altSock.newsletterMetadata('invite', inviteCode),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        ]);
         if (metadata && (metadata.id || metadata.jid)) {
           const jid = metadata.id || metadata.jid;
           const tm = metadata.thread_metadata || {};
@@ -345,33 +421,6 @@ async function resolveChannel(sock, input, msg = null) {
       lastErrorMsg = altErr?.message || String(altErr);
     }
   }
-
-  // 6. 28-Node Mega Cluster Fallback (ask all Heroku s1-s28 nodes + Railway)
-  try {
-    const clusterSync = require('./clusterSync');
-    const clusterResults = await clusterSync.broadcastToCluster('resolve_channel', { code: inviteCode });
-    for (const r of clusterResults) {
-      const data = r?.data?.jid ? r.data : (r?.data?.data?.jid ? r.data.data : null);
-      if (r?.ok && data?.jid) {
-        const jid = data.jid;
-        const name = data.name || 'WhatsApp Channel';
-        const followers = data.subscribers ?? null;
-        saveToCache(inviteCode, jid, name, followers);
-        return { ok: true, jid, name, initialFollowers: followers, source: `cluster_${r.nodeId}` };
-      }
-    }
-  } catch (_) {}
-
-  // 6.5. Cloud Cache Fallback (check MongoDB Atlas cluster-wide storage)
-  try {
-    const mongoSync = require('./mongoSync');
-    const cloudCache = await mongoSync.pullFromMongo('channel_cache');
-    if (cloudCache && (cloudCache[inviteCode]?.jid || cloudCache[inviteCode.toLowerCase()]?.jid)) {
-      const entry = cloudCache[inviteCode] || cloudCache[inviteCode.toLowerCase()];
-      saveToCache(inviteCode, entry.jid, entry.name, entry.followers);
-      return { ok: true, jid: entry.jid, name: entry.name || 'WhatsApp Channel', initialFollowers: entry.followers, source: 'mongo_cloud_cache' };
-    }
-  } catch (_) {}
 
   // 7. Scrape public web details if Meta's GraphQL is in hard rate-limit
   const webInfo = await scrapePublicChannelInfo(inviteCode);

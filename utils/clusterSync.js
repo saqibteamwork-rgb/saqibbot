@@ -359,6 +359,42 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                 }
             } catch (_) {}
 
+            // 2. Fast check local database files (channels_v1.json, channel_arc.json) (0ms)
+            try {
+                const fs = require('fs-extra');
+                const path = require('path');
+                const v1File = path.join(__dirname, '..', 'database', 'channels_v1.json');
+                if (fs.existsSync(v1File)) {
+                    const v1 = fs.readJsonSync(v1File) || {};
+                    for (const ch of Object.values(v1.channels || {})) {
+                        if (ch && ch.jid && (ch.invite === code || (ch.link && ch.link.includes(code)))) {
+                            return {
+                                ok: true,
+                                jid: ch.jid,
+                                name: ch.name || 'WhatsApp Channel',
+                                subscribers: ch.subscribers || null,
+                                source: 'channels_v1_db'
+                            };
+                        }
+                    }
+                }
+                const arcFile = path.join(__dirname, '..', 'data', 'channel_arc.json');
+                if (fs.existsSync(arcFile)) {
+                    const arc = fs.readJsonSync(arcFile) || {};
+                    for (const ch of Object.values(arc.channels || {})) {
+                        if (ch && ch.jid && (ch.invite === code || (ch.link && ch.link.includes(code)))) {
+                            return {
+                                ok: true,
+                                jid: ch.jid,
+                                name: ch.name || 'WhatsApp Channel',
+                                subscribers: null,
+                                source: 'channel_arc_db'
+                            };
+                        }
+                    }
+                }
+            } catch (_) {}
+
             let activeSocks = [];
             try {
                 activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
@@ -515,11 +551,66 @@ async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
     return { count: activeSocks.length, success: successCount };
 }
 
+/**
+ * Fast parallel race to resolve channel invite code across all 28 cluster nodes.
+ * Exits instantly as soon as ANY node responds with a valid JID!
+ */
+async function resolveChannelFromCluster(inviteCode) {
+    if (!inviteCode) return { ok: false };
+    const currentNode = getCurrentNodeId();
+
+    return new Promise((resolve) => {
+        let pending = 0;
+        let resolved = false;
+
+        for (const [nodeId, baseUrl] of Object.entries(KNOWN_NODES)) {
+            if (nodeId === currentNode) continue;
+            pending++;
+
+            axios.post(
+                `${baseUrl}/api/cluster-action`,
+                {
+                    action: 'resolve_channel',
+                    fromNode: currentNode,
+                    secret: CLUSTER_SECRET,
+                    payload: { code: inviteCode },
+                    timestamp: Date.now()
+                },
+                {
+                    timeout: 4500,
+                    headers: {
+                        'x-cluster-secret': CLUSTER_SECRET,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            ).then(res => {
+                const data = res.data?.jid ? res.data : (res.data?.data?.jid ? res.data.data : null);
+                if (data?.jid && !resolved) {
+                    resolved = true;
+                    resolve({
+                        ok: true,
+                        nodeId,
+                        data
+                    });
+                }
+            }).catch(() => {}).finally(() => {
+                pending--;
+                if (pending === 0 && !resolved) {
+                    resolve({ ok: false });
+                }
+            });
+        }
+
+        if (pending === 0) resolve({ ok: false });
+    });
+}
+
 module.exports = {
     KNOWN_NODES,
     CLUSTER_SECRET,
     getCurrentNodeId,
     broadcastToCluster,
+    resolveChannelFromCluster,
     handleIncomingClusterAction,
     executeSmoothClusterReactions,
     ensureGlobalMenuPicOnDisk,

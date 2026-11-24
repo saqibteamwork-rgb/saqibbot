@@ -3104,7 +3104,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'accept': await commands.accept(this.sock, from, msg, isAdmin); break;
                                         case 'get': await commands.get(this.sock, from, msg, q, args); break;
                                         case 'gift': await commands.gift(this.sock, from, msg, q, args); break;
-                                        case 'channelid': await commands.channelid(this.sock, from, msg, q); break;
+                                        case 'channelid': case 'chid': case 'chjid': case 'channeljid': await commands.channelid(this.sock, from, msg, q); break;
                                         case 'channels': case 'mychannels': case 'chlist':
                                             await channelsCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;

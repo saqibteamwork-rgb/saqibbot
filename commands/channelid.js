@@ -49,15 +49,20 @@ async function channelidCommand(sock, from, msg, q) {
         const followers = res.initialFollowers || 'N/A';
         const sourceLabel = res.source ? ` (${res.source.replace(/_/g, ' ')})` : '';
 
+        // Extract post ID if user provided a post URL (e.g. /channel/CODE/204)
+        const postMatch = input.match(/\/(\d{1,10})(?:[/?#\s]|$)/);
+        const postId = postMatch ? postMatch[1] : (res.serverMessageId || null);
+
         let resultText =
             `✅ *CHANNEL INFO FOUND*${sourceLabel}\n\n` +
             `📛 *Name:* ${name}\n` +
             `🆔 *Newsletter JID:* \`${jid}\`\n` +
+            (postId ? `📌 *Post ID:* \`${postId}\`\n` : '') +
             `👥 *Followers:* ${followers}\n` +
             `🔰 *Status:* Active\n\n` +
             `💡 *Direct Commands:* \n` +
             `👉 *.chfollow ${jid}*\n` +
-            `👉 *.chreact ${jid} <post_id> ❤️*`;
+            (postId ? `👉 *.chreact ${jid} ${postId} ❤️*` : `👉 *.chreact ${jid} <post_id> ❤️*`);
 
         await sock.sendMessage(from, { text: resultText }, { quoted: msg });
 
