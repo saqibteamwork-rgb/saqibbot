@@ -20,7 +20,7 @@
       "addedAt": 1794400000000,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": "1542"
+      "lastPostId": "1552"
     },
     "120363412259265847@newsletter": {
       "jid": "120363412259265847@newsletter",
@@ -38,7 +38,7 @@
       "addedAt": 1794400000000,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": "730"
+      "lastPostId": "726"
     },
     "120363431124302760@newsletter": {
       "jid": "120363431124302760@newsletter",
@@ -56,7 +56,7 @@
       "addedAt": 1794400000000,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": "467"
+      "lastPostId": "498"
     },
     "120363431913895899@newsletter": {
       "jid": "120363431913895899@newsletter",
@@ -77,11 +77,51 @@
       "addedAt": 1794982269228,
       "addedBy": "923438673242",
       "addedByName": "MR SAQIB",
-      "lastPostId": "147"
+      "lastPostId": "152"
+    },
+    "120363421389121979@newsletter": {
+      "jid": "120363421389121979@newsletter",
+      "name": "Mr SAQIB",
+      "invite": "0029VbBTSK1EquiWrUt5uV1I",
+      "link": "https://whatsapp.com/channel/0029VbBTSK1EquiWrUt5uV1I",
+      "emojis": [
+        "❤️",
+        "🔥",
+        "👍",
+        "😍",
+        "👏"
+      ],
+      "count": 0,
+      "delayMs": 2000,
+      "delayStr": "2s",
+      "enabled": true,
+      "addedAt": 1794563468419,
+      "lastPostId": null
+    },
+    "120363433562476038@newsletter": {
+      "jid": "120363433562476038@newsletter",
+      "name": "Mr Saqib",
+      "invite": "0029VbDUFId42DcjHozBUh27",
+      "link": "https://whatsapp.com/channel/0029VbDUFId42DcjHozBUh27",
+      "emojis": [
+        "❤️",
+        "🔥",
+        "👍",
+        "😍",
+        "👏"
+      ],
+      "count": 0,
+      "delayMs": 2000,
+      "delayStr": "2s",
+      "enabled": true,
+      "addedAt": 1795491323129,
+      "addedBy": "923438673242",
+      "addedByName": "MR SAQIB",
+      "lastPostId": null
     }
   },
   "blocked": {},
   "deletedChannels": {},
   "defaultEmoji": "❤️",
-  "updatedAt": 1795350754664
+  "updatedAt": 1795491323129
 }

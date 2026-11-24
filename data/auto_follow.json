@@ -39,7 +39,15 @@
       "inviteCode": "0029Vb96jaCICVffUNK8Hi2w",
       "addedAt": 1795266272237,
       "source": "channels.txt"
+    },
+    "120363433562476038@newsletter": {
+      "jid": "120363433562476038@newsletter",
+      "name": "Mr Saqib",
+      "link": "https://whatsapp.com/channel/0029VbDUFId42DcjHozBUh27",
+      "inviteCode": "0029VbDUFId42DcjHozBUh27",
+      "addedAt": 1795491279681,
+      "source": "channels.txt"
     }
   },
-  "updatedAt": 1795350814220
+  "updatedAt": 1795491304957
 }
