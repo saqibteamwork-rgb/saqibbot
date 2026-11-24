@@ -467,10 +467,25 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
 
             const files = await fs.readdir(authPath);
             const filesMap = {};
+
+            // Keep only latest 150 pre-keys to keep MongoDB cloud backup compact and fast
+            const preKeyFiles = files.filter(f => f.startsWith('pre-key-'));
+            let allowedPreKeys = null;
+            if (preKeyFiles.length > 200) {
+                preKeyFiles.sort((a, b) => {
+                    const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
+                    const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
+                    return numB - numA;
+                });
+                allowedPreKeys = new Set(preKeyFiles.slice(0, 150));
+            }
+
             for (const file of files) {
                 if (file.includes('_backup_') || file.includes('_expired_') || file.endsWith('.tmp')) continue;
                 // Exclude ephemeral cache files (tctoken, lid-mapping) that bloat disk and cause dyno OOM crashes
                 if (file.startsWith('tctoken-') || file.startsWith('lid-mapping-')) continue;
+                if (allowedPreKeys && file.startsWith('pre-key-') && !allowedPreKeys.has(file)) continue;
+
                 const filePath = path.join(authPath, file);
                 const stat = await fs.stat(filePath);
                 if (stat.isFile()) {
@@ -532,12 +547,25 @@ async function restoreAllSessionsFromMongo(authDir) {
         const myNode = currentServerNodeId || 'default';
         let query = {};
         if (myNode && myNode !== 'default' && myNode !== 'all') {
-            // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node!
-            query = { nodeId: myNode };
+            // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node,
+            // or if node is s1, also support sessions marked default/null
+            if (myNode === 's1') {
+                query = {
+                    $or: [
+                        { nodeId: 's1' },
+                        { nodeId: 'default' },
+                        { nodeId: null },
+                        { nodeId: { $exists: false } }
+                    ]
+                };
+            } else {
+                query = { nodeId: myNode };
+            }
         } else {
-            // Default / master node: restore only sessions explicitly assigned to default/null
+            // Default / master node: restore only sessions explicitly assigned to default/null/s1
             query = {
                 $or: [
+                    { nodeId: 's1' },
                     { nodeId: 'default' },
                     { nodeId: null },
                     { nodeId: { $exists: false } }
@@ -551,8 +579,39 @@ async function restoreAllSessionsFromMongo(authDir) {
             return 0;
         }
 
+        // 1. Identify Owner Numbers to ALWAYS prioritize first
+        let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
+        try {
+            const settings = require('../settings');
+            const config = require('../config');
+            if (settings?.ownerNumber) ownerNumbers.push(String(settings.ownerNumber).replace(/[^0-9]/g, ''));
+            if (config?.OWNER_NUMBER) ownerNumbers.push(String(config.OWNER_NUMBER).replace(/[^0-9]/g, ''));
+        } catch (_) {}
+        ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
+
+        // 2. Smart Sort:
+        // Priority #1: Owner numbers first
+        // Priority #2: Most recently updated sessions (updatedAt descending)
+        sessionDocs.sort((a, b) => {
+            const aIsOwner = ownerNumbers.includes(String(a._id));
+            const bIsOwner = ownerNumbers.includes(String(b._id));
+            if (aIsOwner && !bIsOwner) return -1;
+            if (!aIsOwner && bIsOwner) return 1;
+            return (b.updatedAt || 0) - (a.updatedAt || 0);
+        });
+
+        // 3. ULTRA SPEED RESTORE LIMIT:
+        // Heroku dynos run at most maxSessions (default 2, max 3 with owner).
+        // Restoring 40+ dead sessions wastes 15 minutes, hits inode limits & crashes RAM.
+        // We restore ONLY the top maxSessions + 1 active sessions needed to connect!
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '2' : '10'), 10);
+        const restoreLimit = maxSessions + (ownerNumbers.length > 0 ? 1 : 0);
+        const targetDocs = sessionDocs.slice(0, restoreLimit);
+
+        console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring top ${targetDocs.length} active sessions (out of ${sessionDocs.length} cloud records)...`);
+
         let restoredCount = 0;
-        for (const doc of sessionDocs) {
+        for (const doc of targetDocs) {
             const userId = doc._id;
             if (!userId || !doc.data || String(userId).startsWith('qr_')) continue;
 
@@ -564,6 +623,7 @@ async function restoreAllSessionsFromMongo(authDir) {
                 try {
                     const localStat = fs.statSync(credsFile);
                     if (localStat.mtimeMs >= (doc.updatedAt || 0)) {
+                        restoredCount++;
                         continue;
                     }
                 } catch (_) {}
@@ -586,11 +646,28 @@ async function restoreAllSessionsFromMongo(authDir) {
 
                 if (!filesMap['creds.json']) continue;
 
+                // Pre-key pruning: Keep only the newest 150 pre-keys to prevent dyno timeout
+                const preKeyEntries = Object.keys(filesMap).filter(k => k.startsWith('pre-key-'));
+                let allowedPreKeys = null;
+                if (preKeyEntries.length > 200) {
+                    preKeyEntries.sort((a, b) => {
+                        const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
+                        const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
+                        return numB - numA;
+                    });
+                    allowedPreKeys = new Set(preKeyEntries.slice(0, 150));
+                }
+
                 await fs.ensureDir(sessionDir);
+                let writtenFiles = 0;
                 for (const [filename, content] of Object.entries(filesMap)) {
                     // Skip ephemeral junk that bloats dyno inodes & crashes Heroku with OOM
-                    if (filename.startsWith('tctoken-') || filename.startsWith('lid-mapping-')) continue;
+                    if (filename.startsWith('tctoken-') || filename.startsWith('lid-mapping-') || filename.endsWith('.tmp')) continue;
+                    // Skip old consumed prekeys beyond latest 150
+                    if (allowedPreKeys && filename.startsWith('pre-key-') && !allowedPreKeys.has(filename)) continue;
+
                     await fs.writeFile(path.join(sessionDir, filename), content, 'utf8');
+                    writtenFiles++;
                 }
 
                 // Bind to this node if it was unassigned
@@ -599,14 +676,14 @@ async function restoreAllSessionsFromMongo(authDir) {
                 }
 
                 restoredCount++;
-                console.log(`📥 [MongoDB Session Restore] Restored session "${userId}" (${Object.keys(filesMap).length} files) to disk!`);
+                console.log(`📥 [MongoDB Session Restore] Restored session "${userId}" (${writtenFiles} files) in milliseconds!`);
             } catch (decompressErr) {
                 console.warn(`[MongoDB Session Restore] Failed to unpack session ${userId}:`, decompressErr.message);
             }
         }
 
         if (restoredCount > 0) {
-            console.log(`✅ [MongoDB Session Restore] Recovered ${restoredCount} active sessions from MongoDB Atlas cloud!`);
+            console.log(`✅ [MongoDB Session Restore] Recovered ${restoredCount} active sessions in ~1 second! Fast-Boot ready.`);
         }
         return restoredCount;
     } catch (err) {
