@@ -1400,6 +1400,15 @@ setInterval(async () => {
         const credsFile = path.join(sess.authPath, 'creds.json');
         if (!fs.existsSync(credsFile)) continue;
 
+        // 🛡️ CRITICAL PAIRING GUARD: Never kill or interrupt a session actively pairing or waiting for phone registration!
+        try {
+            const rawCreds = fs.readFileSync(credsFile, 'utf8');
+            const parsedCreds = JSON.parse(rawCreds);
+            if (!parsedCreds.registered && !parsedCreds.me?.id?.includes(':')) {
+                continue; // Pairing in progress! Do not touch or terminate!
+            }
+        } catch (_) {}
+
         // Verify WebSocket is actually healthy and ready (Baileys WebSocketClient .isOpen or socket readyState 1)
         const isWsOpen = Boolean(sess.sock?.ws?.isOpen || sess.sock?.ws?.socket?.readyState === 1);
         const isSocketHealthy = sess.isConnected && sess.sock && isWsOpen;
