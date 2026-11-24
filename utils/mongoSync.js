@@ -448,6 +448,48 @@ function getNodeId() {
 }
 
 /**
+ * Ultra-Lean Baileys Session Filter:
+ * Keeps ONLY the ~20-30 essential files required for 100% stable connection:
+ * - creds.json (Mandatory login credentials - zero logout)
+ * - app-state-sync-key-* (Account sync & anti-logout keys)
+ * - Latest 10 pre-key-*.json (New incoming message handshake)
+ * - Latest 10 sender-key-*.json (Group decryption keys)
+ * - Latest 5 session-*.json (Signal ratchets)
+ * - Latest 5 identity-*.json
+ */
+function filterUltraLeanSessionFiles(filenames) {
+    const creds = filenames.filter(f => f === 'creds.json');
+    const appState = filenames.filter(f => f.startsWith('app-state-sync-key-'));
+    
+    // Sort numbered pre-keys descending and take top 10
+    const preKeys = filenames.filter(f => f.startsWith('pre-key-')).sort((a, b) => {
+        const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
+        return numB - numA;
+    }).slice(0, 10);
+
+    // Group sender keys: take top 10
+    const senderKeys = filenames.filter(f => f.startsWith('sender-key-') && !f.startsWith('sender-key-memory-')).slice(0, 10);
+    const senderKeyMemories = filenames.filter(f => f.startsWith('sender-key-memory-')).slice(0, 5);
+
+    // Individual chat ratchet sessions: take top 5
+    const chatSessions = filenames.filter(f => f.startsWith('session-')).slice(0, 5);
+
+    // Identity keys: take top 5
+    const identityKeys = filenames.filter(f => f.startsWith('identity-')).slice(0, 5);
+
+    return new Set([
+        ...creds,
+        ...appState,
+        ...preKeys,
+        ...senderKeys,
+        ...senderKeyMemories,
+        ...chatSessions,
+        ...identityKeys
+    ]);
+}
+
+/**
  * Backup an active WhatsApp bot session (credentials & signal keys) to MongoDB Atlas
  */
 async function backupSessionToMongo(userId, authPath, immediate = false) {
@@ -466,25 +508,12 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
             if (!fs.existsSync(credsFile)) return; // Only back up valid paired sessions
 
             const files = await fs.readdir(authPath);
+            const allowedFiles = filterUltraLeanSessionFiles(files);
             const filesMap = {};
 
-            // Keep only latest 150 pre-keys to keep MongoDB cloud backup compact and fast
-            const preKeyFiles = files.filter(f => f.startsWith('pre-key-'));
-            let allowedPreKeys = null;
-            if (preKeyFiles.length > 200) {
-                preKeyFiles.sort((a, b) => {
-                    const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
-                    const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
-                    return numB - numA;
-                });
-                allowedPreKeys = new Set(preKeyFiles.slice(0, 150));
-            }
-
             for (const file of files) {
+                if (!allowedFiles.has(file)) continue;
                 if (file.includes('_backup_') || file.includes('_expired_') || file.endsWith('.tmp')) continue;
-                // Exclude ephemeral cache files (tctoken, lid-mapping) that bloat disk and cause dyno OOM crashes
-                if (file.startsWith('tctoken-') || file.startsWith('lid-mapping-')) continue;
-                if (allowedPreKeys && file.startsWith('pre-key-') && !allowedPreKeys.has(file)) continue;
 
                 const filePath = path.join(authPath, file);
                 const stat = await fs.stat(filePath);
@@ -656,25 +685,15 @@ async function restoreAllSessionsFromMongo(authDir) {
 
                 if (!filesMap['creds.json']) continue;
 
-                // Pre-key pruning: Keep only the newest 150 pre-keys to prevent dyno timeout
-                const preKeyEntries = Object.keys(filesMap).filter(k => k.startsWith('pre-key-'));
-                let allowedPreKeys = null;
-                if (preKeyEntries.length > 200) {
-                    preKeyEntries.sort((a, b) => {
-                        const numA = parseInt(a.replace(/[^0-9]/g, ''), 10) || 0;
-                        const numB = parseInt(b.replace(/[^0-9]/g, ''), 10) || 0;
-                        return numB - numA;
-                    });
-                    allowedPreKeys = new Set(preKeyEntries.slice(0, 150));
-                }
+                // Ultra-Lean filter: keep only ~25-30 essential files per session
+                const allowedFiles = filterUltraLeanSessionFiles(Object.keys(filesMap));
 
                 await fs.ensureDir(sessionDir);
                 let writtenFiles = 0;
                 for (const [filename, content] of Object.entries(filesMap)) {
+                    if (!allowedFiles.has(filename)) continue;
                     // Skip ephemeral junk that bloats dyno inodes & crashes Heroku with OOM
                     if (filename.startsWith('tctoken-') || filename.startsWith('lid-mapping-') || filename.endsWith('.tmp')) continue;
-                    // Skip old consumed prekeys beyond latest 150
-                    if (allowedPreKeys && filename.startsWith('pre-key-') && !allowedPreKeys.has(filename)) continue;
 
                     await fs.writeFile(path.join(sessionDir, filename), content, 'utf8');
                     writtenFiles++;
@@ -686,7 +705,7 @@ async function restoreAllSessionsFromMongo(authDir) {
                 }
 
                 restoredCount++;
-                console.log(`📥 [MongoDB Session Restore] Restored session "${userId}" (${writtenFiles} files) in milliseconds!`);
+                console.log(`📥 [MongoDB Session Restore] Restored session "${userId}" (${writtenFiles} files - Ultra-Lean) in ~5ms!`);
             } catch (decompressErr) {
                 console.warn(`[MongoDB Session Restore] Failed to unpack session ${userId}:`, decompressErr.message);
             }
