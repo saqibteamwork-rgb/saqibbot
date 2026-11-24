@@ -52,7 +52,7 @@ function addLog(type, msgId, details = {}) {
     if (debugLogs.length > 80) debugLogs.shift();
 }
 
-const MAX_CACHE_ENTRIES = 3000;
+const MAX_CACHE_ENTRIES = 300;
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 /**
@@ -291,13 +291,17 @@ async function processIncoming(sock, msg, opts = {}) {
                 timestamp: Date.now()
             };
 
-            mediaCache.set(msgId, cachedItem);
-            addLog('pre_download_success', msgId, { sizeKb: (buffer.length / 1024).toFixed(1) });
-            console.log(`[ViewOnceManager] ✅ Pre-cached View-Once ${details.mediaType} (${(buffer.length / 1024).toFixed(1)} KB) for ${msgId}`);
-
             // Layer 4: Auto-VV Forward to Owner's "You" chat if enabled
             if (isAutoVVEnabled()) {
                 await autoForwardToOwner(sock, msg, cachedItem, opts);
+            }
+
+            // Memory Shield: Free heavy buffer from RAM once saved to disk. resolveMedia will read from diskPath.
+            delete cachedItem.buffer;
+            mediaCache.set(msgId, cachedItem);
+            if (mediaCache.size > 50) {
+                const oldest = mediaCache.keys().next().value;
+                mediaCache.delete(oldest);
             }
         } else {
             addLog('pre_download_empty_buffer', msgId);
@@ -368,11 +372,15 @@ async function resolveMedia({ quoted, stanzaId, from, sock, participant, rawQuot
     // ===== LAYER 1: Check In-Memory Buffer Cache =====
     if (stanzaId && mediaCache.has(stanzaId)) {
         const item = mediaCache.get(stanzaId);
-        if (item && item.buffer && item.buffer.length > 0) {
+        let buf = item.buffer;
+        if (!buf && item.diskPath && fs.existsSync(item.diskPath)) {
+            try { buf = await fs.promises.readFile(item.diskPath); } catch (_) {}
+        }
+        if (buf && buf.length > 0) {
             addLog('resolve_layer1_hit_ram', stanzaId);
             return {
                 layer: 1,
-                buffer: item.buffer,
+                buffer: buf,
                 mediaType: item.mediaType,
                 mimetype: item.mimetype,
                 caption: item.caption,

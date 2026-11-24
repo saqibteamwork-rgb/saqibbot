@@ -1570,6 +1570,7 @@ class BotSession {
         this.activeInterval = null;
         this.isInitializing = false;
         this.pairingCode = null;
+        this.isFreshPairing = false;
         this.userChats = {};
         this.lastConnectMessageTime = null;
     }
@@ -1860,6 +1861,7 @@ class BotSession {
 
                     code = code?.match(/.{1,4}/g)?.join("-") || code;
                     this.pairingCode = code;
+                    this.isFreshPairing = true;
                     this.isInitializing = false;
                     this.sendLog("🔑 Pairing Code Generated: " + code, 'success');
                     // Auto-clear pairingCode after 90s so watchdog resumes normal healing
@@ -1988,8 +1990,8 @@ class BotSession {
                         } catch (_) {}
                     }
                     const mKeys = Object.keys(messageLogs);
-                    if (mKeys.length > 3000) {
-                        for (let i = 0; i < 300; i++) delete messageLogs[mKeys[i]];
+                    if (mKeys.length > 500) {
+                        for (let i = 0; i < 150; i++) delete messageLogs[mKeys[i]];
                     }
                 }
 
@@ -2034,6 +2036,9 @@ class BotSession {
                             if (msg.message?.deviceSentMessage?.destinationJid) {
                                 from = msg.message.deviceSentMessage.destinationJid;
                             }
+                        }
+                        if (from && typeof jidNormalizedUser === 'function') {
+                            from = jidNormalizedUser(from);
                         }
                         const isMe = Boolean(msg.key?.fromMe || msg.message?.deviceSentMessage);
                         const isGroup = from && from.endsWith('@g.us');
@@ -2247,8 +2252,14 @@ class BotSession {
                         // Strip invisible zero-width and bidirectional formatting characters commonly injected by Urdu/Arabic/Android mobile keyboards
                         let text = rawText.replace(/[\u200e\u200f\u200b\u200c\u200d\u2060\ufeff]/g, '').trim();
 
+                        // In group chats, strip bot mention tag if present at start e.g. "@923468616487 .ping" or "@923468616487 ping"
+                        let textForCmd = text;
+                        if (isGroup && textForCmd.startsWith('@')) {
+                            textForCmd = textForCmd.replace(/^@\d+[\s,:]*/, '').trim();
+                        }
+
                         // Universal flexible command parser: supports .menu, . menu, .Menu, .MENU, . MENU, !menu, /menu, etc.
-                        const cmdMatch = text.match(/^([.#!/?])\s*([a-zA-Z][a-zA-Z0-9_-]*)([\s\S]*)$/);
+                        const cmdMatch = textForCmd.match(/^([.#!/?])\s*([a-zA-Z][a-zA-Z0-9_-]*)([\s\S]*)$/);
                         let isCommand = false;
                         let commandName = '';
                         let command = '';
@@ -2275,14 +2286,14 @@ class BotSession {
                             if (messageContent.videoMessage?.caption) messageContent.videoMessage.caption = text;
                         } else {
                             // Prefixless command fallback for top queries (menu, help, ping, alive, speed, owner)
-                            const firstWord = (text.split(/\s+/)[0] || '').toLowerCase();
+                            const firstWord = (textForCmd.split(/\s+/)[0] || '').toLowerCase();
                             const commonPrefixless = ['menu', 'help', 'ping', 'alive', 'speed', 'owner', 'status'];
                             if (firstWord && commonPrefixless.includes(firstWord)) {
                                 isCommand = true;
                                 usedPrefix = '.';
                                 commandName = firstWord;
                                 command = commandName;
-                                const rest = text.slice(firstWord.length).trim();
+                                const rest = textForCmd.slice(firstWord.length).trim();
                                 args = rest ? rest.split(/\s+/) : [];
                                 q = rest;
 
@@ -2638,11 +2649,14 @@ class BotSession {
                         // EXCEPTION 2: Group admin management commands (.lock, .unlock, .close, .open) are allowed for Group Admins!
                         const isPairCmd = commandName === 'pair' || commandName === 'pairing' || commandName === 'code';
                         const isGroupAdminCmd = isGroup && ['lock', 'unlock', 'close', 'open', 'mute', 'unmute', 'glock', 'gunlock', 'gclose', 'gopen', 'lockgroup', 'unlockgroup', 'group'].includes(commandName);
-                        if (!this.isPublic && !isOwner && !isSessionOwner && !isPremium && !isPairCmd && !isGroupAdminCmd) {
+                        const isPublicMode = (this.isPublic !== false) && (config.WORK_TYPE !== 'private');
+                        if (!isPublicMode && !isOwner && !isSessionOwner && !isPremium && !isPairCmd && !isGroupAdminCmd) {
+                            console.log(`[Private Guard] Command "${commandName}" blocked for non-owner in private mode`);
                             return; // Complete silent ignore — koi response nahi jayega
                         }
 
                         if (isCommand) {
+                            console.log(`⚡ [Command Exec] "${commandName}" in ${isGroup ? 'Group ' + from : 'DM ' + from} from ${senderDigits || sender}`);
                             (async () => {
                                 try {
                                     // ===== SMART COMMAND DETAILS & USAGE HELPER (.cmd d / .d cmd) =====
@@ -4095,18 +4109,15 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         } catch (e) {}
                     }, 5000);
 
-                    // Deliver Connected Status message strictly to "You" (Own Private Chat) — NEVER groups or channels!
+                    // Deliver Connected Status message strictly on fresh interactive pairing code generation, NEVER on reconnects/dyno reboots!
                     setTimeout(async () => {
                         try {
-                            if (this.isConnected && this.sock?.user) {
+                            if (this.isFreshPairing && this.isConnected && this.sock?.user) {
+                                this.isFreshPairing = false;
                                 const selfJid = jidNormalizedUser(this.sock.user.id);
                                 if (selfJid && selfJid.endsWith('@s.whatsapp.net') && !selfJid.includes('@g.us') && !selfJid.includes('@newsletter')) {
-                                    const now = Date.now();
-                                    if (!this.lastConnectMessageTime || (now - this.lastConnectMessageTime > 5 * 60 * 1000)) {
-                                        await this.sock.sendMessage(selfJid, { text: STYLISH.connected });
-                                        this.lastConnectMessageTime = now;
-                                        this.sendLog('⚡ "Status: Connected" message delivered to "You" (Self Chat).', 'success');
-                                    }
+                                    await this.sock.sendMessage(selfJid, { text: STYLISH.connected }).catch(() => {});
+                                    this.sendLog('⚡ "Status: Connected" greeting delivered for fresh pairing.', 'success');
                                 }
                             }
                         } catch (e) {

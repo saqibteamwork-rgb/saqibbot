@@ -821,17 +821,6 @@ async function verifyPremiumOrOwnerAsync(sock, msg, from, groupMetadata = null) 
         await resolveIdentityPairAsync({ digits: phones[0], lid: null }, sock);
     }
 
-    // Also resolve any unlinked entries in data.premium and data.owners
-    const data = loadOwnersData();
-    for (const entry of [...(data.premium || []), ...(data.owners || [])]) {
-        if (!entry) continue;
-        if (entry.digits && !entry.lid) {
-            await resolveIdentityPairAsync({ digits: entry.digits, lid: null }, sock);
-        } else if (entry.lid && !entry.digits) {
-            await resolveIdentityPairAsync({ digits: null, lid: entry.lid }, sock);
-        }
-    }
-
     return checkIsPremium(ctx);
 }
 
