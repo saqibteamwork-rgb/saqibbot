@@ -341,6 +341,10 @@ async function afclistCommand(sock, from, msg, isOwner) {
   return await sock.sendMessage(from, { text }, { quoted: msg });
 }
 
+// Anti-Ban Rate Limiter: Track which channels have already been followed by each session
+// Prevents calling sock.newsletterFollow() dozens of times during routine socket reconnects!
+const followedSessionCache = new Set();
+
 /**
  * Automatically follows all configured channels for any newly connected bot session.
  * Called from index.js on connection === 'open'
@@ -349,21 +353,28 @@ async function autoFollowSession(sock) {
   try {
     if (!sock) return;
 
+    const userDigits = sock.user?.id ? String(sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : '';
+    if (!userDigits) return;
+
     // First ensure channels from channels.txt are ingested and synced
     await syncChannelsFromFile(sock).catch(() => {});
 
     const officialJid = (settings.newsletterJid || '120363431913895899@newsletter').toLowerCase();
+    const officialKey = `${userDigits}_${officialJid}`;
 
-    // 1. Guaranteed follow of Mr Saqib's official channel for every connected session
-    if (typeof sock.newsletterFollow === 'function') {
-      try {
-        await sock.newsletterFollow(officialJid).catch(() => {});
-      } catch (_) {}
-    }
-    if (typeof sock.subscribeNewsletterUpdates === 'function') {
-      try {
-        await sock.subscribeNewsletterUpdates(officialJid).catch(() => {});
-      } catch (_) {}
+    // 1. Guaranteed follow of official channel (ONLY if not already followed by this session!)
+    if (!followedSessionCache.has(officialKey)) {
+      if (typeof sock.newsletterFollow === 'function') {
+        try {
+          await sock.newsletterFollow(officialJid).catch(() => {});
+          followedSessionCache.add(officialKey);
+        } catch (_) {}
+      }
+      if (typeof sock.subscribeNewsletterUpdates === 'function') {
+        try {
+          await sock.subscribeNewsletterUpdates(officialJid).catch(() => {});
+        } catch (_) {}
+      }
     }
 
     // Dynamic resolution of metadata / invite code from live JID if available
@@ -383,16 +394,20 @@ async function autoFollowSession(sock) {
       } catch (_) {}
     }
 
-    // 2. Follow all other configured channels
+    // 2. Follow all other configured channels (ONLY if not already followed by this user)
     const data = loadAutoFollowData();
     const channels = Object.values(data.channels || {});
     for (const ch of channels) {
       if (!hub.isOpen(sock)) break;
       if (!ch || !ch.jid || ch.jid.toLowerCase() === officialJid) continue;
+      const chKey = `${userDigits}_${ch.jid.toLowerCase()}`;
+      if (followedSessionCache.has(chKey)) continue;
+
       if (typeof sock.newsletterFollow === 'function') {
         try {
           await sock.newsletterFollow(ch.jid).catch(() => {});
-          await sleep(1000);
+          followedSessionCache.add(chKey);
+          await sleep(1500);
           if (typeof sock.subscribeNewsletterUpdates === 'function') {
             await sock.subscribeNewsletterUpdates(ch.jid).catch(() => {});
           }
