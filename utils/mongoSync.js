@@ -689,7 +689,7 @@ async function restoreAllSessionsFromMongo(authDir) {
         await fs.ensureDir(authDir);
         const col = db.collection('whatsapp_sessions');
 
-        // 1. Identify Owner Numbers to ALWAYS prioritize and include in query!
+        // 1. Identify Owner Numbers to ALWAYS prioritize first in sorting
         let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
         try {
             const settings = require('../settings');
@@ -698,40 +698,32 @@ async function restoreAllSessionsFromMongo(authDir) {
             if (config?.OWNER_NUMBER) ownerNumbers.push(String(config.OWNER_NUMBER).replace(/[^0-9]/g, ''));
         } catch (_) {}
         ownerNumbers = [...new Set(ownerNumbers.filter(Boolean))];
-        const ownerIdQueries = ownerNumbers.map(num => ({ _id: num }));
 
         const myNode = currentServerNodeId || 'default';
         let query = {};
         if (myNode && myNode !== 'default' && myNode !== 'all') {
-            // Specific Cluster Worker Node: strictly restore sessions explicitly assigned to this node,
-            // or if node is s1, also support sessions marked default/null, plus owner sessions unconditionally!
+            // Specific Cluster Worker Node: strictly restore ONLY sessions explicitly assigned to this node!
+            // This guarantees zero duplicate logins and zero Code 440 collisions across cluster dynos.
             if (myNode === 's1') {
                 query = {
                     $or: [
                         { nodeId: 's1' },
                         { nodeId: 'default' },
                         { nodeId: null },
-                        { nodeId: { $exists: false } },
-                        ...ownerIdQueries
+                        { nodeId: { $exists: false } }
                     ]
                 };
             } else {
-                query = {
-                    $or: [
-                        { nodeId: myNode },
-                        ...ownerIdQueries
-                    ]
-                };
+                query = { nodeId: myNode };
             }
         } else {
-            // Local machine / standalone: restore unassigned or local sessions + owner sessions unconditionally!
+            // Local machine / standalone: only restore unassigned or local sessions, NEVER cluster worker nodes!
             query = {
                 $or: [
                     { nodeId: 'local' },
                     { nodeId: 'default' },
                     { nodeId: null },
-                    { nodeId: { $exists: false } },
-                    ...ownerIdQueries
+                    { nodeId: { $exists: false } }
                 ]
             };
         }
