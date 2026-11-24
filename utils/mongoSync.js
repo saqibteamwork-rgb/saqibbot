@@ -730,8 +730,12 @@ async function restoreAllSessionsFromMongo(authDir) {
             query = { nodeId: 'local' };
         }
 
-        const sessionDocs = await col.find(query).toArray();
-        if (!sessionDocs || sessionDocs.length === 0) {
+        // 1. Fetch metadata only (exclude heavy binary .data) to eliminate RAM bloat & speed up dyno boot 10x!
+        const candidateMeta = await col.find(query, {
+            projection: { _id: 1, updatedAt: 1, fileCount: 1, nodeId: 1 }
+        }).toArray();
+
+        if (!candidateMeta || candidateMeta.length === 0) {
             console.log(`📂 [MongoDB Session Restore] No cloud sessions found in MongoDB for node "${myNode}".`);
             return 0;
         }
@@ -739,7 +743,7 @@ async function restoreAllSessionsFromMongo(authDir) {
         // 2. Filter: Strictly Owner Numbers (ALWAYS restored) + Sessions updated within last 30 days!
         const maxSessionAgeMs = 30 * 24 * 60 * 60 * 1000; // 30 days retention
         const now = Date.now();
-        const validCandidates = sessionDocs.filter(doc => {
+        const validCandidates = candidateMeta.filter(doc => {
             const isOwner = ownerNumbers.includes(String(doc._id));
             if (isOwner) return true; // Owner numbers are ALWAYS restored!
             // For regular users: strictly validate session age (30 days) and presence of credentials
@@ -762,7 +766,16 @@ async function restoreAllSessionsFromMongo(authDir) {
         // 4. ULTRA SPEED RESTORE LIMIT:
         // Safely bounds max sessions per dyno (4 sessions max) to strictly protect Heroku 512MB RAM from OOM crashes!
         const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
-        const targetDocs = validCandidates.slice(0, maxSessions);
+        const targetMeta = validCandidates.slice(0, maxSessions);
+
+        if (targetMeta.length === 0) {
+            console.log(`📂 [MongoDB Session Restore] No valid active candidates for node "${myNode}".`);
+            return 0;
+        }
+
+        // Fetch ONLY the actual gzip data for the selected top sessions (strictly protects 512MB RAM)
+        const targetIds = targetMeta.map(d => d._id);
+        const targetDocs = await col.find({ _id: { $in: targetIds } }).toArray();
 
         console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring all ${targetDocs.length} valid sessions (Owners + 30-day active) for node "${myNode}" with Ultra-Lean (~25 files each)...`);
 

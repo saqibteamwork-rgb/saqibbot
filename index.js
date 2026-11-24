@@ -1355,7 +1355,7 @@ async function logoutSession(userId) {
     if (sessions[userId]) {
         if (sessions[userId].sock) {
             try {
-                const botNumber = jidNormalizedUser(sessions[userId].sock.user.id);
+                const botNumber = sessions[userId].sock?.user?.id ? jidNormalizedUser(sessions[userId].sock.user.id) : (userId + '@s.whatsapp.net');
                 await sessions[userId].sock.sendMessage(botNumber, {
                     text: "◤━━━━━━━━━━━━━━━◥\n" +
                           "   🔴 𝗕𝗢𝗧 𝗟𝗢𝗚𝗚𝗘𝗗 𝗢𝗨𝗧\n" +
@@ -4213,8 +4213,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         this.isPublic = (config.WORK_TYPE !== 'private');
                     }
 
-                    const botNumber = jidNormalizedUser(this.sock.user.id);
-                    const botName = botData.userNames[this.userId] || (this.sock.user && this.sock.user.name) || this.userId;
+                    const botNumber = this.sock?.user?.id ? jidNormalizedUser(this.sock.user.id) : (this.userId + '@s.whatsapp.net');
+                    const botName = botData.userNames[this.userId] || this.sock?.user?.name || this.userId;
 
                     // Send connected message to Telegram
                     if (this.tgChatId && tgBot) {
