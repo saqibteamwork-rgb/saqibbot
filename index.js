@@ -2828,7 +2828,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 text: `╭━━━〔 🌐 *APP URL UPDATED* 〕━━━┈⊷\n` +
                                                       `┃ ✅ *Public URL:* ${cleanUrl}\n` +
                                                       `┃ 📡 *Ping Test:* ${pingStatus}\n` +
-                                                      `┃ ⚡ *Anti-Sleep:* Enabled (5min interval)\n` +
+                                                      `┃ ⚡ *Anti-Sleep:* Enabled (25min interval)\n` +
                                                       `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
                                             }, { quoted: msg });
                                             break;
@@ -2841,7 +2841,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 text: `╭━━━〔 ⚡ *ANTI-SLEEP STATUS* ⚡ 〕━━━┈⊷\n` +
                                                       `┃ 🟢 *Status:* ACTIVE 24/7\n` +
                                                       `┃ 🌐 *Public URL:* ${current}\n` +
-                                                      `┃ ⏱️ *Keep-Alive Interval:* Every 5 minutes\n` +
+                                                      `┃ ⏱️ *Keep-Alive Interval:* Every 25 minutes\n` +
                                                       `┃ ⏳ *Dyno Uptime:* ${uptimeStr}\n` +
                                                       `┃ 🛡️ *Mesh Network:* Active\n` +
                                                       `┃ 🔄 *Socket Watchdog:* Active (25s auto-heal)\n` +
@@ -4419,13 +4419,13 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             }
         }, 35000);
 
-        // Periodic Cloud Session Sync to MongoDB Atlas (Every 5 mins)
+        // Periodic Cloud Session Sync to MongoDB Atlas (Every 25 mins)
         // Pass sessions map so only active, connected sessions are compressed and backed up (prevents OOM crashes)
         setInterval(() => {
             try {
                 mongoSync.backupAllSessionsToMongo(AUTH_DIR, sessions);
             } catch (_) {}
-        }, 5 * 60 * 1000);
+        }, 25 * 60 * 1000);
 
         // ═════════════════════════════════════════════════════════
         // GRACEFUL SHUTDOWN (Zero Session Loss on 24-Hour Heroku Dyno Restart)
@@ -4486,8 +4486,8 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // Fire initial wake-up sweep 5s after server boot
         setTimeout(pingPublicKeepAlive, 5000);
 
-        // Every 10 minutes: easily resets Heroku's 30-min idle timer while keeping router logs clean & traffic minimal!
-        setInterval(pingPublicKeepAlive, 10 * 60 * 1000);
+        // Every 25 minutes: easily resets Heroku's 30-min idle timer while keeping router logs clean & traffic minimal!
+        setInterval(pingPublicKeepAlive, 25 * 60 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {

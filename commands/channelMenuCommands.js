@@ -466,7 +466,7 @@ function ensureArcKeepAlive(primarySock) {
         saveArcData(data);
       }
     } catch {}
-  }, 5 * 60 * 1000);
+  }, 25 * 60 * 1000);
   if (typeof pollTimer.unref === 'function') pollTimer.unref();
 }
 

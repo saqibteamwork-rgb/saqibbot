@@ -46,7 +46,7 @@ const MB = 1024 * 1024;
 
 const envNum = (name, d) => { const n = Number(process.env[name]); return Number.isFinite(n) && n > 0 ? n : d; };
 const cfg = () => ({
-  pollMs: Math.max(60000, envNum('CHANNEL_POLL_MS', Number(config.channelSettings?.pollMs) || 5 * 60 * 1000)),
+  pollMs: Math.max(60000, envNum('CHANNEL_POLL_MS', Number(config.channelSettings?.pollMs) || 25 * 60 * 1000)),
   fetchWindow: Math.min(100, envNum('CHANNEL_FETCH_WINDOW', Number(config.channelSettings?.fetchWindow) || 40)),
   postTtlMs: envNum('CHANNEL_POST_TTL_MS', 14 * 24 * 3600 * 1000),
   maxPostsPerChannel: envNum('CHANNEL_MAX_POSTS', 150),
