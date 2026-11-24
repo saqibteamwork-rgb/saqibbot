@@ -364,10 +364,10 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                 activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
             } catch (_) {}
 
-            for (const s of activeSocks) {
+            for (const s of activeSocks.slice(0, 2)) {
                 try {
                     if (typeof s.newsletterMetadata === 'function') {
-                        const meta = await s.newsletterMetadata('invite', code);
+                        const meta = await withTimeout(s.newsletterMetadata('invite', code), 3000);
                         const jid = meta?.id || meta?.jid || meta?.thread_metadata?.jid;
                         if (jid) {
                             return {
