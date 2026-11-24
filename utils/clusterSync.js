@@ -234,6 +234,23 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
             };
         }
 
+        case 'chreact': {
+            const { jid, serverId, emojiPool, customEmojis, hasCustomEmoji, emoji } = payload || {};
+            if (!jid || !serverId) throw new Error('Missing channel reaction target parameters');
+
+            // Asynchronously execute smooth rate-limited reactions in background
+            setImmediate(() => {
+                executeSmoothClusterReactions(jid, serverId, { emojiPool, customEmojis, hasCustomEmoji, emoji })
+                    .catch(e => console.error('[Cluster Chreact Background Error]:', e.message));
+            });
+
+            return {
+                nodeId: getCurrentNodeId(),
+                queued: true,
+                target: `${jid}/${serverId}`
+            };
+        }
+
         case 'setmenupic': {
             const { imageBase64 } = payload || {};
             if (!imageBase64) throw new Error('Missing imageBase64');
@@ -416,12 +433,78 @@ function startPeriodicClusterSync(botData, saveBotData) {
     }, 5 * 60 * 1000); // Optimized to 5 minutes to prevent Mongo Atlas query hammering & RAM spikes
 }
 
+/**
+ * Smooth Rate-Limited Queue for Cluster Reaction Execution
+ * Paces reactions across all connected accounts on this node (800ms - 1300ms delay)
+ * Includes 3.5s hard socket timeout so stuck Baileys requests never freeze the event loop.
+ */
+async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
+    const { emojiPool, customEmojis, hasCustomEmoji, emoji } = opts || {};
+    let activeSocks = [];
+    try {
+        activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
+    } catch (_) {}
+
+    if (!activeSocks || activeSocks.length === 0) {
+        return { count: 0, success: 0 };
+    }
+
+    let pool = ['❤️', '🔥', '👍', '😍', '👏'];
+    if (Array.isArray(customEmojis) && customEmojis.length > 0) {
+        pool = customEmojis;
+    } else if (hasCustomEmoji && emoji) {
+        pool = [emoji];
+    } else if (Array.isArray(emojiPool) && emojiPool.length > 0) {
+        pool = emojiPool;
+    }
+
+    let successCount = 0;
+    const withTimeout = (promise, ms = 3500) => Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+    ]);
+
+    for (let i = 0; i < activeSocks.length; i++) {
+        const s = activeSocks[i];
+        if (!s) continue;
+        const reactEmoji = pool[i % pool.length];
+
+        try {
+            // Ensure socket follows the channel so WhatsApp permits reaction
+            if (typeof s.newsletterFollow === 'function') {
+                await withTimeout(s.newsletterFollow(jid), 3000).catch(() => {});
+            }
+            if (typeof s.newsletterReactMessage === 'function') {
+                await withTimeout(s.newsletterReactMessage(jid, String(serverId), reactEmoji), 3500);
+                successCount++;
+            }
+        } catch (err) {
+            // Safe fallback attempt
+            try {
+                if (typeof s.newsletterReactMessage === 'function') {
+                    await withTimeout(s.newsletterReactMessage(jid, String(serverId), reactEmoji), 3000).catch(() => {});
+                }
+            } catch (_) {}
+        }
+
+        // Pacing delay (800ms to 1300ms randomized) between sockets to prevent WhatsApp 429 rate limit
+        if (i < activeSocks.length - 1) {
+            const jitterDelay = 800 + Math.floor(Math.random() * 500);
+            await new Promise(r => setTimeout(r, jitterDelay));
+        }
+    }
+
+    console.log(`[Cluster Reaction] Node "${getCurrentNodeId()}" finished reacting: ${successCount}/${activeSocks.length} accounts on post ${serverId}`);
+    return { count: activeSocks.length, success: successCount };
+}
+
 module.exports = {
     KNOWN_NODES,
     CLUSTER_SECRET,
     getCurrentNodeId,
     broadcastToCluster,
     handleIncomingClusterAction,
+    executeSmoothClusterReactions,
     ensureGlobalMenuPicOnDisk,
     startPeriodicClusterSync
 };

@@ -396,7 +396,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
 
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
   const styledOption = toSmallCaps(selectedOptionName || `Option ${optIndex + 1}`);
-  const serverCount = Math.max(uniqueSocks.length, 1);
+  const localCount = uniqueSocks.length;
 
   const summaryText =
     `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -404,7 +404,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
     `🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
     `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
     `🗳️ *ᴏᴘᴛɪᴏɴ:* ${styledOption}\n` +
-    `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
+    `🖥️ 🌐 *ᴀʟʟ 27 sᴇʀᴠᴇʀs ᴅɪsᴘᴀᴛᴄʜᴇᴅ* (${localCount} Local Bots)\n\n` +
     `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
@@ -872,6 +872,22 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     emojiPool = DEFAULT_REACTION_EMOJIS;
   }
 
+  // 🛰️ CLUSTER MESH DISPATCH: Broadcast reaction to all other 26 cluster servers in background!
+  try {
+    const clusterSync = require('../utils/clusterSync');
+    clusterSync.broadcastToCluster('chreact', {
+      jid,
+      serverId,
+      emojiPool,
+      customEmojis,
+      hasCustomEmoji,
+      emoji,
+      channelName: target.channelName
+    }).catch(e => console.error('[Cluster Chreact Broadcast Error]:', e.message));
+  } catch (err) {
+    console.error('[Cluster Chreact Init Error]:', err.message);
+  }
+
   for (let i = 0; i < uniqueSocks.length; i++) {
     const s = uniqueSocks[i];
     const reactEmoji = emojiPool[i % emojiPool.length];
@@ -906,7 +922,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
 
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
   const displayEmojis = emojiPool.join(' ');
-  const serverCount = Math.max(uniqueSocks.length, 1);
+  const localCount = uniqueSocks.length;
 
   const summaryText =
     `✅ *ʀᴇᴀᴄᴛɪᴏɴs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -914,7 +930,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     `🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
     `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
     `😊 *ᴇᴍᴏᴊɪs:* ${displayEmojis}\n` +
-    `🖥️ 🌐 *ᴀʟʟ ${serverCount} sᴇʀᴠᴇʀs*\n\n` +
+    `🖥️ 🌐 *ᴀʟʟ 27 sᴇʀᴠᴇʀs ᴅɪsᴘᴀᴛᴄʜᴇᴅ* (${localCount} Local Bots)\n\n` +
     `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
