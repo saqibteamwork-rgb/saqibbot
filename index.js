@@ -53,6 +53,19 @@ const P = require('pino');
 const { OpenAI } = require('openai');
 const mongoSync = require('./utils/mongoSync');
 
+// Safe NodeCache loader for Baileys Signal Keys with fallback
+function getSignalNodeCache() {
+    try {
+        return require('@cacheable/node-cache').NodeCache;
+    } catch (_) {
+        try {
+            return require('@whiskeysockets/baileys/node_modules/@cacheable/node-cache').NodeCache;
+        } catch (e) {
+            return null;
+        }
+    }
+}
+
 // Import Commands
 const commands = {
     song: require('./commands/song'),
@@ -966,6 +979,37 @@ app.get('/api/session/delete', async (req, res) => {
     }
 });
 
+// Force Remote Ratchet Reset for desynced Bad MAC contacts
+app.get(['/api/session/reset-ratchet', '/api/session/fix-ratchet'], async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+        const botId = (req.query.botId || req.query.id || '').replace(/[^0-9]/g, '');
+        const target = req.query.target || req.query.sender || '';
+        if (!botId) return res.status(400).json({ error: 'Missing botId parameter' });
+
+        const sess = sessions[botId];
+        if (!sess) {
+            return res.status(404).json({ error: `Session "${botId}" not active on node ${mongoSync.getNodeId() || 'current'}` });
+        }
+
+        const targetJid = target || sess.sock?.user?.id;
+        if (!targetJid) {
+            return res.status(400).json({ error: 'Missing target JID or sender' });
+        }
+
+        await sess.purgeBadMacRatchet(targetJid);
+        return res.json({
+            success: true,
+            node: mongoSync.getNodeId() || 'current',
+            botId,
+            target: targetJid,
+            message: 'Ratchet purged from memory/disk and fresh WhatsApp server prekeys asserted'
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
 // Purge any stale/duplicate sessions for the same physical phone number
 app.get('/api/session/purge-duplicates', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1359,7 +1403,7 @@ async function loadExistingSessions() {
         });
 
         let started = 0;
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!
@@ -1374,10 +1418,9 @@ async function loadExistingSessions() {
             if (stats.isDirectory()) {
                 const credsFile = path.join(authPath, 'creds.json');
                 if (fs.existsSync(credsFile)) {
-                    const isOwnerNum = ownerNumbers.includes(userId);
-                    if (!isOwnerNum && started >= maxSessions) {
+                    if (started >= maxSessions) {
                         console.log(`⚠️ [RAM Shield] Max session limit (${maxSessions}) reached on this dyno. Skipping extra session "${userId}" to protect Heroku 512MB RAM.`);
-                        continue;
+                        break;
                     }
                     console.log('📂 [System] Found existing session for: ' + userId + '. Initializing...');
                     if (!sessions[userId]) {
@@ -1582,6 +1625,7 @@ class BotSession {
         this.isFreshPairing = false;
         this.userChats = {};
         this.lastConnectMessageTime = null;
+        this.signalKeyCache = null;
     }
 
     sendLog(message, type = 'info') {
@@ -1731,11 +1775,20 @@ class BotSession {
             const version = await getCachedBaileysVersion();
             const { state, saveCreds } = await useMultiFileAuthState(this.authPath);
 
+            const SignalNodeCache = getSignalNodeCache();
+            if (!this.signalKeyCache && SignalNodeCache) {
+                this.signalKeyCache = new SignalNodeCache({
+                    stdTTL: 300,
+                    useClones: false,
+                    deleteOnExpire: true
+                });
+            }
+
             this.sock = makeWASocket({
                 version,
                 auth: {
                     creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' })),
+                    keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }), this.signalKeyCache || undefined),
                 },
                 printQRInTerminal: false,
                 logger: P({ level: 'fatal' }),
@@ -1929,6 +1982,98 @@ class BotSession {
         }
     }
 
+    async purgeBadMacRatchet(rawSender) {
+        if (!rawSender || rawSender.includes('status') || rawSender.endsWith('@newsletter') || rawSender.endsWith('@g.us')) return;
+
+        try {
+            const senderUser = rawSender.split('@')[0].split(':')[0];
+            const senderDigits = senderUser.replace(/[^0-9]/g, '');
+            if (!senderDigits || senderDigits.length < 5) return;
+
+            console.log(`[Ratchet Reset] 🔄 Auto-purging corrupted ratchet state for ${rawSender} (user: ${senderUser})...`);
+
+            // 1. Delete session from Baileys Signal Repository (clears LibSignal in-memory session records)
+            if (this.sock?.signalRepository?.deleteSession) {
+                try {
+                    await this.sock.signalRepository.deleteSession([rawSender]);
+                    if (rawSender.endsWith('@lid')) {
+                        const pn = await this.sock.signalRepository.lidMapping?.getPNForLID?.(rawSender);
+                        if (pn) await this.sock.signalRepository.deleteSession([pn]);
+                    } else if (rawSender.endsWith('@s.whatsapp.net')) {
+                        const lid = await this.sock.signalRepository.lidMapping?.getLIDForPN?.(rawSender);
+                        if (lid) await this.sock.signalRepository.deleteSession([lid]);
+                    }
+                } catch (_) {}
+            }
+
+            // 2. Clear from authState.keys (nulls out the key in Baileys key store & triggers removeData on disk)
+            if (this.sock?.authState?.keys?.set) {
+                try {
+                    const sessionNullUpdates = {
+                        [senderUser]: null,
+                        [`${senderUser}.0`]: null,
+                        [`${senderUser}_1.0`]: null,
+                        [`${senderUser}:0.0`]: null,
+                        [`${senderUser}:1.0`]: null,
+                        [`${senderUser}:0`]: null,
+                        [`${senderUser}:1`]: null
+                    };
+                    await this.sock.authState.keys.set({ session: sessionNullUpdates });
+                } catch (_) {}
+            }
+
+            // 3. Clear directly from our signalKeyCache (removes from NodeCache in memory)
+            if (this.signalKeyCache) {
+                try {
+                    const allKeys = this.signalKeyCache.keys();
+                    for (const k of allKeys) {
+                        if (k.includes(senderUser) || (senderDigits && k.includes(senderDigits))) {
+                            this.signalKeyCache.del(k);
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 4. Force-unlink all matching session-* files on disk
+            if (this.authPath && fs.existsSync(this.authPath)) {
+                try {
+                    const existingFiles = fs.readdirSync(this.authPath);
+                    for (const file of existingFiles) {
+                        if (file.startsWith(`session-${senderDigits}`) || file.startsWith(`session-${senderUser}`)) {
+                            try {
+                                fs.unlinkSync(path.join(this.authPath, file));
+                                console.log(`[Ratchet Reset] 🗑️ Unlinked disk session file "${file}"`);
+                            } catch (_) {}
+                        }
+                    }
+                } catch (_) {}
+            }
+
+            // 5. Fetch fresh PreKeys from WhatsApp servers and inject a fresh session record
+            if (this.sock?.assertSessions) {
+                try {
+                    await this.sock.assertSessions([rawSender], true);
+                    console.log(`[Ratchet Reset] 🔑 Asserted fresh WhatsApp server prekeys for ${rawSender}`);
+                } catch (e) {
+                    console.warn(`[Ratchet Reset] assertSessions warning:`, e.message);
+                }
+            }
+
+            // 6. Send presence update so WhatsApp multi-device client re-negotiates E2E ratchet
+            if (this.sock) {
+                try {
+                    await this.sock.sendPresenceUpdate('available', rawSender);
+                } catch (_) {}
+            }
+
+            // 7. Update MongoDB backup so cloud doc immediately drops the stale ratchet
+            mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
+            console.log(`[Ratchet Reset] ✅ Ratchet reset & re-alignment completed for ${rawSender}`);
+        } catch (err) {
+            console.warn('[Ratchet Reset Error]:', err.message);
+        }
+    }
+
     bindSocketEvents(saveCreds) {
         this.sock.ev.on('creds.update', async () => {
             try {
@@ -2030,20 +2175,7 @@ class BotSession {
                     if (msg.messageStubType === 1 || msg.messageStubType === 2) {
                         const rawSender = msg.key?.participant || msg.key?.remoteJid || '';
                         if (rawSender && !rawSender.includes('status') && !rawSender.endsWith('@newsletter') && !rawSender.endsWith('@g.us')) {
-                            try {
-                                const senderDigits = rawSender.split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                if (senderDigits && senderDigits.length >= 5 && fs.existsSync(this.authPath)) {
-                                    const existingFiles = fs.readdirSync(this.authPath);
-                                    for (const file of existingFiles) {
-                                        if (file.startsWith(`session-${senderDigits}`) || file.startsWith(`session-${rawSender.split('@')[0]}`)) {
-                                            try {
-                                                fs.unlinkSync(path.join(this.authPath, file));
-                                                console.log(`[Ratchet Reset] 🔄 Cleared corrupted ratchet session file "${file}" for ${rawSender}`);
-                                            } catch (_) {}
-                                        }
-                                    }
-                                }
-                            } catch (_) {}
+                            this.purgeBadMacRatchet(rawSender).catch(() => {});
                         }
                     }
 
@@ -4199,11 +4331,14 @@ app.get('/api/qr/start', async (req, res) => {
         const { state, saveCreds } = await useMultiFileAuthState(authPath);
         const version = await getCachedBaileysVersion();
 
+        const SignalNodeCache = getSignalNodeCache();
+        const qrSignalCache = SignalNodeCache ? new SignalNodeCache({ stdTTL: 300, useClones: false, deleteOnExpire: true }) : null;
+
         const sock = makeWASocket({
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' })),
+                keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }), qrSignalCache || undefined),
             },
             printQRInTerminal: true,
             logger: P({ level: 'fatal' }),

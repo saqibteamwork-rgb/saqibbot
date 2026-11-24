@@ -760,10 +760,9 @@ async function restoreAllSessionsFromMongo(authDir) {
         });
 
         // 4. ULTRA SPEED RESTORE LIMIT:
-        // Safely bounds max sessions per dyno (5 sessions + owners) to strictly protect Heroku 512MB RAM from OOM crashes!
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '5' : '10'), 10);
-        const restoreLimit = Math.max(maxSessions, 5) + ownerNumbers.length;
-        const targetDocs = validCandidates.slice(0, restoreLimit);
+        // Safely bounds max sessions per dyno (4 sessions max) to strictly protect Heroku 512MB RAM from OOM crashes!
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
+        const targetDocs = validCandidates.slice(0, maxSessions);
 
         console.log(`⚡ [MongoDB Session Restore] Fast-Boot: Restoring all ${targetDocs.length} valid sessions (Owners + 30-day active) for node "${myNode}" with Ultra-Lean (~25 files each)...`);
 
