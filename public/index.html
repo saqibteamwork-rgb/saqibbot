@@ -400,7 +400,7 @@
     </section>
 
     <!-- =================================================================== -->
-    <!-- 3. 27-NODE CLOUD CLUSTER LOAD BALANCER & ROUTER (26 Heroku + 1 Railway) -->
+    <!-- 3. 49-NODE CLOUD CLUSTER LOAD BALANCER & ROUTER (48 Heroku + 1 Railway) -->
     <!-- =================================================================== -->
     <section class="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl border border-slate-700/80">
       <div class="flex items-center justify-between mb-3 px-1 flex-wrap gap-2">
@@ -409,12 +409,12 @@
                   <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                 </span>
-                <span class="text-xs font-black uppercase tracking-wider text-slate-200">27-Node Mega Cluster</span>
-                <span id="clusterStatusBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">27/27 Online</span>
+                <span class="text-xs font-black uppercase tracking-wider text-slate-200">49-Node Mega Cluster</span>
+                <span id="clusterStatusBadge" class="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">49/49 Online</span>
               </div>
               <div id="routingModeBadge" class="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1.5 shadow-sm">
                 <i class="fa-solid fa-bolt text-[10px]"></i>
-                <span id="routingModeText">Smart Auto (27 Nodes Balanced)</span>
+                <span id="routingModeText">Smart Auto (49 Nodes Balanced)</span>
               </div>
             </div>
 
@@ -435,12 +435,12 @@
                 </span>
               </div>
               <div class="flex items-center justify-between text-xs text-slate-200">
-                <span class="font-bold text-white text-[11px] sm:text-xs">Dynamic Load-Balance &amp; Instant Failover (26 Heroku + 1 Railway)</span>
+                <span class="font-bold text-white text-[11px] sm:text-xs">Dynamic Load-Balance &amp; Instant Failover (48 Heroku + 1 Railway)</span>
                 <span class="text-[10px] text-emerald-300 font-semibold hidden sm:inline">⚡ High Speed Routing</span>
               </div>
             </button>
 
-            <!-- 2. Individual 27 Nodes Grid -->
+            <!-- 2. Individual 49 Nodes Grid -->
             <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <!-- S1: Heroku 1 -->
               <button
@@ -860,6 +860,28 @@
                 </div>
               </button>
 
+              <!-- S21: Heroku 21 -->
+              <button
+                type="button"
+                id="serverCard_s21"
+                onclick="setServerRouting('s21')"
+                class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"
+              >
+                <div class="flex items-center justify-between mb-0.5">
+                  <span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1">
+                    <i class="fa-brands fa-docker text-[10px]"></i> Node 21
+                  </span>
+                  <span id="s21Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                </div>
+                <div class="text-[11px] font-black text-white truncate flex items-center justify-between">
+                  <span>Heroku-21</span>
+                  <span id="s21Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span>
+                </div>
+                <div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between">
+                  <span id="s21Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
+                </div>
+              </button>
+
               <!-- S22: Heroku 22 -->
               <button
                 type="button"
@@ -1013,6 +1035,29 @@
                   <span id="s28Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span>
                 </div>
               </button>
+
+              <!-- S29..S50: Additional Heroku Cluster Nodes -->
+              <button type="button" id="serverCard_s29" onclick="setServerRouting('s29')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 29</span><span id="s29Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-29</span><span id="s29Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s29Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s30" onclick="setServerRouting('s30')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 30</span><span id="s30Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-30</span><span id="s30Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s30Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s32" onclick="setServerRouting('s32')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 32</span><span id="s32Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-32</span><span id="s32Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s32Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s33" onclick="setServerRouting('s33')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 33</span><span id="s33Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-33</span><span id="s33Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s33Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s34" onclick="setServerRouting('s34')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 34</span><span id="s34Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-34</span><span id="s34Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s34Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s35" onclick="setServerRouting('s35')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 35</span><span id="s35Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-35</span><span id="s35Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s35Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s36" onclick="setServerRouting('s36')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 36</span><span id="s36Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-36</span><span id="s36Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s36Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s37" onclick="setServerRouting('s37')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 37</span><span id="s37Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-37</span><span id="s37Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s37Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s38" onclick="setServerRouting('s38')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 38</span><span id="s38Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-38</span><span id="s38Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s38Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s39" onclick="setServerRouting('s39')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 39</span><span id="s39Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-39</span><span id="s39Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s39Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s40" onclick="setServerRouting('s40')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 40</span><span id="s40Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-40</span><span id="s40Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s40Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s41" onclick="setServerRouting('s41')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 41</span><span id="s41Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-41</span><span id="s41Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s41Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s42" onclick="setServerRouting('s42')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 42</span><span id="s42Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-42</span><span id="s42Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s42Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s43" onclick="setServerRouting('s43')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 43</span><span id="s43Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-43</span><span id="s43Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s43Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s44" onclick="setServerRouting('s44')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 44</span><span id="s44Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-44</span><span id="s44Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s44Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s45" onclick="setServerRouting('s45')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 45</span><span id="s45Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-45</span><span id="s45Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s45Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s46" onclick="setServerRouting('s46')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 46</span><span id="s46Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-46</span><span id="s46Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s46Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s47" onclick="setServerRouting('s47')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 47</span><span id="s47Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-47</span><span id="s47Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s47Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s48" onclick="setServerRouting('s48')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 48</span><span id="s48Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-48</span><span id="s48Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s48Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s49" onclick="setServerRouting('s49')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 49</span><span id="s49Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-49</span><span id="s49Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s49Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
+              <button type="button" id="serverCard_s50" onclick="setServerRouting('s50')" class="server-pill-btn p-2 rounded-xl border border-slate-700/80 bg-slate-800/80 hover:bg-slate-700/60 text-left transition relative cursor-pointer group"><div class="flex items-center justify-between mb-0.5"><span class="text-[9px] font-black uppercase tracking-wider text-purple-300 flex items-center gap-1"><i class="fa-brands fa-docker text-[10px]"></i> Node 50</span><span id="s50Dot" class="w-2 h-2 rounded-full bg-emerald-400"></span></div><div class="text-[11px] font-black text-white truncate flex items-center justify-between"><span>Heroku-50</span><span id="s50Ping" class="text-[9px] font-mono text-slate-400 font-bold">--ms</span></div><div class="text-[9px] text-slate-300 font-semibold truncate mt-0.5 flex items-center justify-between"><span id="s50Capacity" class="text-emerald-400 font-bold flex items-center gap-1"><i class="fa-solid fa-circle-check text-[8px]"></i> Online</span></div></button>
 
               <!-- S_Railway: Railway Hub Node -->
               <button
@@ -1766,6 +1811,16 @@
         active: 0,
         ping: null
       },
+      s21: {
+        id: 's21',
+        name: 'Node 21 (Heroku-21)',
+        short: 'Heroku-21',
+        url: 'https://saqibbot21-ac7859f5f0fb.herokuapp.com',
+        type: 'Heroku',
+        online: true,
+        active: 0,
+        ping: null
+      },
       s22: {
         id: 's22',
         name: 'Node 22 (Heroku-22)',
@@ -1836,6 +1891,27 @@
         active: 0,
         ping: null
       },
+      s29: { id: 's29', name: 'Node 29 (Heroku-29)', short: 'Heroku-29', url: 'https://saqibot29-94eae3596692.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s30: { id: 's30', name: 'Node 30 (Heroku-30)', short: 'Heroku-30', url: 'https://saqibot30-e89854c3fef2.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s32: { id: 's32', name: 'Node 32 (Heroku-32)', short: 'Heroku-32', url: 'https://saqibot32-daa98fd51f65.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s33: { id: 's33', name: 'Node 33 (Heroku-33)', short: 'Heroku-33', url: 'https://saqibot33-454998cdc49b.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s34: { id: 's34', name: 'Node 34 (Heroku-34)', short: 'Heroku-34', url: 'https://saqibot34-88b9afd45ae5.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s35: { id: 's35', name: 'Node 35 (Heroku-35)', short: 'Heroku-35', url: 'https://saqibot35-b5a65594dc78.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s36: { id: 's36', name: 'Node 36 (Heroku-36)', short: 'Heroku-36', url: 'https://saqibot36-822da6a7cddd.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s37: { id: 's37', name: 'Node 37 (Heroku-37)', short: 'Heroku-37', url: 'https://saqibot37-46d3819a472c.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s38: { id: 's38', name: 'Node 38 (Heroku-38)', short: 'Heroku-38', url: 'https://saqibot38-520caade1fd3.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s39: { id: 's39', name: 'Node 39 (Heroku-39)', short: 'Heroku-39', url: 'https://saqibot39-6fa296b89e98.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s40: { id: 's40', name: 'Node 40 (Heroku-40)', short: 'Heroku-40', url: 'https://saqibot40-d19a79bf6170.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s41: { id: 's41', name: 'Node 41 (Heroku-41)', short: 'Heroku-41', url: 'https://saqibbot41-fd5991fd6038.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s42: { id: 's42', name: 'Node 42 (Heroku-42)', short: 'Heroku-42', url: 'https://saqibbot42-18e1d04afef3.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s43: { id: 's43', name: 'Node 43 (Heroku-43)', short: 'Heroku-43', url: 'https://saqibot43-4ac9ae252f6b.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s44: { id: 's44', name: 'Node 44 (Heroku-44)', short: 'Heroku-44', url: 'https://saqibobot44-6379b396e027.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s45: { id: 's45', name: 'Node 45 (Heroku-45)', short: 'Heroku-45', url: 'https://saqibot45-4fee2ad8369c.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s46: { id: 's46', name: 'Node 46 (Heroku-46)', short: 'Heroku-46', url: 'https://saqibbt46-3c399938d5a6.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s47: { id: 's47', name: 'Node 47 (Heroku-47)', short: 'Heroku-47', url: 'https://saqibot47-6f2e03e874fc.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s48: { id: 's48', name: 'Node 48 (Heroku-48)', short: 'Heroku-48', url: 'https://saqibot48-ac004fb8d44b.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s49: { id: 's49', name: 'Node 49 (Heroku-49)', short: 'Heroku-49', url: 'https://saqibot49-e792da7c6864.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
+      s50: { id: 's50', name: 'Node 50 (Heroku-50)', short: 'Heroku-50', url: 'https://saqibot50-d29d71852e9a.herokuapp.com', type: 'Heroku', online: true, active: 0, ping: null },
       railway: {
         id: 'railway',
         name: 'Railway (Hub)',
@@ -1848,14 +1924,14 @@
       }
     };
 
-    let selectedServerMode = 'auto'; // 'auto' | 's1'..'s10' | 'railway'
+    let selectedServerMode = 'auto'; // 'auto' | 's1'..'s50' | 'railway'
     let autoCounter = 0;
 
     function setServerRouting(mode) {
       selectedServerMode = mode;
       updateServerButtonsUI();
       if (mode === 'auto') {
-        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all 27 Cloud Nodes (26 Heroku + 1 Railway)', 'info');
+        addLog('⚡ Smart Load-Balancer activated: Traffic distributed across all 49 Cloud Nodes (48 Heroku + 1 Railway)', 'info');
       } else if (CLUSTER[mode]) {
         addLog(`📍 Dedicated Routing: Locked to ${CLUSTER[mode].name}`, 'info');
       }
@@ -1882,7 +1958,7 @@
       if (selectedServerMode === 'auto') {
         if (btnAuto) btnAuto.className = 'w-full mb-2.5 p-2.5 sm:p-3 rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-500/25 via-teal-500/20 to-sky-500/20 text-left transition relative cursor-pointer shadow-md group ring-2 ring-emerald-400/30';
         if (checkAuto) checkAuto.classList.remove('hidden');
-        if (modeText) modeText.textContent = 'Smart Auto (27 Nodes Balanced)';
+        if (modeText) modeText.textContent = 'Smart Auto (49 Nodes Balanced)';
       } else if (CLUSTER[selectedServerMode]) {
         const btn = document.getElementById('serverCard_' + selectedServerMode);
         const node = CLUSTER[selectedServerMode];
