@@ -28,6 +28,15 @@ const withTimeout = (promise, ms = 3500) => Promise.race([
   new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
 ]);
 
+function getClusterServerCount() {
+  try {
+    const clusterSync = require('../utils/clusterSync');
+    const n = Object.keys(clusterSync.KNOWN_NODES || {}).length;
+    if (n > 0) return n;
+  } catch {}
+  return 49;
+}
+
 const VOTE_EMOJI_MAP = {
   '1': '1️⃣',
   '2': '2️⃣',
@@ -397,6 +406,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
   const styledOption = toSmallCaps(selectedOptionName || `Option ${optIndex + 1}`);
   const localCount = uniqueSocks.length;
+  const totalClusterNodes = getClusterServerCount();
 
   const summaryText =
     `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -404,7 +414,7 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
     `🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
     `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
     `🗳️ *ᴏᴘᴛɪᴏɴ:* ${styledOption}\n` +
-    `🖥️ 🌐 *ᴀʟʟ 27 sᴇʀᴠᴇʀs ᴅɪsᴘᴀᴛᴄʜᴇᴅ* (${localCount} Local Bots)\n\n` +
+    `🖥️ 🌐 *ᴀʟʟ ${totalClusterNodes} sᴇʀᴠᴇʀs ᴅɪsᴘᴀᴛᴄʜᴇᴅ* (${localCount} Local Bots)\n\n` +
     `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});
@@ -872,7 +882,8 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     emojiPool = DEFAULT_REACTION_EMOJIS;
   }
 
-  // 🛰️ CLUSTER MESH DISPATCH: Broadcast reaction to all other 26 cluster servers in background!
+  // 🛰️ CLUSTER MESH DISPATCH: Broadcast reaction to all configured cluster servers in background!
+  const totalClusterNodes = getClusterServerCount();
   try {
     const clusterSync = require('../utils/clusterSync');
     clusterSync.broadcastToCluster('chreact', {
@@ -930,7 +941,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     `🎯 *ᴄʜᴀɴɴᴇʟ:* ${styledChannel}\n` +
     `📝 *ᴘᴏsᴛ:* ${serverId}\n` +
     `😊 *ᴇᴍᴏᴊɪs:* ${displayEmojis}\n` +
-    `🖥️ 🌐 *ᴀʟʟ 27 sᴇʀᴠᴇʀs ᴅɪsᴘᴀᴛᴄʜᴇᴅ* (${localCount} Local Bots)\n\n` +
+    `🖥️ 🌐 *ᴀʟʟ ${totalClusterNodes} sᴇʀᴠᴇʀs ᴅɪsᴘᴀᴛᴄʜᴇᴅ* (${localCount} Local Bots)\n\n` +
     `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
 
   await sock.sendMessage(from, { text: summaryText }, { quoted: msg }).catch(() => {});

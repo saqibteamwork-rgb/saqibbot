@@ -1939,10 +1939,21 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
     const onlineCount = items.filter(it => it.isOnline).length;
     const offlineCount = items.filter(it => !it.isOnline).length;
 
-    // Server Environment Detection
+    // Server Environment Detection & Parallel Cluster Polling
+    let mongoSync = null;
+    try {
+        mongoSync = require('./mongoSync');
+    } catch (_) {}
+
     const isHeroku = Boolean(process.env.HEROKU_APP_NAME || process.env.DYNO);
     const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_NAME);
-    const serverNode = isHeroku ? 'Heroku Dyno (Server 1)' : (isRailway ? 'Railway Cloud Engine' : 'Dedicated Cloud Node');
+    const currentNodeId = (mongoSync && typeof mongoSync.getNodeId === 'function')
+        ? mongoSync.getNodeId()
+        : (isRailway ? 'railway' : 'local');
+    const currentNodeMeta = CLUSTER_MONITOR_NODES.find(n => n.id === currentNodeId);
+    const serverNode = currentNodeMeta
+        ? currentNodeMeta.name
+        : (isHeroku ? `Heroku Dyno (${process.env.HEROKU_APP_NAME || currentNodeId})` : (isRailway ? 'Railway Cloud Engine' : 'Dedicated Cloud Node'));
 
     // System stats
     const uptimeSec = Math.floor(process.uptime());
@@ -1950,36 +1961,38 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
     const uptimeMins = Math.floor((uptimeSec % 3600) / 60);
     const ramMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
 
-    // Parallel Cluster Health & Sessions Polling across 11 Nodes
+    // Parallel Cluster Health & Sessions Polling across all configured Cluster Nodes
     // Cross-verify with MongoDB Atlas whatsapp_sessions cloud collection
     let mongoClusterSessions = [];
     try {
-        const mongoSync = require('./mongoSync');
-        mongoClusterSessions = await mongoSync.getAllClusterSessions();
+        if (mongoSync) {
+            mongoClusterSessions = await mongoSync.getAllClusterSessions();
+        }
     } catch (_) {}
 
+    const hostSessionIds = items.map(it => it.id);
     const clusterResults = await Promise.allSettled(
         CLUSTER_MONITOR_NODES.map(async (node) => {
             const t0 = Date.now();
             const mongoForNode = mongoClusterSessions.filter(s => s && s.nodeId === node.id);
             const mongoCount = mongoForNode.length;
             try {
-                const isCurrentHost = (isRailway && node.id === 'railway') || (isHeroku && process.env.HEROKU_APP_NAME?.includes(node.id));
+                const isCurrentHost = node.id === currentNodeId;
                 if (isCurrentHost) {
                     return {
                         id: node.id,
                         name: node.name,
                         online: true,
                         active: onlineCount,
-                        total: Math.max(sessionList.length, mongoCount),
+                        total: Math.max(hostSessionIds.length, mongoCount),
                         ping: 1,
                         isCurrent: true,
-                        sessions: sessionList
+                        sessions: hostSessionIds
                     };
                 }
 
                 const res = await axios.get(`${node.url}/health`, {
-                    timeout: 6500,
+                    timeout: 4500,
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SaqibBotClusterMonitor/2.0' }
                 });
                 const ping = Date.now() - t0;
@@ -2055,7 +2068,7 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
         });
     }
 
-    // 2. Remote cluster node numbers (from MongoDB cloud sync across 11 nodes)
+    // 2. Remote cluster node numbers (from MongoDB cloud sync across all cluster nodes)
     const hostNumberSet = new Set(items.map(it => String(it.id).replace(/[^0-9]/g, '')));
     clusterResults.forEach((res) => {
         if (res.status === 'fulfilled') {
@@ -2077,18 +2090,19 @@ async function checkSessionsCommand(sock, from, msg, isOwner, args = [], session
         listText = `┃ 📭 *Cluster me koi number pair nahi mila!*`;
     }
 
+    const totalMonitorNodes = CLUSTER_MONITOR_NODES.length;
     const message =
-`╭━━━〔 🖥️ *11-NODE MEGA CLUSTER (.cs)* 〕━━━┈⊷\n` +
+`╭━━━〔 🖥️ *${totalMonitorNodes}-NODE MEGA CLUSTER (.cs)* 〕━━━┈⊷\n` +
 `┃ 👑 *Master Owner:* MR SAQIB\n` +
 `┃ 🌐 *Current Host:* ${serverNode}\n` +
 `┃ ⚡ *RAM Usage:* ${ramMb} MB | *Uptime:* ${uptimeHrs}h ${uptimeMins}m\n` +
 `┃\n` +
 `┃ 📊 *CLUSTER SUMMARY:*\n` +
-`┃ 🌐 *Cluster Nodes:* ${clusterOnlineNodes}/11 Online\n` +
+`┃ 🌐 *Cluster Nodes:* ${clusterOnlineNodes}/${totalMonitorNodes} Online\n` +
 `┃ 🚀 *TOTAL CLUSTER PAIRED:* ${clusterTotalActive} Numbers Active\n` +
 `┃ 🟢 *Host Active:* ${onlineCount} | 🔴 *Host Idle:* ${offlineCount}\n` +
 `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
-`┃ 🌐 *11-NODE LIVE BREAKDOWN:*\n` +
+`┃ 🌐 *${totalMonitorNodes}-NODE LIVE BREAKDOWN:*\n` +
 `${nodeLines.join('\n')}\n` +
 `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
 `┃ 📋 *CLUSTER PAIRED NUMBERS LIST:*\n` +
