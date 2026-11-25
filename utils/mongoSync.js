@@ -777,17 +777,18 @@ async function restoreAllSessionsFromMongo(authDir) {
         });
 
         // 4. ULTRA SPEED RESTORE LIMIT:
-        // Safely bounds max sessions per dyno (4 sessions max) to strictly protect Heroku 512MB RAM from OOM crashes!
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
+        // Default 10 bots per dyno (override via MAX_SESSIONS) so paired sessions stay connected without dropping.
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || '10', 10);
         const targetMeta = validCandidates.slice(0, maxSessions);
 
-        // 4.5 ORPHAN RESCUE: If this cloud dyno still has free slots (< maxSessions), adopt unassigned or stranded recent sessions!
-        if (targetMeta.length < maxSessions && myNode && myNode !== 'default' && myNode !== 'all' && myNode !== 'local') {
+        // 4.5 ORPHAN RESCUE: If this cloud dyno still has low session count (< 5), adopt live unassigned or stranded recent sessions!
+        const orphanFillCap = Math.min(maxSessions, 5);
+        if (targetMeta.length < orphanFillCap && myNode && myNode !== 'default' && myNode !== 'all' && myNode !== 'local') {
             try {
-                const slotsLeft = maxSessions - targetMeta.length;
+                const slotsLeft = orphanFillCap - targetMeta.length;
                 const alreadyPicked = new Set(targetMeta.map(d => String(d._id)));
                 const staleCutoff = now - 15 * 60 * 1000; // Not updated in last 15 mins (stranded by dead/full dyno)
-                const recentCutoff = now - 48 * 3600 * 1000; // Active in last 48h
+                const recentCutoff = now - 8 * 3600 * 1000; // Active in last 8h only (avoid reviving old logged-out ghosts)
 
                 const locksCol = db.collection('session_locks');
                 const activeLocks = await locksCol.find({ heartbeat: { $gte: now - 10 * 60 * 1000 } }, { projection: { _id: 1 } }).toArray();
@@ -795,6 +796,7 @@ async function restoreAllSessionsFromMongo(authDir) {
 
                 const orphanMeta = await col.find({
                     fileCount: { $gt: 1 },
+                    isConnected: { $ne: false },
                     $or: [
                         { nodeId: { $in: ['default', null] } },
                         { nodeId: { $exists: false } },

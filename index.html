@@ -1898,20 +1898,20 @@
     function getTargetServerNode() {
       if (selectedServerMode !== 'auto' && CLUSTER[selectedServerMode]) {
         const node = CLUSTER[selectedServerMode];
-        if (node.online && (node.active || 0) < (node.maxSessions || 4) && (node.mem || 0) < 470) return node;
+        if (node.online && (node.active || 0) < (node.maxSessions || 10) && (node.mem || 0) < 475) return node;
         if (node.online) {
-          addLog(`⚠️ ${node.short} is at full capacity (${node.active}/4 bots). Smart-routing to a lighter node for 24/7 stability...`, 'info');
+          addLog(`⚠️ ${node.short} is at full capacity (${node.active}/${node.maxSessions || 10} bots). Smart-routing to a lighter node for 24/7 stability...`, 'info');
         } else {
           addLog(`⚠️ Selected ${node.short} is unresponsive, auto-routing to healthy node...`, 'error');
         }
       }
 
-      // Auto mode: prioritize online nodes strictly under capacity (< maxSessions & < 460MB RAM)
+      // Auto mode: prioritize online nodes strictly under capacity (< maxSessions & < 475MB RAM)
       const allNodes = Object.values(CLUSTER);
       const onlineNodes = allNodes.filter(n => n.online);
       if (onlineNodes.length === 0) return CLUSTER.s1;
 
-      const underCap = onlineNodes.filter(n => (n.active || 0) < (n.maxSessions || 4) && (n.mem || 0) < 470);
+      const underCap = onlineNodes.filter(n => (n.active || 0) < (n.maxSessions || 10) && (n.mem || 0) < 475);
       const pool = underCap.length > 0 ? underCap : onlineNodes;
 
       // Least-loaded first, then lowest RAM
@@ -1963,7 +1963,7 @@
               node.ping = latency;
               const activeCount = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
               node.active = activeCount;
-              node.maxSessions = data.maxSessions || 4;
+              node.maxSessions = data.maxSessions || 10;
               node.mem = data.memoryUsageMb || 0;
               totalActiveBots += activeCount;
               onlineServersCount++;

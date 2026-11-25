@@ -621,7 +621,7 @@ app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
     }
     const activeCount = uniqueActive.size;
     const totalCount = uniqueTotal.size;
-    const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
+    const maxSessions = parseInt(process.env.MAX_SESSIONS || '10', 10);
     res.status(200).json({
         status: 'ok',
         alive: true,
@@ -1437,7 +1437,7 @@ async function loadExistingSessions() {
         });
 
         let started = 0;
-        const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
+        const maxSessions = parseInt(process.env.MAX_SESSIONS || '10', 10);
         for (const userId of authDirs) {
             if (userId.includes('_backup_') || userId.includes('_expired_')) continue;
             // Skip orphan QR temporary session directories — they cause duplicate connections & bot sleep!
@@ -4762,14 +4762,14 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 1 min; runs GC if RSS > 300MB to strictly guarantee dyno never hits 512MB OOM)
+        // Periodic Memory Trimmer (Runs every 1 min; triggers GC if RSS > 340MB to support up to 10 bots safely under 512MB)
         setInterval(() => {
             const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-            if (memMb > 300) {
+            if (memMb > 340) {
                 if (global.gc) {
                     try { global.gc(); } catch (e) {}
                 }
-                if (memMb > 360) {
+                if (memMb > 400) {
                     try {
                         if (typeof groupMetaCache !== 'undefined' && groupMetaCache.clear) groupMetaCache.clear();
                         if (typeof inflightGroupMeta !== 'undefined' && inflightGroupMeta.clear) inflightGroupMeta.clear();
