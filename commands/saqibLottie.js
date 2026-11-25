@@ -161,7 +161,8 @@ async function saqibLottieCommand(sock, from, msg, args = [], commandName = 'saq
 ┃ 🔹 *.saqib* / *.saq* : Send standalone animated Lottie sticker
 ┃ 🔹 *.saqreact* / *.saqibreact* (or reply to any message with *.saqib*):
 ┃    Attach Lottie sticker as reaction on that message!
-┃ 🔹 *.saqsticker* / *.saqibsticker* : Direct standalone sticker
+┃ 🔹 *.saqibsend* / *.saqsend* / *.sendlottie* / *.saqibsticker* :
+┃    Direct standalone animated Lottie sticker send karein (reply par bhi send hoga!)
 ┃ 🔹 *.saqib send* : Force standalone send even in reply
 ┃ 🔹 *.saqib save [name]* : Save into your personal \`.sts\` collection
 ┃ 🔹 *.saqib <number>* : Forward sticker to specific contact/group
@@ -224,7 +225,12 @@ async function saqibLottieCommand(sock, from, msg, args = [], commandName = 'saq
         const stickerObj = buildStickerMessageObject();
 
         // 4. REACTION MODE (Quoted message present OR user called .saqreact / .saqibreact)
-        const isExplicitSend = (sub === 'send' || sub === 's' || cmd === 'saqsticker' || cmd === 'saqibsticker');
+        const isExplicitSend = (
+            sub === 'send' || sub === 's' ||
+            cmd === 'saqsticker' || cmd === 'saqibsticker' ||
+            cmd === 'saqibsend' || cmd === 'saqsend' ||
+            cmd === 'sendlottie' || cmd === 'saqibdirect' || cmd === 'saqdirect'
+        );
         const isExplicitReact = (sub === 'react' || sub === 'r' || sub === 'reaction' || cmd === 'saqreact' || cmd === 'saqibreact');
         const hasQuoted = Boolean(stanzaId && (quoted || participant));
 

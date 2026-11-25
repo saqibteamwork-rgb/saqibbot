@@ -222,7 +222,7 @@ const { wikiCommand } = require('./commands/wiki');
 const { npmCommand } = require('./commands/npm');
 const { capcutCommand } = require('./commands/capcut');
 const { downloadCommand } = require('./commands/download');
-const { saveStickerCommand, repeatReactCommand } = require('./commands/stickerReact');
+const { saveStickerCommand, repeatReactCommand, sendSavedStickerCommand } = require('./commands/stickerReact');
 const { silentSaveCommand } = require('./commands/silentsave');
 const silentMediaSaver = require('./utils/silentMediaSaver');
 const viewOnceManager = require('./utils/viewOnceManager');
@@ -3523,6 +3523,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'sts': case 'savesticker': case 'setsticker': case 'addsticker': case 'ss':
                                             await saveStickerCommand(this.sock, from, msg, args);
                                             break;
+                                        case 'stssend': case 'getsticker': case 'sendsts':
+                                            await sendSavedStickerCommand(this.sock, from, msg, args);
+                                            break;
                                         case 'rs': case 'rs1': case 'rs2': case 'rs3': case 'rs4': case 'rs5': case 'rs6': case 'rs7': case 'rs8': case 'rs9': case 'rs10': case 'rs15': case 'rs20':
                                         case 'sreact': case 'stickerreact': case 'reactsticker': case 'sreaction':
                                             await repeatReactCommand(this.sock, from, msg, args, command);
@@ -3532,7 +3535,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'lottie': case 'was': case 'asticker': case 'avatar': case 'lottiesticker':
                                             await lottieCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'saqib': case 'saq': case 'saqibsticker': case 'saqsticker': case 'saqibreact': case 'saqreact': case 'saqibofc': case 'lottie2': case 'was2': case 'premiumsticker':
+                                        case 'saqib': case 'saq': case 'saqibsticker': case 'saqsticker': case 'saqibsend': case 'saqsend': case 'sendlottie': case 'saqibdirect': case 'saqdirect': case 'saqibreact': case 'saqreact': case 'saqibofc': case 'lottie2': case 'was2': case 'premiumsticker':
                                             await saqibLottieCommand(this.sock, from, msg, args, command);
                                             break;
                                         // ===== PREMIUM STICKER VAULT & REACTION (.saveprem / .prs1 / .prem1) =====

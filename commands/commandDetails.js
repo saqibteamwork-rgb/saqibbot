@@ -162,23 +162,23 @@ const COMMAND_GUIDES = {
   },
   saqib: {
     name: 'saqib',
-    aliases: ['saq', 'saqibsticker', 'saqsticker', 'saqibreact', 'saqreact', 'saqibofc', 'lottie2', 'was2', 'premiumsticker'],
+    aliases: ['saq', 'saqibsend', 'saqsend', 'sendlottie', 'saqibdirect', 'saqdirect', 'saqibsticker', 'saqsticker', 'saqibreact', 'saqreact', 'saqibofc', 'lottie2', 'was2', 'premiumsticker'],
     category: 'STICKER & REACTION',
     permission: 'Everyone 🌐',
-    usage: '.saqib [send | react | save | info | <number>]',
-    desc: 'Official WhatsApp Native Vector Animated Lottie Sticker (.was). Standalone send karta hai ya replied message par sticker reaction attach karta hai.',
+    usage: '.saqibsend | .saqibreact | .saqib [send | react | save | info | <number>]',
+    desc: 'Official WhatsApp Native Vector Animated Lottie Sticker (.was). .saqibsend se direct sticker chat mein send hota hai aur .saqibreact se message par react karta hai.',
     params: [
-      'send: Force standalone sticker send',
-      'react: Attach sticker reaction on quoted message',
+      '.saqibsend / .saqibsticker: Direct standalone Lottie sticker chat mein send karein',
+      '.saqibreact: Quoted message par Lottie sticker reaction attach karein',
       'save [name]: Save into your personal collection',
       'info: Show detailed vector specs card',
       '<number>: Send sticker directly to that phone number'
     ],
     examples: [
-      '.saqib (Standalone animated Lottie sticker)',
-      '(Message ko reply karein) ➜ .saqreact (Attach Lottie reaction)',
+      '.saqibsend (Direct animated Lottie sticker send karein)',
+      '(Message ko reply karein) ➜ .saqibreact (Attach Lottie reaction)',
       '.saqib save vip (Save to personal collection)',
-      '.saqib 923438673242 (Send to number)',
+      '.saqibsend 923438673242 (Send to number)',
       '.saqib info'
     ]
   },

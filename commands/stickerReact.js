@@ -824,9 +824,66 @@ async function repeatReactCommand(sock, from, msg, args = [], commandName = 'rs'
     }
 }
 
+/**
+ * Direct Standalone Send of any user's personal saved (.sts) sticker
+ * Commands: .stssend [name] | .getsticker [name] | .sendsts [name]
+ */
+async function sendSavedStickerCommand(sock, from, msg, args = []) {
+    try {
+        const store = loadSavedStickers();
+        const userIds = await extractUserIdentifiers(sock, from, msg, store);
+        const userRecord = getUserRecord(store, userIds.canonicalId);
+        const userStickers = userRecord.stickers || {};
+        const myKeys = Object.keys(userStickers);
+
+        if (myKeys.length === 0) {
+            return await sock.sendMessage(from, {
+                text: `⚠️ *Aapka personal sticker collection khali hai!*\n💡 Pehle kisi sticker par reply karke *.sts [name]* likhein, phir *.stssend [name]* se direct send karein.`
+            }, { quoted: msg });
+        }
+
+        const requestedName = (args[0] || '').toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        const matchedKey = requestedName
+            ? myKeys.find((k) => k.toLowerCase() === requestedName)
+            : (userRecord.latest && userStickers[userRecord.latest] ? userRecord.latest : myKeys[myKeys.length - 1]);
+
+        if (!matchedKey || !userStickers[matchedKey]) {
+            return await sock.sendMessage(from, {
+                text: `❌ Sticker *"${requestedName}"* nahi mila!\n📋 Apne stickers dekhne ke liye likhein: *.sts list*`
+            }, { quoted: msg });
+        }
+
+        const s = userStickers[matchedKey];
+        const stickerObj = {
+            url: s.url || '',
+            fileSha256: ensureBuffer(s.fileSha256),
+            fileEncSha256: ensureBuffer(s.fileEncSha256),
+            mediaKey: ensureBuffer(s.mediaKey),
+            fileLength: Number(s.fileLength) || 134248,
+            height: Number(s.height) || (s.isLottie ? 64 : 512),
+            width: Number(s.width) || (s.isLottie ? 64 : 512),
+            mimetype: s.mimetype || (s.isLottie ? 'application/was' : 'image/webp'),
+            directPath: s.directPath || '',
+            isAnimated: Boolean(s.isAnimated || s.isLottie),
+            isAvatar: Boolean(s.isAvatar),
+            isLottie: Boolean(s.isLottie)
+        };
+
+        const payload = s.isLottie
+            ? { lottieStickerMessage: { message: { stickerMessage: stickerObj } } }
+            : { stickerMessage: stickerObj };
+
+        await sock.relayMessage(from, payload, {});
+    } catch (e) {
+        console.error('[sendSavedStickerCommand Error]:', e);
+        return await sock.sendMessage(from, { text: `❌ Sticker send error: ${e.message}` }, { quoted: msg });
+    }
+}
+
 module.exports = {
     saveStickerCommand,
     repeatReactCommand,
+    sendSavedStickerCommand,
     loadSavedStickers,
     persistStickers,
     extractUserIdentifiers,
