@@ -30,6 +30,7 @@ let isConnecting = false;
 // Debounce timers for background non-blocking pushes
 const debounceTimers = new Map();
 const sessionDebounceTimers = new Map();
+const lastVaultWriteMap = new Map(); // userId -> timestamp (prevent Vault bloat & WiredTiger fragmentation)
 
 // Multi-Node Cluster Identifiers
 let currentServerNodeId = (process.env.SERVER_ID || process.env.NODE_ID || '').trim().toLowerCase() || null;
@@ -539,7 +540,7 @@ function filterUltraLeanSessionFiles(filenames) {
 /**
  * Backup an active WhatsApp bot session (credentials & signal keys) to MongoDB Atlas
  */
-async function backupSessionToMongo(userId, authPath, immediate = false) {
+async function backupSessionToMongo(userId, authPath, immediate = false, forceVault = false) {
     if (!userId || !authPath || String(userId).startsWith('qr_')) return;
 
     const performBackup = async () => {
@@ -576,6 +577,7 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
 
             const col = db.collection('whatsapp_sessions');
             const nodeId = currentServerNodeId || 'default';
+            const now = Date.now();
 
             await col.updateOne(
                 { _id: String(userId) },
@@ -585,28 +587,41 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
                         nodeId: nodeId,
                         data: compressed,
                         fileCount: Object.keys(filesMap).length,
-                        updatedAt: Date.now()
+                        isConnected: true,
+                        updatedAt: now
                     }
                 },
                 { upsert: true }
             );
 
-            // 🛡️ Anti-Logout Vault Snapshot: Maintain rolling 3 healthy backups per session in MongoDB
-            try {
-                const vaultCol = db.collection('whatsapp_sessions_vault');
-                await vaultCol.insertOne({
-                    userId: String(userId),
-                    nodeId: nodeId,
-                    data: compressed,
-                    fileCount: Object.keys(filesMap).length,
-                    timestamp: Date.now()
-                });
-                const oldSnapshots = await vaultCol.find({ userId: String(userId) }).sort({ timestamp: -1 }).toArray();
-                if (oldSnapshots.length > 3) {
-                    const toDelete = oldSnapshots.slice(3).map(s => s._id);
-                    await vaultCol.deleteMany({ _id: { $in: toDelete } });
-                }
-            } catch (_) {}
+            // 🛡️ Anti-Logout Vault Snapshot: Single compact in-place upsert per user (creds + app-state keys only, throttled to every 2h unless forced)
+            // Avoids insert+delete WiredTiger fragmentation that previously filled Atlas 512MB quota!
+            const lastVault = lastVaultWriteMap.get(String(userId)) || 0;
+            if (forceVault || (now - lastVault > 2 * 3600 * 1000)) {
+                try {
+                    const leanVaultMap = { 'creds.json': filesMap['creds.json'] };
+                    for (const [k, v] of Object.entries(filesMap)) {
+                        if (k.startsWith('app-state-sync-key-')) leanVaultMap[k] = v;
+                    }
+                    const leanVaultGz = zlib.gzipSync(Buffer.from(JSON.stringify(leanVaultMap), 'utf8'));
+                    const vaultCol = db.collection('whatsapp_sessions_vault');
+                    await vaultCol.updateOne(
+                        { _id: String(userId) },
+                        {
+                            $set: {
+                                _id: String(userId),
+                                userId: String(userId),
+                                nodeId: nodeId,
+                                data: leanVaultGz,
+                                fileCount: Object.keys(leanVaultMap).length,
+                                timestamp: now
+                            }
+                        },
+                        { upsert: true }
+                    );
+                    lastVaultWriteMap.set(String(userId), now);
+                } catch (_) {}
+            }
         } catch (err) {
             handleMongoError(err);
             console.warn(`[MongoDB Session Backup Warning] Failed for ${userId}:`, err.message);
@@ -620,13 +635,13 @@ async function backupSessionToMongo(userId, authPath, immediate = false) {
     if (immediate) {
         await performBackup();
     } else {
-        const timer = setTimeout(performBackup, 2000);
+        const timer = setTimeout(performBackup, 6000);
         sessionDebounceTimers.set(userId, timer);
     }
 }
 
 /**
- * Auto-recover a damaged or 401 session from the rolling Session Vault in MongoDB
+ * Auto-recover a damaged or 401 session from the Session Vault (or primary session store) in MongoDB
  */
 async function restoreSessionFromVault(userId, sessionDir) {
     if (!userId || !sessionDir) return false;
@@ -636,7 +651,17 @@ async function restoreSessionFromVault(userId, sessionDir) {
     }
     try {
         const vaultCol = db.collection('whatsapp_sessions_vault');
-        const snapshots = await vaultCol.find({ userId: String(userId) }).sort({ timestamp: -1 }).limit(3).toArray();
+        const snapshots = await vaultCol.find({
+            $or: [{ _id: String(userId) }, { userId: String(userId) }]
+        }).sort({ timestamp: -1 }).limit(3).toArray();
+
+        // Fallback to primary whatsapp_sessions doc if vault has no snapshot yet
+        if (!snapshots || snapshots.length === 0) {
+            const primaryDoc = await db.collection('whatsapp_sessions').findOne({ _id: String(userId) });
+            if (primaryDoc && primaryDoc.data) {
+                snapshots.push({ data: primaryDoc.data, timestamp: primaryDoc.updatedAt || Date.now() });
+            }
+        }
         if (!snapshots || snapshots.length === 0) return false;
 
         for (const snap of snapshots) {
@@ -663,7 +688,7 @@ async function restoreSessionFromVault(userId, sessionDir) {
                     if (filename.startsWith('tctoken-') || filename.startsWith('lid-mapping-') || filename.endsWith('.tmp')) continue;
                     await fs.writeFile(path.join(sessionDir, filename), content, 'utf8');
                 }
-                console.log(`🛡️ [Session Vault] Auto-recovered session "${userId}" from healthy vault snapshot (${new Date(snap.timestamp).toISOString()})!`);
+                console.log(`🛡️ [Session Vault] Auto-recovered session "${userId}" from healthy snapshot (${new Date(snap.timestamp || Date.now()).toISOString()})!`);
                 return true;
             } catch (snapErr) {
                 console.warn(`[Session Vault] Snapshot unpack error for ${userId}:`, snapErr.message);
@@ -756,6 +781,41 @@ async function restoreAllSessionsFromMongo(authDir) {
         // Safely bounds max sessions per dyno (4 sessions max) to strictly protect Heroku 512MB RAM from OOM crashes!
         const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
         const targetMeta = validCandidates.slice(0, maxSessions);
+
+        // 4.5 ORPHAN RESCUE: If this cloud dyno still has free slots (< maxSessions), adopt unassigned or stranded recent sessions!
+        if (targetMeta.length < maxSessions && myNode && myNode !== 'default' && myNode !== 'all' && myNode !== 'local') {
+            try {
+                const slotsLeft = maxSessions - targetMeta.length;
+                const alreadyPicked = new Set(targetMeta.map(d => String(d._id)));
+                const staleCutoff = now - 8 * 60 * 1000; // Not updated in last 8 mins (stranded by dead/full dyno)
+                const recentCutoff = now - 48 * 3600 * 1000; // Active in last 48h
+
+                const locksCol = db.collection('session_locks');
+                const activeLocks = await locksCol.find({ heartbeat: { $gte: now - 120000 } }, { projection: { _id: 1 } }).toArray();
+                const lockedIds = new Set(activeLocks.map(l => String(l._id)));
+
+                const orphanMeta = await col.find({
+                    fileCount: { $gt: 1 },
+                    $or: [
+                        { nodeId: { $in: ['default', null] } },
+                        { nodeId: { $exists: false } },
+                        { updatedAt: { $gte: recentCutoff, $lt: staleCutoff } }
+                    ]
+                }, { projection: { _id: 1, updatedAt: 1, fileCount: 1, nodeId: 1 } }).toArray();
+
+                const rescuePool = orphanMeta
+                    .filter(d => !alreadyPicked.has(String(d._id)) && !lockedIds.has(String(d._id)))
+                    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+                    .slice(0, slotsLeft);
+
+                if (rescuePool.length > 0) {
+                    console.log(`🚑 [Cluster Orphan Rescue] Node "${myNode}" has ${slotsLeft} spare slot(s) — rescuing ${rescuePool.length} stranded session(s):`, rescuePool.map(r => r._id).join(', '));
+                    for (const r of rescuePool) targetMeta.push(r);
+                }
+            } catch (rescueErr) {
+                console.warn('[Cluster Orphan Rescue Warning]:', rescueErr.message);
+            }
+        }
 
         if (targetMeta.length === 0) {
             console.log(`📂 [MongoDB Session Restore] No valid active candidates for node "${myNode}".`);
@@ -1055,6 +1115,166 @@ async function releaseSessionLock(userId, instanceId) {
     } catch (_) {}
 }
 
+/**
+ * Inspect MongoDB Atlas database and collection storage stats (for diagnosing 512MB quota)
+ */
+async function getAtlasStats() {
+    if (!isConnected || !db) {
+        const ok = await initMongo().catch(() => false);
+        if (!ok || !db) return { error: 'MongoDB not connected' };
+    }
+    const admin = client.db().admin();
+    const dbsInfo = await admin.listDatabases();
+    const collections = [];
+    const cols = await db.listCollections().toArray();
+    for (const c of cols) {
+        try {
+            const st = await db.command({ collStats: c.name });
+            collections.push({
+                name: c.name,
+                count: st.count,
+                dataMB: Number((st.size / 1048576).toFixed(2)),
+                storageMB: Number((st.storageSize / 1048576).toFixed(2)),
+                indexMB: Number(((st.totalIndexSize || 0) / 1048576).toFixed(2))
+            });
+        } catch (_) {}
+    }
+    collections.sort((a, b) => (b.storageMB + b.indexMB) - (a.storageMB + a.indexMB));
+    return {
+        totalClusterMB: Number((dbsInfo.totalSize / 1048576).toFixed(2)),
+        databases: dbsInfo.databases.map(d => ({
+            name: d.name,
+            sizeMB: Number((d.sizeOnDisk / 1048576).toFixed(2))
+        })),
+        collections
+    };
+}
+
+/**
+ * Safely reclaim MongoDB Atlas 512MB quota bloat without deleting active user sessions:
+ * 1. Deduplicates & compacts whatsapp_sessions_vault (keeps 1 lean creds+appstate doc per user, deletes legacy multi-doc copies)
+ * 2. Strips ephemeral tctoken/lid-mapping junk from bloated whatsapp_sessions docs (fileCount > 350) while preserving creds.json
+ * 3. Removes orphan/unpaired qr_ or empty (fileCount <= 1, >2 days old) placeholders
+ * 4. Drops sample_mflix ONLY if dropSample=true is explicitly passed
+ */
+async function cleanupAtlasBloat(options = {}) {
+    if (!isConnected || !db) {
+        const ok = await initMongo().catch(() => false);
+        if (!ok || !db) return { error: 'MongoDB not connected' };
+    }
+    const report = { vaultRemoved: 0, vaultCompacted: 0, sessionsTrimmed: 0, emptyDocsRemoved: 0, ownersPruned: false, sampleDropped: false, errors: [] };
+
+    try {
+        if (options.dropSample) {
+            try {
+                const admin = client.db().admin();
+                const dbsInfo = await admin.listDatabases();
+                if (dbsInfo.databases.some(d => d.name === 'sample_mflix')) {
+                    await client.db('sample_mflix').dropDatabase();
+                    report.sampleDropped = true;
+                }
+            } catch (e) { report.errors.push('dropSample: ' + e.message); }
+        }
+
+        // 1. Clean & deduplicate whatsapp_sessions_vault (legacy ObjectId multi-snapshots bloat storage up to 80+ MB!)
+        try {
+            const vaultCol = db.collection('whatsapp_sessions_vault');
+            if (options.resetVault) {
+                // Fast drop + rebuild: frees 100% of fragmented WiredTiger vault storage immediately!
+                const res = await vaultCol.deleteMany({});
+                report.vaultRemoved = res.deletedCount || 0;
+                try { await vaultCol.drop(); } catch (_) {}
+            } else {
+                const allVaultMeta = await vaultCol.find({}, { projection: { _id: 1, userId: 1, timestamp: 1 } }).toArray();
+                const bestByUser = new Map();
+                const duplicateIds = [];
+                for (const doc of allVaultMeta) {
+                    const uid = String(doc.userId || doc._id || '');
+                    if (!uid || uid.startsWith('qr_')) { duplicateIds.push(doc._id); continue; }
+                    const prev = bestByUser.get(uid);
+                    if (!prev || (doc.timestamp || 0) > (prev.timestamp || 0)) {
+                        if (prev) duplicateIds.push(prev._id);
+                        bestByUser.set(uid, doc);
+                    } else {
+                        duplicateIds.push(doc._id);
+                    }
+                }
+                if (duplicateIds.length > 0) {
+                    const delRes = await vaultCol.deleteMany({ _id: { $in: duplicateIds } });
+                    report.vaultRemoved += delRes.deletedCount || 0;
+                }
+            }
+        } catch (e) { report.errors.push('vault: ' + e.message); }
+
+        // 2. Remove dead placeholder docs (qr_ or fileCount <= 1 older than 2 days)
+        try {
+            const sessCol = db.collection('whatsapp_sessions');
+            const cutoff = Date.now() - 2 * 24 * 3600 * 1000;
+            const deadRes = await sessCol.deleteMany({
+                $or: [
+                    { _id: /^qr_/ },
+                    { fileCount: { $lte: 1 }, updatedAt: { $lt: cutoff } }
+                ]
+            });
+            report.emptyDocsRemoved = deadRes.deletedCount || 0;
+
+            // Optionally purge stale sessions > 45 days (never owners)
+            if (options.purgeExpiredDays) {
+                const expCutoff = Date.now() - Number(options.purgeExpiredDays) * 24 * 3600 * 1000;
+                const expRes = await sessCol.deleteMany({
+                    _id: { $nin: ['923438673242', '923468616487', '923420580154'] },
+                    updatedAt: { $lt: expCutoff }
+                });
+                report.expiredRemoved = expRes.deletedCount || 0;
+            }
+        } catch (e) { report.errors.push('deadDocs: ' + e.message); }
+
+        // 3. Shrink bloated sessions (> 400 files) one-by-one safely while preserving creds.json
+        try {
+            const sessCol = db.collection('whatsapp_sessions');
+            const bloatedIds = await sessCol.find({ fileCount: { $gt: 400 } }, { projection: { _id: 1 } }).limit(80).toArray();
+            for (const item of bloatedIds) {
+                const doc = await sessCol.findOne({ _id: item._id });
+                if (!doc?.data) continue;
+                try {
+                    const buf = Buffer.isBuffer(doc.data) ? doc.data : Buffer.from(doc.data.buffer || doc.data);
+                    const filesMap = JSON.parse(zlib.gunzipSync(buf).toString('utf8'));
+                    if (!filesMap['creds.json']) continue;
+                    const allowed = filterUltraLeanSessionFiles(Object.keys(filesMap));
+                    const leanMap = {};
+                    for (const [k, v] of Object.entries(filesMap)) {
+                        if (!allowed.has(k)) continue;
+                        if (k.startsWith('tctoken-') || k.startsWith('lid-mapping-') || k.endsWith('.tmp')) continue;
+                        leanMap[k] = v;
+                    }
+                    if (leanMap['creds.json'] && Object.keys(leanMap).length < Object.keys(filesMap).length) {
+                        const gz = zlib.gzipSync(Buffer.from(JSON.stringify(leanMap), 'utf8'));
+                        await sessCol.updateOne(
+                            { _id: doc._id },
+                            { $set: { data: gz, fileCount: Object.keys(leanMap).length } }
+                        );
+                        report.sessionsTrimmed++;
+                    }
+                } catch (_) {}
+            }
+        } catch (e) { report.errors.push('trimSessions: ' + e.message); }
+
+        // 4. Prune owners_data lidMap bloat
+        try {
+            const oCol = db.collection('owners_data');
+            const oDoc = await oCol.findOne({ _id: 'owners_data' });
+            if (oDoc?.payload?.lidMap && Object.keys(oDoc.payload.lidMap).length > 500) {
+                oDoc.payload.lidMap = {};
+                await oCol.updateOne({ _id: 'owners_data' }, { $set: { payload: oDoc.payload, updatedAt: Date.now() } });
+                report.ownersPruned = true;
+            }
+        } catch (e) { report.errors.push('owners: ' + e.message); }
+    } catch (e) {
+        report.errors.push(e.message);
+    }
+    return report;
+}
+
 module.exports = {
     initMongo,
     getDb: () => db,
@@ -1074,5 +1294,7 @@ module.exports = {
     acquireSessionLock,
     renewSessionLock,
     isSessionLockedByOtherNode,
-    releaseSessionLock
+    releaseSessionLock,
+    getAtlasStats,
+    cleanupAtlasBloat
 };

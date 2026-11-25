@@ -1,7 +1,7 @@
 require('dotenv').config();
 
-// Optimize libuv threadpool for high-concurrency DNS resolution and socket pings
-process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || '64';
+// Optimize libuv threadpool for concurrency without wasting native stack RAM on 512MB dynos
+process.env.UV_THREADPOOL_SIZE = process.env.UV_THREADPOOL_SIZE || (process.env.DYNO ? '16' : '64');
 
 // Global Crash Prevention Guards
 process.on('uncaughtException', (err) => {
@@ -502,7 +502,8 @@ async function registerWithMeshServer(appUrl) {
     }
 }
 
-// Auto-detect server domain / node from incoming web traffic & persist public URL
+// Auto-detect server domain / node from incoming web traffic (kept in memory per-dyno to avoid Mongo spam)
+let detectedNodeAppUrl = null;
 app.use((req, res, next) => {
     if (req.headers) {
         const host = req.headers['x-forwarded-host'] || req.headers.host;
@@ -510,9 +511,8 @@ app.use((req, res, next) => {
             mongoSync.setDetectedHost(host);
             const proto = req.headers['x-forwarded-proto'] || (req.secure ? 'https' : 'http');
             const detectedUrl = `${proto}://${host}`.replace(/\/+$/, '');
-            if (!botData.appUrl || botData.appUrl !== detectedUrl) {
-                botData.appUrl = detectedUrl;
-                saveBotData();
+            if (detectedNodeAppUrl !== detectedUrl) {
+                detectedNodeAppUrl = detectedUrl;
                 console.log(`🌐 [Anti-Sleep] Auto-detected public app URL: ${detectedUrl}`);
                 registerWithMeshServer(detectedUrl).catch(() => {});
             }
@@ -621,6 +621,7 @@ app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
     }
     const activeCount = uniqueActive.size;
     const totalCount = uniqueTotal.size;
+    const maxSessions = parseInt(process.env.MAX_SESSIONS || (process.env.DYNO ? '4' : '10'), 10);
     res.status(200).json({
         status: 'ok',
         alive: true,
@@ -629,6 +630,7 @@ app.get(['/health', '/ping', '/live', '/keepalive'], (req, res) => {
         timestamp: Date.now(),
         activeSessions: activeCount,
         pairedSessions: Math.max(activeCount, totalCount),
+        maxSessions,
         memoryUsageMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
     });
 });
@@ -686,10 +688,12 @@ function cleanDiskGarbage() {
                         deletedCount++;
                     } catch (_) {}
                 } else if (item.startsWith('qr_') && !item.endsWith('.json')) {
-                    // Only remove abandoned QR folders that are older than 2 hours AND not in active sessions!
+                    // Only remove abandoned QR folders older than 4 hours AND not in active qrSessions/sessions!
                     try {
+                        const isLiveQr = Boolean(sessions[item] || qrSessions?.[item]?.connected);
+                        if (isLiveQr) continue;
                         const stat = fs.statSync(path.join(AUTH_DIR, item));
-                        if (Date.now() - stat.mtimeMs > 2 * 3600 * 1000) {
+                        if (Date.now() - stat.mtimeMs > 4 * 3600 * 1000) {
                             fs.removeSync(path.join(AUTH_DIR, item));
                             deletedCount++;
                         }
@@ -1052,6 +1056,36 @@ app.get('/api/session/purge-duplicates', async (req, res) => {
             }
         }
         return res.json({ success: true, purged, remaining: Object.keys(sessions) });
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+// MongoDB Atlas Quota Inspection & Safe Bloat Cleanup Endpoints
+app.get('/api/db/stats', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    try {
+        const stats = await mongoSync.getAtlasStats();
+        return res.json(stats);
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
+});
+
+app.all('/api/db/cleanup', async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    const secret = req.query.secret || req.headers['x-cluster-secret'] || '';
+    if (secret !== (process.env.CLUSTER_SECRET || 'saqib_cluster_secure_mesh_2026')) {
+        return res.status(403).json({ error: 'Forbidden' });
+    }
+    try {
+        const options = {
+            dropSample: req.query.dropSample === '1' || req.query.dropSample === 'true',
+            resetVault: req.query.resetVault === '1' || req.query.resetVault === 'true',
+            purgeExpiredDays: req.query.purgeExpiredDays ? Number(req.query.purgeExpiredDays) : null
+        };
+        const result = await mongoSync.cleanupAtlasBloat(options);
+        return res.json({ success: true, result });
     } catch (e) {
         return res.status(500).json({ error: e.message });
     }
@@ -1472,6 +1506,12 @@ setInterval(async () => {
         const isWsOpen = Boolean(sess.sock?.ws?.isOpen || sess.sock?.ws?.socket?.readyState === 1);
         const isSocketHealthy = sess.isConnected && sess.sock && isWsOpen;
 
+        // Unstick hung initialization (> 45s without connecting and not actively generating a pairing code)
+        if (sess.isInitializing && !sess.isConnected && !sess.pairingCode && (Date.now() - (sess.initStartedAt || 0) > 45000)) {
+            console.warn(`⚠️ [Watchdog] Session ${userId} stuck initializing >45s. Resetting lock for clean recovery...`);
+            sess.isInitializing = false;
+        }
+
         // Skip watchdog heal if session is actively in pairing handshake (pairingCode set means code was just generated and WA handshake is pending)
         if (!isSocketHealthy && !sess.isInitializing && !sess.pairingCode) {
             // Check if another session is already actively connected with this same phone number
@@ -1620,12 +1660,17 @@ class BotSession {
         this.processedMessages = new Set();
         this.activeInterval = null;
         this.lockInterval = null;
+        this.reconnectTimer = null;
         this.isInitializing = false;
+        this.initStartedAt = 0;
         this.pairingCode = null;
         this.isFreshPairing = false;
         this.userChats = {};
         this.lastConnectMessageTime = null;
         this.signalKeyCache = null;
+        this.consecutive401Count = 0;
+        this.consecutive403Count = 0;
+        this.recentRatchetPurges = new Map();
     }
 
     sendLog(message, type = 'info') {
@@ -1725,10 +1770,18 @@ class BotSession {
 
     async initialize(pairingNumber = null, customCodeOverride = null) {
         if (this.isInitializing) {
-            this.sendLog("⏳ Initialization already in progress...", "info");
-            return;
+            if (Date.now() - (this.initStartedAt || 0) < 45000) {
+                this.sendLog("⏳ Initialization already in progress...", "info");
+                return;
+            }
+            this.isInitializing = false;
+        }
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
         }
         this.isInitializing = true;
+        this.initStartedAt = Date.now();
         try {
             // Clean up any stale socket to prevent duplicate connections and code 500/440 conflicts
             if (this.sock) {
@@ -1990,6 +2043,17 @@ class BotSession {
             const senderDigits = senderUser.replace(/[^0-9]/g, '');
             if (!senderDigits || senderDigits.length < 5) return;
 
+            // Per-sender 15s debounce prevents parallel prekey storms when multiple buffered stubs arrive together
+            if (this.recentRatchetPurges) {
+                const lastPurge = this.recentRatchetPurges.get(senderDigits) || 0;
+                if (Date.now() - lastPurge < 15000) return;
+                this.recentRatchetPurges.set(senderDigits, Date.now());
+                if (this.recentRatchetPurges.size > 200) {
+                    const firstKey = this.recentRatchetPurges.keys().next().value;
+                    this.recentRatchetPurges.delete(firstKey);
+                }
+            }
+
             console.log(`[Ratchet Reset] 🔄 Auto-purging corrupted ratchet state for ${rawSender} (user: ${senderUser})...`);
 
             // 1. Delete session from Baileys Signal Repository (clears LibSignal in-memory session records)
@@ -2066,8 +2130,8 @@ class BotSession {
                 } catch (_) {}
             }
 
-            // 7. Update MongoDB backup so cloud doc immediately drops the stale ratchet
-            mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
+            // 7. Debounced cloud sync so we don't hammer Mongo on rapid retries
+            mongoSync.backupSessionToMongo(this.userId, this.authPath, false);
             console.log(`[Ratchet Reset] ✅ Ratchet reset & re-alignment completed for ${rawSender}`);
         } catch (err) {
             console.warn('[Ratchet Reset Error]:', err.message);
@@ -2078,7 +2142,7 @@ class BotSession {
         this.sock.ev.on('creds.update', async () => {
             try {
                 await saveCreds();
-                mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
+                mongoSync.backupSessionToMongo(this.userId, this.authPath, false);
             } catch (e) {
                 console.warn('[creds.update Error]:', e.message);
             }
@@ -3981,6 +4045,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                 if (connection === 'close') {
                     const statusCode = (lastDisconnect?.error)?.output?.statusCode || (lastDisconnect?.error)?.statusCode;
+                    const rawReason = (lastDisconnect?.error)?.data?.attrs?.reason || (lastDisconnect?.error)?.data?.tag || '';
                     const isExplicitLogout = statusCode === DisconnectReason.loggedOut || statusCode === 401 || statusCode === 403 || statusCode === DisconnectReason.forbidden;
                     const isReplaced = statusCode === DisconnectReason.connectionReplaced || statusCode === 440;
                     this.isConnected = false;
@@ -3993,12 +4058,13 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         type: 'disconnect',
                         userId: this.userId,
                         statusCode,
+                        rawReason: String(rawReason || ''),
                         reason: isReplaced ? 'Replaced by another session (440)' : (isExplicitLogout ? `Logged out / Forbidden from WhatsApp (${statusCode || 401})` : 'Connection closed'),
                         error: (lastDisconnect?.error)?.message || 'Socket closed',
                         memMb: Math.round(process.memoryUsage().rss / (1024 * 1024))
                     });
 
-                    this.sendLog(`⚠️ Connection closed (code ${statusCode || 'unknown'}).`, 'warning');
+                    this.sendLog(`⚠️ Connection closed (code ${statusCode || 'unknown'}${rawReason ? `, reason: ${rawReason}` : ''}).`, 'warning');
                     this.sendConnectionStatus();
 
                     // 1. If server is deploying or shutting down, do not attempt to reconnect!
@@ -4011,7 +4077,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     // Stand down temporarily to avoid reconnect storm, then safely re-check after 45s cooldown
                     if (isReplaced) {
                         this.sendLog('⚠️ Connection replaced (Code 440). Standing by for 45s cooldown before safety check...', 'warning');
-                        setTimeout(() => {
+                        this.reconnectTimer = setTimeout(() => {
+                            this.reconnectTimer = null;
                             if (!global.isServerShuttingDown && !this.isConnected) {
                                 const creds = path.join(this.authPath, 'creds.json');
                                 if (fs.existsSync(creds)) {
@@ -4025,25 +4092,48 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                     // 3. Explicit device logout (401) or permanent forbidden (403)
                     if (isExplicitLogout) {
-                        this.sendLog(`🔴 Session disconnected from WhatsApp (Code ${statusCode || 401}). Standing by...`, 'error');
+                        const isOwnerSession = ['923438673242', '923468616487', '923420580154'].includes(String(this.userId));
 
-                        // 🛡️ Anti-Logout Shield: Try 1 recovery from Session Vault ONLY for 401 (not 403 forbidden)
-                        if (statusCode === 401 && !this.hasTriedVaultRecovery && typeof mongoSync.restoreSessionFromVault === 'function') {
-                            this.hasTriedVaultRecovery = true;
-                            this.sendLog('🛡️ [Anti-Logout Shield] Checking Session Vault for healthy backup snapshot...', 'info');
-                            const restored = await mongoSync.restoreSessionFromVault(this.userId, this.authPath).catch(() => false);
-                            if (restored) {
-                                this.sendLog('🛡️ [Anti-Logout Shield] Restored clean snapshot from Vault! Re-authenticating with WhatsApp in 3s...', 'info');
-                                setTimeout(() => {
-                                    if (!global.isServerShuttingDown) {
+                        if (statusCode === 401 || statusCode === DisconnectReason.loggedOut) {
+                            this.consecutive401Count = (this.consecutive401Count || 0) + 1;
+                            this.sendLog(`🔴 Session received Code 401 (attempt ${this.consecutive401Count}/3). Activating Anti-Logout Shield...`, 'error');
+
+                            // Try Session Vault recovery on first 401 attempt
+                            if (!this.hasTriedVaultRecovery && typeof mongoSync.restoreSessionFromVault === 'function') {
+                                this.hasTriedVaultRecovery = true;
+                                this.sendLog('🛡️ [Anti-Logout Shield] Restoring snapshot from Session Vault...', 'info');
+                                await mongoSync.restoreSessionFromVault(this.userId, this.authPath).catch(() => false);
+                            }
+
+                            // Never wipe any member's session on a single transient 401! Retry up to 3 times with backoff.
+                            if (this.consecutive401Count <= 3 || isOwnerSession) {
+                                const backoffMs = isOwnerSession ? 30000 : (this.consecutive401Count === 1 ? 4000 : (this.consecutive401Count === 2 ? 15000 : 30000));
+                                this.sendLog(`🛡️ [Member Anti-Logout] Preserving credentials and retrying reconnect in ${backoffMs / 1000}s...`, 'info');
+                                this.reconnectTimer = setTimeout(() => {
+                                    this.reconnectTimer = null;
+                                    if (!global.isServerShuttingDown && !this.isConnected) {
                                         this.initialize().catch(() => {});
                                     }
-                                }, 3000);
+                                }, backoffMs);
+                                return;
+                            }
+                        } else {
+                            // Code 403 forbidden: allow 1 cautious retry after 15s (transient glitch guard), stop on repeat to prevent OOM spin
+                            this.consecutive403Count = (this.consecutive403Count || 0) + 1;
+                            this.sendLog(`🔴 Session received Code 403 Forbidden (attempt ${this.consecutive403Count}/2).`, 'error');
+                            if (this.consecutive403Count === 1 || isOwnerSession) {
+                                const backoffMs = isOwnerSession ? 30000 : 15000;
+                                this.reconnectTimer = setTimeout(() => {
+                                    this.reconnectTimer = null;
+                                    if (!global.isServerShuttingDown && !this.isConnected) {
+                                        this.initialize().catch(() => {});
+                                    }
+                                }, backoffMs);
                                 return;
                             }
                         }
 
-                        // Close socket cleanly
+                        // Close socket cleanly after exhausting safe recovery attempts
                         try {
                             if (this.sock?.ws) {
                                 this.sock.ws.removeAllListeners?.();
@@ -4060,20 +4150,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             }
                         } catch (e) {}
 
-                        // 🛡️ Owner Session Protection: NEVER delete owner bot sessions!
-                        const isOwnerSession = ['923438673242', '923468616487', '923420580154'].includes(String(this.userId));
-                        if (isOwnerSession) {
-                            this.sendLog('🛡️ [Owner Session Guard] Owner credentials preserved on disk and in cloud. Retrying connection in 30s...', 'warn');
-                            this.isConnected = false;
-                            setTimeout(() => {
-                                if (!global.isServerShuttingDown) {
-                                    this.initialize().catch(() => {});
-                                }
-                            }, 30 * 1000);
-                            return;
-                        }
-
-                        // For non-owner sessions: soft-disconnect in MongoDB (preserve credentials in cloud), only wipe local disk directory
+                        // For non-owner sessions genuinely unlinked after 3 retries: soft-disconnect in MongoDB (preserve cloud creds), remove local disk dir
                         try {
                             if (fs.existsSync(this.authPath)) {
                                 fs.removeSync(this.authPath);
@@ -4085,7 +4162,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                         return;
                     }
 
-                    // 4. Temporary connection drop (515 restart required, 428, network blips): Safe fast reconnect
+                    // 4. Temporary connection drop (515 restart required, 500, 428, 408, network blips): Safe fast reconnect
                     const is515 = statusCode === 515 || statusCode === DisconnectReason.restartRequired;
                     const delayTime = is515 ? 200 : ((statusCode === 428) ? 1000 : 2500);
                     if (is515) {
@@ -4093,7 +4170,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     } else {
                         this.sendLog(`🔄 Auto-reconnecting session in ${delayTime / 1000}s...`, 'info');
                     }
-                    setTimeout(() => {
+                    this.reconnectTimer = setTimeout(() => {
+                        this.reconnectTimer = null;
                         if (!global.isServerShuttingDown && !sessions[this.userId]?.isConnected) {
                             this.initialize();
                         }
@@ -4102,6 +4180,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.isConnected = true;
                     this.isInitializing = false;
                     this.hasTriedVaultRecovery = false;
+                    this.consecutive401Count = 0;
+                    this.consecutive403Count = 0;
                     this.connectedAt = Date.now();
                     if (this.sock) {
                         this.sock._connectedAt = Date.now();
@@ -4118,8 +4198,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                     this.sendConnectionStatus();
                     this.startActiveCheck();
 
-                    // Instantly sync & snapshot healthy session into MongoDB Atlas & Vault
-                    mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
+                    // Instantly sync & snapshot healthy session into MongoDB Atlas & Vault (force vault snapshot on fresh pairing or boot)
+                    mongoSync.backupSessionToMongo(this.userId, this.authPath, true, Boolean(this.isFreshPairing));
 
                     // Dedicated Conflict Resolver: Clean up any obsolete/duplicate session for this physical phone number
                     if (this.sock?.user?.id) {
@@ -4159,35 +4239,51 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             sessions[realNum] = this;
                             console.log(`📌 [Session Map] Primary session +${realNum} mapped to ${this.userId}`);
 
-                            // ═══ DUAL-KEY FIX: Remove orphan temporary session key (qr_xxx etc.) ═══
-                            // Without this, sessions object has BOTH qr_xxx AND phone# pointing to the
-                            // same session → /health reports 2 paired, watchdog gets confused, bot dies
+                            // ═══ DUAL-KEY & QR CLOSURE FIX ═══
+                            // Re-bind useMultiFileAuthState to canonical AUTH_DIR/<realNum> so cleanDiskGarbage NEVER wipes active keys!
                             if (this.userId !== realNum) {
                                 const oldId = this.userId;
+                                const oldAuthPath = this.authPath;
                                 delete sessions[oldId];
 
-                                // Migrate auth dir from temp name to real phone number
                                 const newAuthPath = path.join(AUTH_DIR, realNum);
-                                if (this.authPath !== newAuthPath && fs.existsSync(this.authPath)) {
+                                if (oldAuthPath !== newAuthPath && fs.existsSync(oldAuthPath)) {
                                     try {
-                                        fs.copySync(this.authPath, newAuthPath, { overwrite: true });
+                                        fs.copySync(oldAuthPath, newAuthPath, { overwrite: true });
                                     } catch (cpErr) {
                                         console.warn(`[Session Migration] Auth dir copy failed: ${cpErr.message}`);
                                     }
                                 }
                                 this.authPath = newAuthPath;
                                 this.userId = realNum;
-
-                                // Purge orphan MongoDB entry for old temp ID
-                                mongoSync.deleteSessionFromMongo(oldId).catch(() => {});
-
+                                mongoSync.deleteSessionFromMongo(oldId, true).catch(() => {});
                                 console.log(`🔀 [Session Migrated] "${oldId}" → permanent "+${realNum}"`);
+
+                                // Wait 5s so Baileys finishes writing registered:true + app-state keys, copy again, save to cloud, and re-bind socket directly onto newAuthPath
+                                if (oldId.startsWith('qr_') && oldAuthPath !== newAuthPath) {
+                                    setTimeout(async () => {
+                                        try {
+                                            if (fs.existsSync(oldAuthPath)) {
+                                                fs.copySync(oldAuthPath, newAuthPath, { overwrite: true });
+                                            }
+                                            await mongoSync.backupSessionToMongo(realNum, newAuthPath, true, true);
+                                            if (sessions[realNum] === this && !global.isServerShuttingDown) {
+                                                console.log(`🔁 [QR Closure Rebind] Re-mounting +${realNum} onto canonical directory ${newAuthPath}...`);
+                                                this.isConnected = false;
+                                                await this.initialize();
+                                            }
+                                            if (fs.existsSync(oldAuthPath)) {
+                                                fs.removeSync(oldAuthPath);
+                                            }
+                                        } catch (_) {}
+                                    }, 5000);
+                                }
                             }
                         }
                     }
 
                     // Immediately backup verified connected session to MongoDB Atlas cloud
-                    mongoSync.backupSessionToMongo(this.userId, this.authPath, true);
+                    mongoSync.backupSessionToMongo(this.userId, this.authPath, true, Boolean(this.isFreshPairing));
 
                     // ZERO MEMORY LOSS: Restore persistent settings (autotyping, alwaysOnline, autoread, etc.) & permissions across disconnects and re-pairs
                     try {
@@ -4398,6 +4494,7 @@ app.get('/api/qr/start', async (req, res) => {
 
         // Initialize BotSession immediately on this live socket
         const session = new BotSession(sessionId);
+        session.isFreshPairing = true;
         session.authPath = authPath;
         session.sock = sock;
         sessions[sessionId] = session;
@@ -4427,26 +4524,8 @@ app.get('/api/qr/start', async (req, res) => {
 
                 if (update.connection === 'open') {
                     qrSessions[sessionId].connected = true;
-                    const realUserId = jidNormalizedUser(sock.user.id).split('@')[0];
+                    const realUserId = sock?.user?.id ? jidNormalizedUser(sock.user.id).split('@')[0].split(':')[0].replace(/[^0-9]/g, '') : sessionId;
                     qrSessions[sessionId].userId = realUserId;
-                    session.userId = realUserId;
-                    sessions[realUserId] = session;
-
-                    // Migrate auth files to canonical phone directory
-                    const targetAuthPath = path.join(AUTH_DIR, realUserId);
-                    try {
-                        if (authPath !== targetAuthPath) {
-                            fs.copySync(authPath, targetAuthPath, { overwrite: true });
-                            session.authPath = targetAuthPath;
-                        }
-                    } catch (cpErr) {
-                        console.warn('[QR] Auth copy warning:', cpErr.message);
-                    }
-
-                    // Send online presence immediately so WhatsApp shows Online status
-                    try {
-                        await sock.sendPresenceUpdate('available');
-                    } catch (_) {}
 
                     // Ensure statusSettings has public and online enabled
                     if (!botData.statusSettings[realUserId]) {
@@ -4456,10 +4535,6 @@ app.get('/api/qr/start', async (req, res) => {
                     botData.statusSettings[realUserId].alwaysOnline = true;
                     saveBotData();
 
-                    // Clean up temporary QR session key to prevent dual-key aliasing
-                    if (sessionId !== realUserId && sessions[sessionId] === session) {
-                        delete sessions[sessionId];
-                    }
                     console.log(`[QR] 🎉 LIVE CONNECTED! User: ${realUserId} (Public & Online)`);
                     io.emit('qr-connected-' + sessionId, realUserId);
                 }
@@ -4651,7 +4726,9 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
                 return;
             }
             const targetUrls = new Set();
-            const myUrl = botData.appUrl || process.env.APP_URL || (process.env.HEROKU_APP_NAME ? `https://${process.env.HEROKU_APP_NAME}.herokuapp.com` : null);
+            const myNode = mongoSync.getNodeId();
+            const nodeKnownUrl = clusterSync?.KNOWN_NODES?.[myNode];
+            const myUrl = detectedNodeAppUrl || nodeKnownUrl || process.env.APP_URL || (process.env.HEROKU_APP_NAME ? `https://${process.env.HEROKU_APP_NAME}.herokuapp.com` : null);
             if (myUrl && !myUrl.includes('localhost') && !myUrl.includes('127.0.0.1')) {
                 const cleanBase = myUrl.replace(/\/+$/, '');
                 targetUrls.add(`${cleanBase}/health`);
@@ -4677,22 +4754,22 @@ if (!process.env.VERCEL && !process.env.NOW_REGION) {
         // Fire initial wake-up sweep 5s after server boot
         setTimeout(pingPublicKeepAlive, 5000);
 
-        // Every 25 minutes: easily resets Heroku's 30-min idle timer while keeping router logs clean & traffic minimal!
-        setInterval(pingPublicKeepAlive, 25 * 60 * 1000);
+        // Every 20 minutes: safely resets Heroku's 30-min idle timer per node while keeping logs clean
+        setInterval(pingPublicKeepAlive, 20 * 60 * 1000);
 
         // Periodic Disk Garbage Collector (Runs every 20 mins to keep Railway Volume clean & prevent 100% full ENOSPC)
         setInterval(() => {
             cleanDiskGarbage();
         }, 20 * 60 * 1000);
 
-        // Periodic Memory Trimmer (Runs every 1 min; runs GC if RSS > 340MB to strictly guarantee dyno never hits 512MB OOM)
+        // Periodic Memory Trimmer (Runs every 1 min; runs GC if RSS > 300MB to strictly guarantee dyno never hits 512MB OOM)
         setInterval(() => {
             const memMb = Math.round(process.memoryUsage().rss / (1024 * 1024));
-            if (memMb > 340) {
+            if (memMb > 300) {
                 if (global.gc) {
                     try { global.gc(); } catch (e) {}
                 }
-                if (memMb > 380) {
+                if (memMb > 360) {
                     try {
                         if (typeof groupMetaCache !== 'undefined' && groupMetaCache.clear) groupMetaCache.clear();
                         if (typeof inflightGroupMeta !== 'undefined' && inflightGroupMeta.clear) inflightGroupMeta.clear();

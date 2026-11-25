@@ -156,7 +156,9 @@ function loadOwnersData() {
             if (!Array.isArray(data.masterLids)) data.masterLids = [];
             if (!data.lidMap || typeof data.lidMap !== 'object') data.lidMap = {};
 
-            // Hydrate in-memory map from persisted data
+            const wasPruned = pruneOwnersLidMap(data);
+
+            // Hydrate in-memory map from persisted data (bounded to 5000 entries)
             for (const [k, v] of Object.entries(data.lidMap)) {
                 if (k && v) memoryLidMap.set(k, String(v));
             }
@@ -176,6 +178,9 @@ function loadOwnersData() {
 
             cachedOwnersData = data;
             cachedOwnersMtime = stat.mtimeMs;
+            if (wasPruned) {
+                try { saveOwnersData(data); } catch (_) {}
+            }
             return data;
         }
     } catch (e) {
@@ -192,9 +197,58 @@ function loadOwnersData() {
     return fallback;
 }
 
+function pruneOwnersLidMap(data) {
+    if (!data || !data.lidMap || typeof data.lidMap !== 'object') return false;
+    const keys = Object.keys(data.lidMap);
+    if (keys.length <= 500) return false;
+
+    const keepPhones = new Set([MASTER_OWNER_DIGITS]);
+    const keepLids = new Set((data.masterLids || []).map(String));
+    for (const entry of [...(data.owners || []), ...(data.premium || [])]) {
+        if (!entry) continue;
+        if (typeof entry === 'string') {
+            keepPhones.add(entry.replace(/[^0-9]/g, ''));
+        } else {
+            if (entry.digits) keepPhones.add(String(entry.digits).replace(/[^0-9]/g, ''));
+            if (entry.lid) keepLids.add(String(entry.lid));
+        }
+    }
+    try {
+        const activeSess = global.ProBoySessionManager?.getSessions?.() || {};
+        for (const sid of Object.keys(activeSess)) {
+            const d = String(sid).replace(/[^0-9]/g, '');
+            if (d.length >= 9) keepPhones.add(d);
+        }
+    } catch (_) {}
+
+    const nextMap = {};
+    let extraCount = 0;
+    for (const [k, v] of Object.entries(data.lidMap)) {
+        if (!k || !v) continue;
+        const val = String(v);
+        const isPriv =
+            (k.startsWith('pn:') && keepPhones.has(k.slice(3))) ||
+            (k.startsWith('lid:') && (keepLids.has(k.slice(4)) || keepPhones.has(val)));
+        if (isPriv) {
+            nextMap[k] = val;
+        }
+    }
+    // Preserve up to 200 most recent non-privileged entries
+    const recentEntries = Object.entries(data.lidMap).slice(-200);
+    for (const [k, v] of recentEntries) {
+        if (!k || !v || nextMap[k]) continue;
+        if (extraCount >= 200) break;
+        nextMap[k] = String(v);
+        extraCount++;
+    }
+    data.lidMap = nextMap;
+    return true;
+}
+
 function saveOwnersData(data) {
     try {
         if (!data.lidMap || typeof data.lidMap !== 'object') data.lidMap = {};
+        pruneOwnersLidMap(data);
         data.updatedAt = Date.now();
         fs.ensureDirSync(path.dirname(OWNERS_FILE));
         
@@ -243,6 +297,14 @@ function learnIdentityMapping(phoneInput, lidInput) {
     if (!phoneDigits || !lidDigits || phoneDigits === lidDigits) return false;
 
     const last10 = phoneDigits.slice(-10);
+    if (memoryLidMap.size > 5000) {
+        // Evict oldest 1000 transient entries to prevent unbounded RAM growth
+        let evicted = 0;
+        for (const k of memoryLidMap.keys()) {
+            memoryLidMap.delete(k);
+            if (++evicted >= 1000) break;
+        }
+    }
     memoryLidMap.set(`pn:${phoneDigits}`, lidDigits);
     if (last10.length === 10) memoryLidMap.set(`pn10:${last10}`, lidDigits);
     memoryLidMap.set(`lid:${lidDigits}`, phoneDigits);
@@ -250,15 +312,31 @@ function learnIdentityMapping(phoneInput, lidInput) {
     const data = loadOwnersData();
     let changed = false;
 
-    if (!data.lidMap) data.lidMap = {};
-    if (data.lidMap[`pn:${phoneDigits}`] !== lidDigits || data.lidMap[`lid:${lidDigits}`] !== phoneDigits) {
-        data.lidMap[`pn:${phoneDigits}`] = lidDigits;
-        data.lidMap[`lid:${lidDigits}`] = phoneDigits;
-        changed = true;
+    // Only persist lidMap to disk/MongoDB for Master Owner, Co-Owners, Premium users, or active paired bot accounts!
+    // Persisting random group participants bloats owners.json to 2.5MB+ and fills MongoDB Atlas quota!
+    const isMaster = phoneDigits === MASTER_OWNER_DIGITS || (last10 && phoneDigits.endsWith(MASTER_LAST10));
+    const isOwnerOrPrem = [...(data.owners || []), ...(data.premium || [])].some(entry => {
+        if (!entry) return false;
+        const ed = typeof entry === 'string' ? normalizePhoneDigits(entry) : normalizePhoneDigits(entry.digits);
+        return ed && (ed === phoneDigits || (last10 && ed.slice(-10) === last10));
+    });
+    let isActiveBot = false;
+    try {
+        const sMap = global.ProBoySessionManager?.getSessions?.();
+        isActiveBot = Boolean(sMap && sMap[phoneDigits]);
+    } catch (_) {}
+
+    if (isMaster || isOwnerOrPrem || isActiveBot) {
+        if (!data.lidMap) data.lidMap = {};
+        if (data.lidMap[`pn:${phoneDigits}`] !== lidDigits || data.lidMap[`lid:${lidDigits}`] !== phoneDigits) {
+            data.lidMap[`pn:${phoneDigits}`] = lidDigits;
+            data.lidMap[`lid:${lidDigits}`] = phoneDigits;
+            changed = true;
+        }
     }
 
     // Master Owner LID auto-learn
-    if (phoneDigits === MASTER_OWNER_DIGITS || (last10 && phoneDigits.endsWith(MASTER_LAST10))) {
+    if (isMaster) {
         if (!data.masterLids.includes(lidDigits)) {
             data.masterLids.push(lidDigits);
             changed = true;

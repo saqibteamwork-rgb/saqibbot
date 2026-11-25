@@ -1898,19 +1898,26 @@
     function getTargetServerNode() {
       if (selectedServerMode !== 'auto' && CLUSTER[selectedServerMode]) {
         const node = CLUSTER[selectedServerMode];
-        if (node.online) return node;
-        addLog(`⚠️ Selected ${node.short} is unresponsive, auto-routing to healthy node...`, 'error');
+        if (node.online && (node.active || 0) < (node.maxSessions || 4) && (node.mem || 0) < 470) return node;
+        if (node.online) {
+          addLog(`⚠️ ${node.short} is at full capacity (${node.active}/4 bots). Smart-routing to a lighter node for 24/7 stability...`, 'info');
+        } else {
+          addLog(`⚠️ Selected ${node.short} is unresponsive, auto-routing to healthy node...`, 'error');
+        }
       }
 
-      // Auto mode: find all online nodes
+      // Auto mode: prioritize online nodes strictly under capacity (< maxSessions & < 460MB RAM)
       const allNodes = Object.values(CLUSTER);
       const onlineNodes = allNodes.filter(n => n.online);
       if (onlineNodes.length === 0) return CLUSTER.s1;
 
-      // Least-loaded first, round-robin amongst least busy nodes
-      onlineNodes.sort((a, b) => a.active - b.active);
-      const minActive = onlineNodes[0].active;
-      const candidates = onlineNodes.filter(n => n.active <= minActive + 1);
+      const underCap = onlineNodes.filter(n => (n.active || 0) < (n.maxSessions || 4) && (n.mem || 0) < 470);
+      const pool = underCap.length > 0 ? underCap : onlineNodes;
+
+      // Least-loaded first, then lowest RAM
+      pool.sort((a, b) => (a.active - b.active) || ((a.mem || 0) - (b.mem || 0)));
+      const minActive = pool[0].active;
+      const candidates = pool.filter(n => n.active <= minActive);
 
       autoCounter++;
       return candidates[autoCounter % candidates.length];
@@ -1956,6 +1963,8 @@
               node.ping = latency;
               const activeCount = (typeof data.activeSessions === 'number') ? data.activeSessions : (data.pairedSessions || 0);
               node.active = activeCount;
+              node.maxSessions = data.maxSessions || 4;
+              node.mem = data.memoryUsageMb || 0;
               totalActiveBots += activeCount;
               onlineServersCount++;
 
