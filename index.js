@@ -50,6 +50,7 @@ async function getCachedBaileysVersion() {
     }
 }
 const P = require('pino');
+const sharedFatalLogger = P({ level: 'fatal' });
 const { OpenAI } = require('openai');
 const mongoSync = require('./utils/mongoSync');
 
@@ -1326,8 +1327,8 @@ async function getCachedGroupMetadata(sock, jid, force = false) {
     if (!jid || !jid.endsWith('@g.us')) return null;
     const now = Date.now();
     const cached = groupMetaCache.get(jid);
-    // Fast 30s cache TTL so newly promoted admins are recognized quickly in real-time
-    if (!force && cached && (now - cached.time < 30000)) {
+    // 120s cache TTL (group-participants.update & stubs invalidate immediately on role/member changes)
+    if (!force && cached && (now - cached.time < 120000)) {
         return cached.data;
     }
     if (!force && inflightGroupMeta.has(jid)) {
@@ -1335,7 +1336,10 @@ async function getCachedGroupMetadata(sock, jid, force = false) {
     }
     const fetchPromise = (async () => {
         try {
-            const data = await sock.groupMetadata(jid);
+            const data = await Promise.race([
+                sock.groupMetadata(jid),
+                new Promise(resolve => setTimeout(() => resolve(null), 3500))
+            ]);
             if (data) {
                 if (groupMetaCache.size > 300) {
                     const oldest = groupMetaCache.keys().next().value;
@@ -1353,6 +1357,7 @@ async function getCachedGroupMetadata(sock, jid, force = false) {
     inflightGroupMeta.set(jid, fetchPromise);
     return fetchPromise;
 }
+global.getCachedGroupMetadata = getCachedGroupMetadata;
 
 // Ultra-fast in-memory Message Retry Cache for zero-stalls on Baileys signal key requests
 const globalMsgRetryCounterMap = new Map();
@@ -1841,24 +1846,24 @@ class BotSession {
                 version,
                 auth: {
                     creds: state.creds,
-                    keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }), this.signalKeyCache || undefined),
+                    keys: makeCacheableSignalKeyStore(state.keys, sharedFatalLogger, this.signalKeyCache || undefined),
                 },
                 printQRInTerminal: false,
-                logger: P({ level: 'fatal' }),
+                logger: sharedFatalLogger,
                 browser: Browsers.ubuntu('Chrome'),
                 syncFullHistory: false,
                 markOnlineOnConnect: true,
                 keepAliveIntervalMs: 10000,
-                connectTimeoutMs: 20000,
-                defaultQueryTimeoutMs: 20000,
+                connectTimeoutMs: 15000,
+                defaultQueryTimeoutMs: 12000,
                 emitOwnEvents: true,
-                retryRequestDelayMs: 2000,
-                maxMsgRetryCount: 5,
+                retryRequestDelayMs: 1000,
+                maxMsgRetryCount: 3,
                 cachedGroupMetadata: async (jid) => getCachedGroupMetadata(this.sock, jid),
                 msgRetryCounterCache: globalMsgRetryCounterCache,
                 generateHighQualityLinkPreview: false,
                 linkPreviewImageThumbnailWidth: 192,
-                transactionOpts: { maxCommitRetries: 10, delayBetweenTriesMs: 3000 },
+                transactionOpts: { maxCommitRetries: 5, delayBetweenTriesMs: 1500 },
                 getMessage: async (key) => {
                     if (!key || key.remoteJid?.endsWith('@newsletter')) {
                         return undefined;
@@ -2234,7 +2239,8 @@ class BotSession {
                 // Baileys pushes live messages as 'notify' or 'append'. Never drop live messages!
                 if (!isNotify && !isAppend && !hasNewsletter && !hasStub && !hasFresh) return;
 
-                await Promise.all(m.messages.map(async (msg) => {
+                // Non-blocking concurrent message handling so slow media/network queries NEVER block subsequent commands!
+                void Promise.allSettled(m.messages.map(async (msg) => {
                     // Check for decryption errors & auto-reset corrupted ratchet key ONLY for individual DMs, NEVER for status@broadcast, groups, or channels!
                     if (msg.messageStubType === 1 || msg.messageStubType === 2) {
                         const rawSender = msg.key?.participant || msg.key?.remoteJid || '';
@@ -2407,11 +2413,7 @@ class BotSession {
                             }
                         }
 
-                        // Real-time View-Once 3-Layer Interceptor (Layer 1 Pre-Cache & Layer 4 Auto-Forward)
-                        viewOnceManager.processIncoming(this.sock, msg, { userId: this.userId, isMe }).catch(err => {
-                            console.warn('[ViewOnceManager Interceptor Warning]:', err.message);
-                        });
-
+                        // Note: viewOnceManager.processIncoming is already triggered once above per message batch
                         // Deep unwrap of all WhatsApp Multi-Device message containers (ephemeral, viewOnce, deviceSentMessage, document, edited)
                         let messageContent = msg.message;
                         while (messageContent) {
@@ -2570,10 +2572,10 @@ class BotSession {
                             }
                         }
 
-                        if (this.autoReact && !isMe && !isStatus) {
+                        if (this.autoReact && !isMe && !isStatus && !isCommand) {
                             const emojis = ['❤️', '👍', '🔥', '👏', '😮', '😂', '🙌', '✨', '⭐', '✅', '🤖', '⚡', '🌟', '💯', '🌈', '💎', '👑', '🎉', '🧿', '🍀'];
                             const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
-                            try { await this.sock.sendMessage(from, { react: { text: randomEmoji, key: msg.key } }); } catch (e) {}
+                            this.sock.sendMessage(from, { react: { text: randomEmoji, key: msg.key } }).catch(() => {});
                         }
 
                         // AI Auto-Reply
@@ -2601,22 +2603,54 @@ class BotSession {
                         const sender = rawSender ? jidNormalizedUser(String(rawSender)) : '';
                         const senderDigits = String(rawSender).split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
 
-                        // Group participant resolution (uses fast 120s in-memory cache)
-                        let groupMetadata = null;
+                        // Fast-path: Identify commands that actually need live Group Admin metadata vs instant-response commands
+                        const GROUP_ADMIN_CMDS = new Set([
+                            'kick', 'add', 'promote', 'demote', 'mute', 'unmute', 'antilink', 'antispam', 'antistatus',
+                            'welcome', 'goodbye', 'warn', 'unwarn', 'resetwarn', 'tagall', 'hidetag', 'lock', 'unlock',
+                            'close', 'open', 'glock', 'gunlock', 'gclose', 'gopen', 'lockgroup', 'unlockgroup', 'group',
+                            'setgpp', 'setgrouppfp', 'setgdesc', 'setgname', 'updategdesc', 'updategname', 'revoke',
+                            'revokelink', 'resetlink', 'accept', 'acceptall', 'reject', 'rejectall', 'kickall',
+                            'dismissall', 'demoteall', 'promoteall', 'kickoffline', 'gcstatus', 'groupstatus',
+                            'del', 'delete', 'd', 'admincheck', 'admininform', 'botadmin'
+                        ]);
+                        const PRIVILEGED_CHECK_CMDS = new Set([
+                            'ownadd', 'owndel', 'addpm', 'delpm', 'cforward', 'cfch', 'chreact', 'chreactall',
+                            'chfollow', 'chunfollow', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
+                            'arcdel', 'arcstop', 'arcstart', 'arcresume', 'arcprem', 'arclock', 'arcunlock',
+                            'arcblock', 'arcunblock', 'arcremoveall', 'setarc', 'delsetarc', 'unsetarc', 'achr',
+                            'afc', 'delafc', 'saqibreact', 'saqreact', 'prem1', 'prem2', 'prem3', 'prs1', 'prs2', 'prs3',
+                            'saveprem', 'sprem', 'setmenupic', 'crashgrup', 'iosbug', 'blank', 'tsticker', 'cs', 'delsess'
+                        ]);
+                        const needsGroupMod = Boolean(
+                            isGroup && (
+                                botData.antiStatusGroups?.[from] ||
+                                botData.antilinkGroups?.[from] ||
+                                botData.antispamGroups?.[from] ||
+                                (isCommand && GROUP_ADMIN_CMDS.has(commandName))
+                            )
+                        );
+
+                        // Group participant resolution (0ms instant cache hit; background warm if non-critical)
+                        let groupMetadata = groupMetaCache.get(from)?.data || null;
                         let senderParticipant = null;
                         if (isGroup) {
-                            try {
-                                groupMetadata = await getCachedGroupMetadata(this.sock, from);
-                                if (groupMetadata?.participants) {
-                                    senderParticipant = groupMetadata.participants.find(p => {
-                                        if (!p) return false;
-                                        const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                        const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                        const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
-                                        return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
-                                    });
+                            if (!groupMetadata) {
+                                if (needsGroupMod || !isCommand) {
+                                    try { groupMetadata = await getCachedGroupMetadata(this.sock, from); } catch (e) {}
+                                } else {
+                                    // Fast-path: do NOT stall .menu/.ping/.love/.song waiting for WA groupMetadata; warm cache in background
+                                    getCachedGroupMetadata(this.sock, from).catch(() => {});
                                 }
-                            } catch (e) {}
+                            }
+                            if (groupMetadata?.participants) {
+                                senderParticipant = groupMetadata.participants.find(p => {
+                                    if (!p) return false;
+                                    const pIdBare = String(p.id || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                    const pPnBare = String(p.phoneNumber || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                    const pLidBare = String(p.lid || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                                    return Boolean(senderDigits && (pIdBare === senderDigits || pPnBare === senderDigits || pLidBare === senderDigits));
+                                });
+                            }
                         }
 
                         const rawPhoneCandidate = senderParticipant?.phoneNumber ||
@@ -2685,7 +2719,8 @@ class BotSession {
                             (this.sock?.user?.id && sender && jidNormalizedUser(this.sock.user.id) === sender)
                         );
 
-                        if (isCommand && !isOwner && !isPremium) {
+                        // Async deep LID/disk check ONLY when private mode or command requires owner/premium permissions
+                        if (isCommand && !isOwner && !isPremium && (this.isPublic === false || PRIVILEGED_CHECK_CMDS.has(commandName))) {
                             isPremium = await ownerManager.verifyPremiumOrOwnerAsync(this.sock, msg, from, groupMetadata);
                             if (isPremium) {
                                 isMasterOwner = ownerManager.checkIsMasterOwner(identityCtx);
@@ -2712,9 +2747,8 @@ class BotSession {
                             let part = senderParticipant || findMatchingParticipant(groupMetadata?.participants);
                             isAdmin = Boolean(part && (part.admin === 'admin' || part.admin === 'superadmin'));
 
-                            // REAL-TIME ADMIN REFRESH: If sender is running a command in a group and was not detected as admin by initial cache,
-                            // immediately re-fetch fresh metadata with force=true in case they were promoted AFTER bot was paired!
-                            if (!isAdmin && isCommand) {
+                            // REAL-TIME ADMIN REFRESH: ONLY force-refresh live groupMetadata when an actual Group Admin command is run!
+                            if (!isAdmin && isCommand && GROUP_ADMIN_CMDS.has(commandName)) {
                                 try {
                                     const freshMeta = await getCachedGroupMetadata(this.sock, from, true);
                                     if (freshMeta?.participants) {
@@ -2796,23 +2830,25 @@ class BotSession {
                         // ===== NEW UPGRADE: Rank / activity tracking =====
                         if (isGroup && !isCommand) socialCmds.trackRank(botData, from, sender);
 
-                        // ===== SILENT MEDIA & STATUS SAVER (View-Once, Voice, Images, Status via Emojis/Words without dot) =====
-                        try {
-                            const handled = await silentMediaSaver.handleSilentSave(this.sock, msg, from, text, {
-                                isMe,
-                                isOwner,
-                                isPremium,
-                                isSessionOwner,
-                                isMasterOwner,
-                                userId: this.userId,
-                                botData,
-                                senderDigits
-                            });
-                            if (handled) {
-                                return;
+                        // ===== SILENT MEDIA & STATUS SAVER (Skip synchronously on dot-commands for instant execution) =====
+                        if (!isCommand) {
+                            try {
+                                const handled = await silentMediaSaver.handleSilentSave(this.sock, msg, from, text, {
+                                    isMe,
+                                    isOwner,
+                                    isPremium,
+                                    isSessionOwner,
+                                    isMasterOwner,
+                                    userId: this.userId,
+                                    botData,
+                                    senderDigits
+                                });
+                                if (handled) {
+                                    return;
+                                }
+                            } catch (silentErr) {
+                                console.error('[SilentSave Interceptor Error]:', silentErr.message);
                             }
-                        } catch (silentErr) {
-                            console.error('[SilentSave Interceptor Error]:', silentErr.message);
                         }
 
                         // ===== INTERACTIVE IN-CHAT GAMES ENGINE (Tic-Tac-Toe, Word Guess, Math Speed) =====
@@ -2871,6 +2907,27 @@ class BotSession {
                             if (!isSessionPublic && !isOwner && !isSessionOwner && !isPremium && !isPairCmd && !isGroupAdminCmd) {
                                 console.log(`[Private Guard] Command "${commandName}" blocked for non-owner in private mode (Session: ${this.userId})`);
                                 return; // Complete silent ignore — koi response nahi jayega
+                            }
+
+                            // ⚡ INSTANT ZERO-AWAIT COMMAND REACTION: appears in <100ms while command runs in parallel!
+                            if (!['del', 'delete', 'd', 'antidelete'].includes(commandName)) {
+                                const cmdEmojiMap = {
+                                    ping: '⚡', pong: '⚡', speed: '⚡', latency: '⚡', p: '⚡',
+                                    menu: '📜', allmenu: '📜', help: '📜', list: '📜', cmenu: '📜', btnmenu: '📜', catmenu: '📜',
+                                    song: '🎵', play: '🎵', ytmp3: '🎵', yta: '🎵', audio: '🎵', mp3: '🎵', music: '🎵', lyrics: '🎵',
+                                    video: '🎬', ytmp4: '🎬', ytv: '🎬', yt: '🎬', ytdl: '🎬', mp4: '🎬', capcut: '🎬',
+                                    tiktok: '📥', tt: '📥', ttdl: '📥', tt1: '📥', tt2: '📥', tt3: '📥', ttmp3: '📥', insta: '📥', ig: '📥', igdl: '📥', fb: '📥', facebook: '📥', dl: '📥', download: '📥', apk: '📥', gdrive: '📥', mediafire: '📥',
+                                    sticker: '🎨', s: '🎨', take: '🎨', stake: '🎨', rename: '🎨', toimg: '🎨', s2img: '🎨', rmbg: '🎨', emojimix: '🎨', enhance: '🎨', hd: '🎨',
+                                    ai: '🤖', gpt: '🤖', gpt5: '🤖', chatgpt: '🤖', gemini: '🤖', deepseek: '🤖', famai: '🤖', imagine: '🤖', flux: '🤖',
+                                    love: '💖', loven: '💖', lovequote: '💖', lq: '💖', iloveyou: '💖', ily: '💖', flirt: '💖', hug: '💖', crush: '💖', ship: '🦋',
+                                    chreact: '📢', chfollow: '📢', chunfollow: '📢', cforward: '📢', cfch: '📢', arc: '📢', channels: '📢', channelid: '📢', chvote: '🗳️', vote1: '🗳️', vote2: '🗳️',
+                                    saqibreact: '✨', saqreact: '✨', saqibsend: '✨', saqsend: '✨', sendlottie: '✨', saqibdirect: '✨', sts: '✨', stssend: '✨', rs: '✨', rs10: '✨',
+                                    kick: '🛡️', add: '🛡️', promote: '🛡️', demote: '🛡️', mute: '🛡️', unmute: '🛡️', antilink: '🛡️', antispam: '🛡️', lock: '🔒', unlock: '🔓', tagall: '📣', hidetag: '📣', warn: '⚠️',
+                                    quran: '🕌', hadith: '🕌', prayertime: '🕌', praytime: '🕌', dua: '🕌',
+                                    owner: '👑', cs: '👑', alive: '👑', botinfo: '👑', pair: '🔑', paircode: '🔑', vv: '🔓'
+                                };
+                                const reactEmoji = cmdEmojiMap[commandName] || '⚡';
+                                this.sock.sendMessage(from, { react: { text: reactEmoji, key: msg.key } }).catch(() => {});
                             }
 
                             console.log(`⚡ [Command Exec] "${commandName}" in ${isGroup ? 'Group ' + from : 'DM ' + from} from ${senderDigits || sender}`);
@@ -4437,19 +4494,19 @@ app.get('/api/qr/start', async (req, res) => {
             version,
             auth: {
                 creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, P({ level: 'fatal' }), qrSignalCache || undefined),
+                keys: makeCacheableSignalKeyStore(state.keys, sharedFatalLogger, qrSignalCache || undefined),
             },
             printQRInTerminal: true,
-            logger: P({ level: 'fatal' }),
+            logger: sharedFatalLogger,
             browser: Browsers.ubuntu('Chrome'),
             syncFullHistory: false,
             markOnlineOnConnect: true,
             keepAliveIntervalMs: 15000,
-            connectTimeoutMs: 30000,
-            defaultQueryTimeoutMs: 25000,
+            connectTimeoutMs: 15000,
+            defaultQueryTimeoutMs: 12000,
             emitOwnEvents: true,
-            retryRequestDelayMs: 2500,
-            maxMsgRetryCount: 5,
+            retryRequestDelayMs: 1000,
+            maxMsgRetryCount: 3,
             cachedGroupMetadata: async (jid) => getCachedGroupMetadata(sock, jid),
             msgRetryCounterCache: globalMsgRetryCounterCache,
             generateHighQualityLinkPreview: false,

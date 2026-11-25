@@ -621,10 +621,14 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
             // Card 2: All Commands List + Google Search Card (in full text message, supports up to 65KB)
             const combinedCommandsAndSearch = `${(bodyText + footerText).trim()}\n\n${GOOGLE_LINKS_CARD}`;
 
+            const sendImgWithTimeout = (payload) => Promise.race([
+                sock.sendMessage(from, payload, { quoted: msg }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Image menu send timeout >8s')), 8000))
+            ]);
             if (imagePayload) {
                 if (menuText.length <= 1500) {
                     try {
-                        await sock.sendMessage(from, { image: imagePayload, caption: menuText, contextInfo: channelContext }, { quoted: msg });
+                        await sendImgWithTimeout({ image: imagePayload, caption: menuText, contextInfo: channelContext });
                         await sock.sendMessage(from, { text: GOOGLE_LINKS_CARD, contextInfo: channelContext });
                     } catch (imgErr) {
                         console.warn('[menuCommand] Short image menu failed, falling back to text:', imgErr.message);
@@ -633,7 +637,7 @@ async function menuCommand(sock, from, msg, session, botData, BOT_START_TIME, ar
                 } else {
                     // Full menu: Card 1 (Image + Header), Card 2 (Commands + Google Search)
                     try {
-                        await sock.sendMessage(from, { image: imagePayload, caption: headerText.trim(), contextInfo: channelContext }, { quoted: msg });
+                        await sendImgWithTimeout({ image: imagePayload, caption: headerText.trim(), contextInfo: channelContext });
                         await sock.sendMessage(from, { text: combinedCommandsAndSearch, contextInfo: channelContext });
                     } catch (imgErr) {
                         console.warn('[menuCommand] Image send failed, sending pure text menu:', imgErr.message);

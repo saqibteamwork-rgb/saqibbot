@@ -403,26 +403,25 @@ function learnIdentityMapping(phoneInput, lidInput) {
 /**
  * Scans auth_info folders for creds.json and lid-mapping-*.json files (throttled to every 15s)
  */
+let isAuthScanRunning = false;
 function harvestAuthFolderMappings(force = false) {
     const now = Date.now();
-    if (!force && now - lastAuthScanTime < 15000) return;
+    if (!force && now - lastAuthScanTime < 300000) return; // Max once per 5 mins
+    if (isAuthScanRunning) return;
     lastAuthScanTime = now;
+    isAuthScanRunning = true;
 
-    try {
-        if (!fs.existsSync(AUTH_DIR)) return;
-        const dirs = fs.readdirSync(AUTH_DIR);
-        for (const dirName of dirs) {
-            if (dirName.includes('_backup_') || dirName.includes('_expired_')) continue;
-            const folderPath = path.join(AUTH_DIR, dirName);
-            let stat;
-            try { stat = fs.statSync(folderPath); } catch { continue; }
-            if (!stat.isDirectory()) continue;
-
-            // 1. Check creds.json for session's own me.id <-> me.lid
-            const credsPath = path.join(folderPath, 'creds.json');
-            if (fs.existsSync(credsPath)) {
+    // Non-blocking background scan of creds.json only (O(sessions), never blocks event loop scanning 50k+ lid-mapping files!)
+    setImmediate(async () => {
+        try {
+            if (!fs.existsSync(AUTH_DIR)) return;
+            const dirs = await fs.promises.readdir(AUTH_DIR);
+            for (const dirName of dirs) {
+                if (dirName.includes('_backup_') || dirName.includes('_expired_') || dirName.startsWith('qr_')) continue;
+                const credsPath = path.join(AUTH_DIR, dirName, 'creds.json');
                 try {
-                    const creds = fs.readJsonSync(credsPath);
+                    const raw = await fs.promises.readFile(credsPath, 'utf8');
+                    const creds = JSON.parse(raw);
                     const mePhone = normalizePhoneDigits(creds?.me?.id || dirName);
                     const meLid = extractLidDigits(creds?.me?.lid || '', true);
                     if (mePhone && meLid) {
@@ -430,33 +429,10 @@ function harvestAuthFolderMappings(force = false) {
                     }
                 } catch {}
             }
-
-            // 2. Check Baileys lid-mapping-*.json files
-            try {
-                const files = fs.readdirSync(folderPath);
-                for (const file of files) {
-                    if (!file.startsWith('lid-mapping-') || !file.endsWith('.json')) continue;
-                    const keyPart = file.slice('lid-mapping-'.length, -'.json'.length);
-                    const filePath = path.join(folderPath, file);
-                    if (keyPart.endsWith('_reverse')) {
-                        const lidDigits = keyPart.slice(0, -'_reverse'.length).replace(/[^0-9]/g, '');
-                        if (lidDigits && !memoryLidMap.has(`lid:${lidDigits}`)) {
-                            const val = fs.readJsonSync(filePath);
-                            const pnDigits = normalizePhoneDigits(val);
-                            if (pnDigits && lidDigits) learnIdentityMapping(pnDigits, lidDigits);
-                        }
-                    } else {
-                        const pnDigits = normalizePhoneDigits(keyPart);
-                        if (pnDigits && !memoryLidMap.has(`pn:${pnDigits}`)) {
-                            const val = fs.readJsonSync(filePath);
-                            const lidDigits = extractLidDigits(val, true);
-                            if (pnDigits && lidDigits) learnIdentityMapping(pnDigits, lidDigits);
-                        }
-                    }
-                }
-            } catch {}
+        } catch {} finally {
+            isAuthScanRunning = false;
         }
-    } catch {}
+    });
 }
 
 /**
@@ -608,40 +584,36 @@ async function resolveIdentityPairAsync({ digits, lid }, sock = null) {
         }
     }
 
-    for (const s of socketsToCheck) {
+    const checks = socketsToCheck.slice(0, 3).map(async (s) => {
         const lidStore = s?.signalRepository?.lidMapping;
-        if (!lidStore) continue;
+        if (!lidStore) throw new Error('no lidStore');
 
         if (resolvedDigits && !resolvedLid && typeof lidStore.getLIDForPN === 'function') {
-            try {
-                const lidJid = await Promise.race([
-                    lidStore.getLIDForPN(`${resolvedDigits}@s.whatsapp.net`),
-                    new Promise(r => setTimeout(() => r(null), 2000))
-                ]);
-                if (lidJid) {
-                    resolvedLid = extractLidDigits(lidJid, true);
-                    if (resolvedLid) {
-                        learnIdentityMapping(resolvedDigits, resolvedLid);
-                        break;
-                    }
-                }
-            } catch {}
+            const lidJid = await Promise.race([
+                lidStore.getLIDForPN(`${resolvedDigits}@s.whatsapp.net`),
+                new Promise(r => setTimeout(() => r(null), 600))
+            ]);
+            const found = lidJid ? extractLidDigits(lidJid, true) : null;
+            if (found) return { digits: resolvedDigits, lid: found };
         } else if (resolvedLid && !resolvedDigits && typeof lidStore.getPNForLID === 'function') {
-            try {
-                const pnJid = await Promise.race([
-                    lidStore.getPNForLID(`${resolvedLid}@lid`),
-                    new Promise(r => setTimeout(() => r(null), 2000))
-                ]);
-                if (pnJid) {
-                    resolvedDigits = normalizePhoneDigits(pnJid);
-                    if (resolvedDigits) {
-                        learnIdentityMapping(resolvedDigits, resolvedLid);
-                        break;
-                    }
-                }
-            } catch {}
+            const pnJid = await Promise.race([
+                lidStore.getPNForLID(`${resolvedLid}@lid`),
+                new Promise(r => setTimeout(() => r(null), 600))
+            ]);
+            const found = pnJid ? normalizePhoneDigits(pnJid) : null;
+            if (found) return { digits: found, lid: resolvedLid };
         }
-    }
+        throw new Error('not resolved');
+    });
+
+    try {
+        const matched = await Promise.any(checks);
+        if (matched?.digits && matched?.lid) {
+            resolvedDigits = matched.digits;
+            resolvedLid = matched.lid;
+            learnIdentityMapping(resolvedDigits, resolvedLid);
+        }
+    } catch {}
 
     return {
         digits: resolvedDigits || null,
@@ -908,8 +880,8 @@ async function verifyPremiumOrOwnerAsync(sock, msg, from, groupMetadata = null) 
     const ctx = { sock, msg, from, isGroup, isMe, groupMetadata, senderParticipant, rawSender };
     if (checkIsPremium(ctx)) return true;
 
-    // Force fresh disk auth scan
-    harvestAuthFolderMappings(true);
+    // Throttled disk auth scan (uses 60s cache instead of blocking sync I/O on every command)
+    harvestAuthFolderMappings(false);
     if (checkIsPremium(ctx)) return true;
 
     // Resolve sender's own missing half via Baileys lidMapping
