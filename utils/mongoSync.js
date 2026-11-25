@@ -745,13 +745,12 @@ async function restoreAllSessionsFromMongo(authDir) {
         }
 
         // 1. Fetch metadata only (exclude heavy binary .data) to eliminate RAM bloat & speed up dyno boot 10x!
-        const candidateMeta = await col.find(query, {
+        const candidateMeta = (await col.find(query, {
             projection: { _id: 1, updatedAt: 1, fileCount: 1, nodeId: 1 }
-        }).toArray();
+        }).toArray()) || [];
 
-        if (!candidateMeta || candidateMeta.length === 0) {
-            console.log(`📂 [MongoDB Session Restore] No cloud sessions found in MongoDB for node "${myNode}".`);
-            return 0;
+        if (candidateMeta.length === 0) {
+            console.log(`📂 [MongoDB Session Restore] No direct sessions found for node "${myNode}" — checking orphan pool...`);
         }
 
         // 2. Filter: Strictly Owner Numbers (ALWAYS restored) + Sessions updated within last 30 days!
@@ -787,11 +786,11 @@ async function restoreAllSessionsFromMongo(authDir) {
             try {
                 const slotsLeft = maxSessions - targetMeta.length;
                 const alreadyPicked = new Set(targetMeta.map(d => String(d._id)));
-                const staleCutoff = now - 8 * 60 * 1000; // Not updated in last 8 mins (stranded by dead/full dyno)
+                const staleCutoff = now - 15 * 60 * 1000; // Not updated in last 15 mins (stranded by dead/full dyno)
                 const recentCutoff = now - 48 * 3600 * 1000; // Active in last 48h
 
                 const locksCol = db.collection('session_locks');
-                const activeLocks = await locksCol.find({ heartbeat: { $gte: now - 120000 } }, { projection: { _id: 1 } }).toArray();
+                const activeLocks = await locksCol.find({ heartbeat: { $gte: now - 10 * 60 * 1000 } }, { projection: { _id: 1 } }).toArray();
                 const lockedIds = new Set(activeLocks.map(l => String(l._id)));
 
                 const orphanMeta = await col.find({
@@ -809,7 +808,10 @@ async function restoreAllSessionsFromMongo(authDir) {
                     .slice(0, slotsLeft);
 
                 if (rescuePool.length > 0) {
-                    console.log(`🚑 [Cluster Orphan Rescue] Node "${myNode}" has ${slotsLeft} spare slot(s) — rescuing ${rescuePool.length} stranded session(s):`, rescuePool.map(r => r._id).join(', '));
+                    const rescueIds = rescuePool.map(r => String(r._id));
+                    // Atomically claim nodeId so parallel booting dynos never rescue the same orphan
+                    await col.updateMany({ _id: { $in: rescueIds } }, { $set: { nodeId: myNode } }).catch(() => {});
+                    console.log(`🚑 [Cluster Orphan Rescue] Node "${myNode}" has ${slotsLeft} spare slot(s) — rescuing ${rescuePool.length} stranded session(s):`, rescueIds.join(', '));
                     for (const r of rescuePool) targetMeta.push(r);
                 }
             } catch (rescueErr) {
@@ -1229,11 +1231,24 @@ async function cleanupAtlasBloat(options = {}) {
             }
         } catch (e) { report.errors.push('deadDocs: ' + e.message); }
 
-        // 3. Shrink bloated sessions (> 400 files) one-by-one safely while preserving creds.json
+        // 3. Prune owners_data lidMap bloat BEFORE heavy session compression so fast metadata cleanups finish within Heroku 30s
         try {
+            const oCol = db.collection('owners_data');
+            const oDoc = await oCol.findOne({ _id: 'owners_data' });
+            if (oDoc?.payload?.lidMap && Object.keys(oDoc.payload.lidMap).length > 500) {
+                oDoc.payload.lidMap = {};
+                await oCol.updateOne({ _id: 'owners_data' }, { $set: { payload: oDoc.payload, updatedAt: Date.now() } });
+                report.ownersPruned = true;
+            }
+        } catch (e) { report.errors.push('owners: ' + e.message); }
+
+        // 4. Shrink bloated sessions (> 400 files) in bounded 15-doc batches (<16s total to prevent Heroku H12 30s timeout)
+        try {
+            const tStart = Date.now();
             const sessCol = db.collection('whatsapp_sessions');
-            const bloatedIds = await sessCol.find({ fileCount: { $gt: 400 } }, { projection: { _id: 1 } }).limit(80).toArray();
+            const bloatedIds = await sessCol.find({ fileCount: { $gt: 400 } }, { projection: { _id: 1 } }).limit(15).toArray();
             for (const item of bloatedIds) {
+                if (Date.now() - tStart > 16000) break;
                 const doc = await sessCol.findOne({ _id: item._id });
                 if (!doc?.data) continue;
                 try {
@@ -1258,17 +1273,6 @@ async function cleanupAtlasBloat(options = {}) {
                 } catch (_) {}
             }
         } catch (e) { report.errors.push('trimSessions: ' + e.message); }
-
-        // 4. Prune owners_data lidMap bloat
-        try {
-            const oCol = db.collection('owners_data');
-            const oDoc = await oCol.findOne({ _id: 'owners_data' });
-            if (oDoc?.payload?.lidMap && Object.keys(oDoc.payload.lidMap).length > 500) {
-                oDoc.payload.lidMap = {};
-                await oCol.updateOne({ _id: 'owners_data' }, { $set: { payload: oDoc.payload, updatedAt: Date.now() } });
-                report.ownersPruned = true;
-            }
-        } catch (e) { report.errors.push('owners: ' + e.message); }
     } catch (e) {
         report.errors.push(e.message);
     }
