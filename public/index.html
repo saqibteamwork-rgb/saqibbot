@@ -440,8 +440,26 @@
               </div>
             </button>
 
-            <!-- 2. Individual 49 Nodes Grid -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <!-- Toggle Button to Show/Hide 49-Node Server Grid -->
+            <button
+              type="button"
+              id="toggleServersBtn"
+              onclick="toggleClusterServers()"
+              aria-expanded="false"
+              class="w-full py-2.5 px-3.5 rounded-xl border border-slate-700/80 bg-slate-800/75 hover:bg-slate-700/75 text-xs font-bold text-slate-100 flex items-center justify-between transition cursor-pointer shadow-sm"
+            >
+              <span class="flex items-center gap-2">
+                <i class="fa-solid fa-server text-sky-400 text-[11px]"></i>
+                <span id="toggleServersLabel">See Servers (49 Nodes)</span>
+              </span>
+              <span class="flex items-center gap-2 text-[11px] text-emerald-300 font-semibold">
+                <i id="toggleServersIcon" class="fa-solid fa-chevron-down text-[10px]"></i>
+              </span>
+            </button>
+
+            <!-- 2. Individual 49 Nodes Grid (Collapsed by default) -->
+            <div id="clusterNodesGrid" class="hidden mt-2.5">
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
               <!-- S1: Heroku 1 -->
               <button
                 type="button"
@@ -1081,6 +1099,7 @@
                   <span class="text-[8px] px-1 py-0.2 rounded bg-sky-500/20 text-sky-300 font-bold">Fast</span>
                 </div>
               </button>
+              </div>
             </div>
     </section>
 
@@ -1969,6 +1988,18 @@
         }
         if (modeText) modeText.textContent = `Dedicated: ${node.short}`;
       }
+    }
+
+    function toggleClusterServers() {
+      const grid = document.getElementById('clusterNodesGrid');
+      const btn = document.getElementById('toggleServersBtn');
+      const label = document.getElementById('toggleServersLabel');
+      const icon = document.getElementById('toggleServersIcon');
+      if (!grid) return;
+      const isHidden = grid.classList.toggle('hidden');
+      if (btn) btn.setAttribute('aria-expanded', String(!isHidden));
+      if (label) label.textContent = isHidden ? 'See Servers (49 Nodes)' : 'Hide Servers';
+      if (icon) icon.className = isHidden ? 'fa-solid fa-chevron-down text-[10px]' : 'fa-solid fa-chevron-up text-[10px]';
     }
 
     function getTargetServerNode() {
