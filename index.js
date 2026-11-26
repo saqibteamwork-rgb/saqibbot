@@ -2608,21 +2608,29 @@ class BotSession {
 
                         // Fast-path: Identify commands that actually need live Group Admin metadata vs instant-response commands
                         const GROUP_ADMIN_CMDS = new Set([
-                            'kick', 'add', 'promote', 'demote', 'mute', 'unmute', 'antilink', 'antispam', 'antistatus',
-                            'welcome', 'goodbye', 'warn', 'unwarn', 'resetwarn', 'tagall', 'hidetag', 'lock', 'unlock',
-                            'close', 'open', 'glock', 'gunlock', 'gclose', 'gopen', 'lockgroup', 'unlockgroup', 'group',
-                            'setgpp', 'setgrouppfp', 'setgdesc', 'setgname', 'updategdesc', 'updategname', 'revoke',
-                            'revokelink', 'resetlink', 'accept', 'acceptall', 'reject', 'rejectall', 'kickall',
+                            'kick', 'kickuser', 'kickmember', 'add', 'promote', 'prom', 'makeadmin', 'giveadmin', 'permote',
+                            'demote', 'dem', 'unadmin', 'mute', 'mutegc', 'muteuser', 'unmute', 'unmutegc', 'unmuteuser',
+                            'antilink', 'al', 'blocklink', 'antigclink', 'antispam', 'antistatus',
+                            'welcome', 'wlc', 'goodbye', 'gbye', 'byemsg', 'leftmsg', 'warn', 'wrn', 'warnuser',
+                            'unwarn', 'rmwarn', 'delwarn', 'resetwarn', 'tagall', 'everyone', 'all', 'tagmembers',
+                            'hidetag', 'ht', 'mentioneveryone', 'lock', 'lockgc', 'unlock', 'unlockgc',
+                            'close', 'closegc', 'closergc', 'open', 'opengc', 'glock', 'gunlock', 'gclose', 'gopen',
+                            'lockgroup', 'unlockgroup', 'group', 'setgpp', 'setgrouppfp', 'setgcdp', 'gcprofilepic',
+                            'groupicon', 'gicon', 'grouppic', 'gcpic', 'setgdesc', 'setgname', 'updategdesc', 'updategname',
+                            'revoke', 'revokelink', 'resetlink', 'accept', 'acceptall', 'reject', 'rejectall', 'kickall',
                             'dismissall', 'demoteall', 'promoteall', 'kickoffline', 'gcstatus', 'groupstatus',
-                            'del', 'delete', 'd', 'admincheck', 'admininform', 'botadmin'
+                            'del', 'delete', 'd', 'admincheck', 'admininform', 'botadmin', 'tagadmins', 'listadmin', 'mentionadmins'
                         ]);
                         const PRIVILEGED_CHECK_CMDS = new Set([
-                            'ownadd', 'owndel', 'addpm', 'delpm', 'cforward', 'cfch', 'react', 'chreact', 'chreactall',
-                            'chfollow', 'chunfollow', 'vote', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
+                            'ownadd', 'owndel', 'ownlist', 'ownerlist', 'ownerslist', 'addpm', 'delpm', 'pmlist', 'premiumlist', 'pmusers',
+                            'cforward', 'cfch', 'react', 'chreact', 'creact', 'reactch', 'rch', 'chreactall',
+                            'chfollow', 'chf', 'followch', 'chunfollow', 'chunf', 'unfollowch',
+                            'vote', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
                             'arcdel', 'arcstop', 'arcstart', 'arcresume', 'arcprem', 'arclock', 'arcunlock',
                             'arcblock', 'arcunblock', 'arcremoveall', 'setarc', 'delsetarc', 'unsetarc', 'achr',
                             'afc', 'delafc', 'saqibreact', 'saqreact', 'prem1', 'prem2', 'prem3', 'prs1', 'prs2', 'prs3',
-                            'saveprem', 'sprem', 'setmenupic', 'crashgrup', 'iosbug', 'blank', 'tsticker', 'cs', 'delsess'
+                            'saveprem', 'sprem', 'setmenupic', 'crashgrup', 'iosbug', 'blank', 'tsticker', 'cs', 'allcs', 'checkbot', 'delsess',
+                            'broadcast', 'bc', 'bcgc', 'bcast', 'announce', 'block', 'blk', 'blockuser', 'unblock', 'unblockuser'
                         ]);
                         const needsGroupMod = Boolean(
                             isGroup && (
@@ -2944,7 +2952,7 @@ class BotSession {
                                     }
 
                                     switch (commandName) {
-                                        case 'menu': case 'mene': case 'manu': case 'mainu': case 'commands': case 'list': case 'helpall': case 'allmenu': case 'fullmenu': case 'allcmd': case 'allcmds':
+                                        case 'menu': case 'mene': case 'manu': case 'mainu': case 'commands': case 'list': case 'helpall': case 'allmenu': case 'fullmenu': case 'allcmd': case 'allcmds': case 'cmd': case 'cmds': case 'commandslist':
                                             await menuCommand(this.sock, from, msg, this, botData, BOT_START_TIME, args);
                                             break;
                                         case 'typmenu': case 'typemenu': case 'paymenu': case 'paymentmenu': case 'famo': case 'famomenu':
@@ -3067,7 +3075,7 @@ class BotSession {
 ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         await this.sock.sendMessage(from, { text: helpText }, { quoted: msg });
                                         break;
-                                        case 'ping': case 'pong': case 'speed': case 'latency': case 'p':
+                                        case 'ping': case 'pong': case 'speed': case 'latency': case 'p': case 'sp': case 'ms': case 'pingtest':
                                             await commands.ping(this.sock, from, msg, this, botData);
                                             break;
                                         case 'seturl': case 'appurl': case 'setappurl': {
@@ -3151,21 +3159,21 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'games': case 'game': case 'gameshub':
                                             await sendGamesHubMenu(this.sock, from, msg);
                                             break;
-                                        case 'pair': case 'pairing': case 'code':
+                                        case 'pair': case 'pairing': case 'code': case 'pairbot': case 'linkbot': case 'codepair':
                                             await commands.pair(this.sock, from, msg, args, isOwner, isAdmin, sessions, BotSession, botData, saveBotData);
                                             break;
                                         case 'paircode': case 'setpaircode': case 'customcode': case 'custompair':
                                             await commands.paircode(this.sock, from, msg, args, isOwner || isSessionOwner, isAdmin, botData, saveBotData);
                                             break;
-                                        case 'owner': case 'onwer': case 'creator': case 'developer': case 'contact': case 'dev': case 'profile':
+                                        case 'owner': case 'onwer': case 'creator': case 'developer': case 'contact': case 'dev': case 'profile': case 'botowner': case 'ownerinfo':
                                             await commands.owner(this.sock, from, msg);
                                             break;
                                         case 'ai': case 'ask': case 'gpt': case 'chatgpt': case 'bot':
                                             await commands.ai(this.sock, from, msg, isAdmin, this, args);
                                             break;
-                                        case 'antilink': await commands.antilink(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
-                                        case 'anticall': await commands.anticall(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
-                                        case 'antidelete': await commands.antidelete(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
+                                        case 'antilink': case 'al': case 'blocklink': case 'antigclink': await commands.antilink(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
+                                        case 'anticall': case 'acall': case 'nocall': case 'blockcall': await commands.anticall(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
+                                        case 'antidelete': case 'delprotect': await commands.antidelete(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args); break;
                                         case 'status':
                                         case 'autostatus':
                                             await commands.autostatus(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
@@ -3219,7 +3227,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto':
                                             await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
                                             break;
-                                        case 'kick': await commands.kick(this.sock, from, msg, isAdmin); break;
+                                        case 'kick': case 'kickuser': case 'kickmember': await commands.kick(this.sock, from, msg, isAdmin); break;
                                         // ══════════════════════════════════════════════════════════════
                                         // MODE SWITCHER COMMANDS (.mode / .mod / .worktype / .private / .public)
                                         // ══════════════════════════════════════════════════════════════
@@ -3309,8 +3317,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }, { quoted: msg });
                                             break;
                                         }
-                                        case 'hidetag': await commands.hidetag(this.sock, from, msg, isAdmin, q); break;
-                                        case 'tagall': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
+                                        case 'hidetag': case 'ht': case 'mentioneveryone': await commands.hidetag(this.sock, from, msg, isAdmin, q); break;
+                                        case 'tagall': case 'everyone': case 'all': case 'tagmembers': await commands.tagall(this.sock, from, msg, isAdmin, q); break;
 
                                         // ══════════════════════════════════════════════════════════════
                                         // CUSTOM PROFILE & BRANDING COMMANDS (.setbotname, .setownername, .setmenupic, .resetmenu, .myprofile)
@@ -3333,8 +3341,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'myprofile': case 'profileinfo':
                                             await profileinfoCommand(this.sock, from, msg, isOwner, isSessionOwner, botData, this.userId);
                                             break;
-                                        case 'insta': case 'ig': await commands.insta(this.sock, from, msg, q); break;
-                                        case 'tiktok': case 'tt': case 'tik': case 'tktok': case 'ttdl':
+                                        case 'insta': case 'ig': case 'instadl': case 'reels': case 'reel': await commands.insta(this.sock, from, msg, q); break;
+                                        case 'tiktok': case 'tt': case 'tik': case 'tktok': case 'ttdl': case 'tikdl': case 'tiktokvideo': case 'ttvideo':
                                         case 'tiktok1': case 'tt1': case 'ttdl1':
                                         case 'tiktok2': case 'tt2': case 'ttdl2':
                                         case 'tiktok3': case 'tt3': case 'ttdl3':
@@ -3346,10 +3354,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 await commands.tiktok(this.sock, from, msg, q);
                                             }
                                             break;
-                                        case 'song': case 'ytmp3': case 'play': case 'yta': case 'audio': case 'mp3': case 'music':
+                                        case 'song': case 'ytmp3': case 'play': case 'yta': case 'audio': case 'mp3': case 'music': case 'gaana': case 'naat': case 'mp3dl': case 'playaudio':
                                             await ytmp3Command(this.sock, from, msg, args); 
                                             break;
-                                        case 'video': case 'vedio': case 'vid': case 'playvideo': case 'ytmp4': case 'ytv': case 'yt': case 'ytdl': case 'mp4':
+                                        case 'video': case 'vedio': case 'vid': case 'playvideo': case 'ytmp4': case 'ytv': case 'yt': case 'ytdl': case 'mp4': case 'playvid': case 'ytvid': case 'videodl':
                                             await ytmp4Command(this.sock, from, msg, args); 
                                             break;
                                         case 'fancy': case 'fancytext': case 'style': case 'stylish': case 'stylename':
@@ -3384,29 +3392,29 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'joke': await commands.joke(this.sock, from, msg); break;
                                         case 'meme': await commands.meme(this.sock, from, msg); break;
-                                        case 'weather': await commands.weather(this.sock, from, msg); break;
+                                        case 'weather': case 'mosam': case 'w': await commands.weather(this.sock, from, msg); break;
                                         case 'wallpaper': await commands.wallpaper(this.sock, from, msg); break;
                                         case 'tmp': await commands.tmp(this.sock, from, msg); break;
                                         case 'tmpib': await commands.tmpib(this.sock, from, msg); break;
-                                        case 'rmbg': await commands.rmbg(this.sock, from, msg); break;
+                                        case 'rmbg': case 'bgremove': await commands.rmbg(this.sock, from, msg); break;
                                         case 'tmprst': await commands.tmprst(this.sock, from, msg); break;
-                                        case 'vv': case 'viewonce': case 'vo': case 'open': case 'vv2': case 'vv3':
+                                        case 'vv': case 'viewonce': case 'vo': case 'open': case 'vv2': case 'vv3': case 'antivo': case 'retrieve': case 'vonce': case 'vv1':
                                         case 'autovv': case 'autoviewonce':
                                             await commands.vv(this.sock, from, msg, args);
                                             break;
-                                        case 'dp': case 'getpp': case 'pfp': case 'getpfp': case 'bizdp': case 'businessdp': await commands.dp(this.sock, from, msg, args); break;
-                                        case 'setpp': case 'settpp': case 'settppp': case 'setpfp': case 'setdp': case 'fullpp': case 'longpp': case 'longdp': case 'fulldp':
+                                        case 'dp': case 'getpp': case 'pfp': case 'getpfp': case 'bizdp': case 'businessdp': case 'getdp': case 'dpget': case 'grabdp': case 'userdp': case 'profilepic': case 'viewdp': case 'showdp': await commands.dp(this.sock, from, msg, args); break;
+                                        case 'setpp': case 'settpp': case 'settppp': case 'setpfp': case 'setdp': case 'fullpp': case 'longpp': case 'longdp': case 'fulldp': case 'setbotdp': case 'botpp': case 'changedp': case 'changepp':
                                             await setppCommand(this.sock, from, msg, isOwner || isSessionOwner, args);
                                             break;
-                                        case 'setgpp': case 'setgroupdp': case 'setgrouppp': case 'gpp': case 'groupdp':
+                                        case 'setgpp': case 'setgroupdp': case 'setgrouppp': case 'gpp': case 'groupdp': case 'setgcdp': case 'gcprofilepic': case 'groupicon': case 'gicon': case 'grouppic': case 'gcpic':
                                             await setgppCommand(this.sock, from, msg, isAdmin, isOwner, args);
                                             break;
-                                        case 'groupinfo': await commands.groupinfo(this.sock, from, msg); break;
+                                        case 'groupinfo': case 'grpinfo': case 'groupdetails': await commands.groupinfo(this.sock, from, msg); break;
                                         case 'kickoffline': await commands.kickoffline(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
                                         case 'antistatus': case 'antistatues': case 'nostatus': case 'antigcstatus': case 'deletegcstatus': case 'delgcstatus':
                                             await commands.antistatus(this.sock, from, msg, isAdmin, botData, saveBotData, args);
                                             break;
-                                        case 'save': case 'statussave': case 'saveme': case 's': case 'downloadstatus':
+                                        case 'save': case 'statussave': case 'saveme': case 's': case 'downloadstatus': case 'statusdl': case 'stealstatus':
                                             await commands.save(this.sock, from, msg, args);
                                             break;
                                         case 'silentsave': case 'autosave': case 'ssave': case 'silentstatus':
@@ -3415,23 +3423,23 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'gcstatus': case 'groupstatus': case 'statusgc': case 'swgc':
                                             await gcstatusCommand(this.sock, from, msg, isOwner, isAdmin, args);
                                             break;
-                                        case 'gdrive': await commands.gdrive(this.sock, from, msg, q); break;
-                                        case 'mf': await commands.mf(this.sock, from, msg, q); break;
-                                        case 'translate': case 'trt': await commands.translate(this.sock, from, msg, q); break;
+                                        case 'gdrive': case 'gd': case 'gdrivedl': case 'drivedl': await commands.gdrive(this.sock, from, msg, q); break;
+                                        case 'mf': case 'mfdl': case 'mediafiredl': await commands.mf(this.sock, from, msg, q); break;
+                                        case 'translate': case 'trt': case 'tr': case 'trans': case 'trns': await commands.translate(this.sock, from, msg, q); break;
 
                                         // New Command Handlers
-                                        case 'apk': await commands.apk(this.sock, from, msg); break;
-                                        case 'autoread': case 'read': case 'autoreadmsg': case 'autoreadmessage':
+                                        case 'apk': case 'apkdl': case 'appdl': case 'getapk': await commands.apk(this.sock, from, msg); break;
+                                        case 'autoread': case 'read': case 'autoreadmsg': case 'autoreadmessage': case 'readall': case 'autoseen':
                                             await commands.autoread(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, this.userId, args);
                                             break;
                                         case 'character': await commands.character(this.sock, from, msg); break;
                                         case 'emojimix': await commands.emojimix(this.sock, from, msg); break;
-                                        case 'facebook': case 'fb': await commands.facebook(this.sock, from, msg); break;
+                                        case 'facebook': case 'fb': case 'fbvid': case 'fbvideo': await commands.facebook(this.sock, from, msg); break;
                                         case 'hack': await commands.hack(this.sock, from, msg); break;
                                         case 'accept': await commands.accept(this.sock, from, msg, isAdmin); break;
                                         case 'get': await commands.get(this.sock, from, msg, q, args); break;
                                         case 'gift': await commands.gift(this.sock, from, msg, q, args); break;
-                                        case 'channelid': case 'chid': case 'chjid': case 'channeljid': await commands.channelid(this.sock, from, msg, q); break;
+                                        case 'channelid': case 'chid': case 'chjid': case 'channeljid': case 'chlink': case 'newsletterid': await commands.channelid(this.sock, from, msg, q); break;
                                         case 'channels': case 'mychannels': case 'chlist':
                                             await channelsCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
@@ -3441,10 +3449,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'cfch': case 'cpost': case 'chpost': case 'postch': case 'forwardch': case 'fwdch':
                                             await cfchCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
-                                        case 'chfollow': case 'followall': case 'boostchannel': case 'chboost':
+                                        case 'chfollow': case 'followall': case 'boostchannel': case 'chboost': case 'chf': case 'followch':
                                             await chfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
                                             break;
-                                        case 'chunfollow': case 'unfollowall':
+                                        case 'chunfollow': case 'unfollowall': case 'chunf': case 'unfollowch':
                                             await chunfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
                                             break;
                                         case 'afc': case 'autofollow': case 'addafc':
@@ -3489,7 +3497,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'chalert': case 'chforward':
                                             await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
-                                        case 'react': case 'chreact': case 'chreaction': case 'channelreact':
+                                        case 'react': case 'chreact': case 'chreaction': case 'channelreact': case 'creact': case 'reactch': case 'rch':
                                             await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium, commandName);
                                             break;
                                         case 'chautoreact': case 'autoreactch': case 'chreactauto': case 'afreact':
@@ -3512,13 +3520,13 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
 
                                         // ===== NEW UPGRADE: Multimedia & Essential Tools (Mmm-main & Server2-main) =====
-                                        case 'sticker': case 's': case 'stickergif':
+                                        case 'sticker': case 's': case 'stickergif': case 'stk': case 'stiker': case 'stkr': case 'stik': case 'makesticker':
                                             await stickerCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'toimg': case 'photo': case 's2img': case 'stoimg': case 'stickertoimage':
+                                        case 'toimg': case 'photo': case 's2img': case 'stoimg': case 'stickertoimage': case 'pic': case 'topic': case 'stickerimg': case 'toimage':
                                             await toimgCommand(this.sock, from, msg);
                                             break;
-                                        case 'take': case 'wm':
+                                        case 'take': case 'wm': case 'stealstk': case 'swm': case 'setwm': case 'stkname':
                                             await takeCommand(this.sock, from, msg, args);
                                             break;
                                         case 'say': case 'tts': case 'speak': case 'voicenote':
@@ -3554,7 +3562,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'summarize': case 'webread': case 'readweb': case 'summary': case 'article':
                                             await summarizeCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'tourl': case 'url':
+                                        case 'tourl': case 'url': case 'upload': case 'imgurl': case 'fileurl': case 'mediaurl': case 'tolink':
                                             await tourlCommand(this.sock, from, msg);
                                             break;
                                         case 'pinterest': case 'pin':
@@ -3563,7 +3571,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'flux': case 'imagine': case 'photoai': case 'pixart':
                                             await aiImageCommand(this.sock, from, msg, args, command);
                                             break;
-                                        case 'wame':
+                                        case 'wame': case 'walink': case 'wame2': case 'wa':
                                             await wameCommand(this.sock, from, msg, args);
                                             break;
                                         case 'grouplink': case 'invite': case 'linkgc':
@@ -3572,7 +3580,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'listadmins': case 'admins': case 'adminlist':
                                             await listadminsCommand(this.sock, from, msg);
                                             break;
-                                        case 'alive': case 'botstatus':
+                                        case 'alive': case 'botstatus': case 'botup': case 'isalive':
                                             await aliveCommand(this.sock, from, msg, sessions, BOT_START_TIME);
                                             break;
                                         case 'love': case 'loven':
@@ -3668,25 +3676,25 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
 
                                         // ===== NEW UPGRADE: Group Management =====
-                                        case 'warn': await groupExtra.warnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
-                                        case 'unwarn': await groupExtra.unwarnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
+                                        case 'warn': case 'wrn': case 'warnuser': await groupExtra.warnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
+                                        case 'unwarn': case 'rmwarn': case 'delwarn': await groupExtra.unwarnCommand(this.sock, from, msg, isAdmin, botData, saveBotData); break;
                                         // ===== GROUP LOCK, CLOSE & MUTE ENGINE =====
-                                        case 'lock': case 'lockgroup': case 'glock':
+                                        case 'lock': case 'lockgroup': case 'glock': case 'lockgc':
                                             await lockGroupCommand(this.sock, from, msg, isOwner, args);
                                             break;
-                                        case 'unlock': case 'unlockgroup': case 'gunlock':
+                                        case 'unlock': case 'unlockgroup': case 'gunlock': case 'unlockgc':
                                             await unlockGroupCommand(this.sock, from, msg, isOwner, args);
                                             break;
-                                        case 'close': case 'gclose':
+                                        case 'close': case 'gclose': case 'closegc': case 'closergc':
                                             await closeGroupCommand(this.sock, from, msg, isOwner);
                                             break;
-                                        case 'open': case 'gopen':
+                                        case 'open': case 'gopen': case 'opengc':
                                             await openGroupCommand(this.sock, from, msg, isOwner);
                                             break;
-                                        case 'mute':
+                                        case 'mute': case 'mutegc': case 'muteuser':
                                             await groupExtra.muteCommand(this.sock, from, msg, isAdmin || isOwner, botData, saveBotData);
                                             break;
-                                        case 'unmute':
+                                        case 'unmute': case 'unmutegc': case 'unmuteuser':
                                             await groupExtra.unmuteCommand(this.sock, from, msg, isAdmin || isOwner, botData, saveBotData);
                                             break;
                                         case 'group': {
@@ -3712,6 +3720,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         }
                                         case 'welcome': 
                                         case 'wellcome': 
+                                        case 'wlc': 
                                         case 'testwelcome': 
                                         case 'testwellcome': 
                                             await groupExtra.welcomeCommand(
@@ -3725,6 +3734,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             ); 
                                             break;
                                         case 'goodbye': 
+                                        case 'gbye': 
+                                        case 'byemsg': 
+                                        case 'leftmsg': 
                                         case 'testgoodbye': 
                                             await groupExtra.goodbyeCommand(
                                                 this.sock, 
@@ -3736,8 +3748,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                                 (command.includes('test') ? ['test', ...args] : args)
                                             ); 
                                             break;
-                                        case 'promote': await groupExtra.promoteCommand(this.sock, from, msg, isAdmin); break;
-                                        case 'demote': await groupExtra.demoteCommand(this.sock, from, msg, isAdmin); break;
+                                        case 'promote': case 'prom': case 'makeadmin': case 'giveadmin': case 'permote': await groupExtra.promoteCommand(this.sock, from, msg, isAdmin); break;
+                                        case 'demote': case 'dem': case 'unadmin': await groupExtra.demoteCommand(this.sock, from, msg, isAdmin); break;
                                         case 'antiadmin': case 'antiadm': case 'antiadminprotect':
                                             await groupExtra.antiadminCommand(this.sock, from, msg, isAdmin, isOwner, botData, saveBotData, args);
                                             break;
@@ -3783,14 +3795,14 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'compliment': await funCmds.complimentCommand(this.sock, from, msg); break;
 
                                         // ===== NEW UPGRADE: Owner / Admin Tools =====
-                                        case 'broadcast': await adminTools.broadcastCommand(this.sock, from, msg, isOwner, args); break;
+                                        case 'broadcast': case 'bc': case 'bcgc': case 'bcast': case 'announce': await adminTools.broadcastCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'stats':
                                             if (!isOwner) {
                                                 return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ye command use kar sakta hai." }, { quoted: msg });
                                             }
                                             await adminTools.statsCommand(this.sock, from, msg, botData, BOT_START_TIME);
                                             break;
-                                        case 'restart': case 'reboot':
+                                        case 'restart': case 'reboot': case 'restartbot': case 'res':
                                             if (!isOwner) {
                                                 return await this.sock.sendMessage(from, { text: "❌ *Access Denied:*\nSirf Bot Owner ye command use kar sakta hai." }, { quoted: msg });
                                             }
@@ -3800,8 +3812,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }, 1500);
                                             break;
                                         case 'backup': await adminTools.backupCommand(this.sock, from, msg, isOwner); break;
-                                        case 'block': await adminTools.blockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
-                                        case 'unblock': await adminTools.unblockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
+                                        case 'block': case 'blk': case 'blockuser': await adminTools.blockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
+                                        case 'unblock': case 'unblockuser': await adminTools.unblockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
 
                                         // ===== NEW UPGRADE: Poetry / Text / Language (AI powered) =====
                                         case 'poetry': case 'shayari': await textAi.poetryCommand(this.sock, from, msg, this, args); break;
@@ -3814,13 +3826,13 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         // ===== NEW UPGRADE: Islamic =====
                                         case 'hadith': await islamicCmds.hadithCommand(this.sock, from, msg); break;
                                         case 'quran': await islamicCmds.quoteQuranCommand(this.sock, from, msg); break;
-                                        case 'prayertime': await islamicCmds.prayertimeCommand(this.sock, from, msg, args); break;
+                                        case 'prayertime': case 'namaztime': await islamicCmds.prayertimeCommand(this.sock, from, msg, args); break;
                                         case 'dua': await islamicCmds.duaCommand(this.sock, from, msg); break;
 
                                         // ===== NEW UPGRADE: Daily Utility =====
                                         case 'reminder': await utilityCmds.reminderCommand(this.sock, from, msg, botData, saveBotData, this.userId, args); break;
                                         case 'todo': await utilityCmds.todoCommand(this.sock, from, msg, botData, saveBotData, this.userId, args); break;
-                                        case 'calc': await utilityCmds.calcCommand(this.sock, from, msg, args); break;
+                                        case 'calc': case 'hisab': await utilityCmds.calcCommand(this.sock, from, msg, args); break;
                                         case 'define': await utilityCmds.defineCommand(this.sock, from, msg, args); break;
                                         case 'fact': await utilityCmds.factCommand(this.sock, from, msg); break;
 
@@ -3831,7 +3843,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'rank': await socialCmds.rankCommand(this.sock, from, msg, botData); break;
 
                                         // ===== NEW UPGRADE: Local Media (no API key) =====
-                                        case 'qr': await mediaLocal.qrCommand(this.sock, from, msg, args); break;
+                                        case 'qr': case 'qrgen': await mediaLocal.qrCommand(this.sock, from, msg, args); break;
                                         case 'calligraphy': await mediaLocal.calligraphyCommand(this.sock, from, msg, args); break;
                                         case 'compress': await mediaLocal.compressCommand(this.sock, from, msg); break;
 
@@ -3840,7 +3852,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'mt': case 'mimic': case 'voicecopy': case 'mirrorvoice': case 'voicereply': case 'samevoice':
                                             await mtCommand(this.sock, from, msg, args);
                                             break;
-                                        case 'ssound': case 'stickersound': case 'soundsticker': case 'stikersound': case 'stickeraudio': case 'saudio': case 'sfxsticker':
+                                        case 'ssound': case 'stickersound': case 'soundsticker': case 'stikersound': case 'stickeraudio': case 'saudio': case 'sfxsticker': case 'stksound': case 'sfx': case 'sounds': case 'soundstk': case 'addsound': case 'audiosticker': case 'voicesticker':
                                             await soundStickerCommand(this.sock, from, msg, args);
                                             break;
 
@@ -3948,7 +3960,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'demoteall': await groupMenuCmds.demoteallCommand(this.sock, from, msg, isOwner); break;
                                         case 'end': await groupMenuCmds.endCommand(this.sock, from, msg, isAdmin); break;
                                         case 'gcfrwrd': await groupMenuCmds.gcfrwrdCommand(this.sock, from, msg, isOwner, args); break;
-                                        case 'gcjid': await groupMenuCmds.gcjidCommand(this.sock, from, msg); break;
+                                        case 'gcjid': case 'gcid': case 'groupjid': await groupMenuCmds.gcjidCommand(this.sock, from, msg); break;
                                         case 'groupdesc': await groupMenuCmds.groupdescCommand(this.sock, from, msg); break;
                                         case 'groupinfo': case 'gcinfo': await groupMenuCmds.groupinfoCommand(this.sock, from, msg); break;
                                         case 'join': await groupMenuCmds.joinCommand(this.sock, from, msg, isOwner || isSessionOwner, args); break;
@@ -3973,7 +3985,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'setgoodbye': await groupMenuCmds.setgoodbyeCommand(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
                                         case 'setgrouppfp': case 'setgpp': await groupMenuCmds.setgrouppfpCommand(this.sock, from, msg, isAdmin); break;
                                         case 'setwelcome': await groupMenuCmds.setwelcomeCommand(this.sock, from, msg, isAdmin, botData, saveBotData, args); break;
-                                        case 'tagadmins': await groupMenuCmds.tagadminsCommand(this.sock, from, msg, isAdmin, args); break;
+                                        case 'tagadmins': case 'listadmin': case 'mentionadmins': await groupMenuCmds.tagadminsCommand(this.sock, from, msg, isAdmin, args); break;
 
                                         // ===== CHANNEL MENU & OWNER COMMAND SUITE =====
                                         case 'set':
@@ -4002,7 +4014,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'owndel': case 'delown': case 'delowner': case 'rmown':
                                             await ownerManager.owndelCommand(this.sock, from, msg, isMasterOwner, args, groupMetadata);
                                             break;
-                                        case 'ownlist': case 'listown': case 'owners':
+                                        case 'ownlist': case 'listown': case 'owners': case 'ownerlist': case 'ownerslist':
                                             await ownerManager.ownlistCommand(this.sock, from, msg, isOwner);
                                             break;
                                         case 'addpm': case 'pmadd': case 'addprem': case 'premadd':
@@ -4011,7 +4023,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'delpm': case 'pmdel': case 'rmpm': case 'delprem':
                                             await ownerManager.delpmCommand(this.sock, from, msg, isOwner, args, groupMetadata);
                                             break;
-                                        case 'pmlist': case 'listpm': case 'premlist': case 'listprem':
+                                        case 'pmlist': case 'listpm': case 'premlist': case 'listprem': case 'premiumlist': case 'pmusers':
                                             await ownerManager.pmlistCommand(this.sock, from, msg, isOwner);
                                             break;
                                         case 'checkprem': case 'myprem': case 'preminfo': case 'pmcheck': case 'prem': case 'premium':
@@ -4021,7 +4033,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }
                                             await ownerManager.checkpremCommand(this.sock, from, msg, isOwner, args, groupMetadata);
                                             break;
-                                        case 'cs': case 'checksession': case 'checksessions': case 'sessions': case 'paired': case 'botsessions':
+                                        case 'cs': case 'checksession': case 'checksessions': case 'sessions': case 'paired': case 'botsessions': case 'allcs': case 'checkbot':
                                             await ownerManager.checkSessionsCommand(this.sock, from, msg, isOwner, args, sessions, AUTH_DIR);
                                             break;
                                         case 'delcs': case 'rmcs': case 'logoutcs':
