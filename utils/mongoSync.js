@@ -599,6 +599,7 @@ async function backupSessionToMongo(userId, authPath, immediate = false, forceVa
 
             const col = db.collection('whatsapp_sessions');
             const nodeId = currentServerNodeId || 'default';
+            const clusterTag = String(nodeId).toLowerCase().startsWith('ashu') ? 'ashu' : 'saqib';
             const now = Date.now();
 
             await col.updateOne(
@@ -607,6 +608,7 @@ async function backupSessionToMongo(userId, authPath, immediate = false, forceVa
                     $set: {
                         _id: String(userId),
                         nodeId: nodeId,
+                        cluster: clusterTag,
                         data: compressed,
                         fileCount: Object.keys(filesMap).length,
                         isConnected: true,
@@ -819,6 +821,8 @@ async function restoreAllSessionsFromMongo(authDir) {
                 const orphanMeta = await col.find({
                     fileCount: { $gt: 1 },
                     isConnected: { $ne: false },
+                    cluster: { $ne: 'ashu' },
+                    nodeId: { $not: /^ashu/i },
                     $or: [
                         { nodeId: { $in: ['default', null] } },
                         { nodeId: { $exists: false } },
