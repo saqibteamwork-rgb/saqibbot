@@ -680,10 +680,6 @@ async function resolveChannelPollLocally(jid, serverId) {
     for (const s of activeSocks.slice(0, 5)) {
         if (!s) continue;
         try {
-            if (typeof s.newsletterFollow === 'function') {
-                await withClusterTimeout(s.newsletterFollow(jid), 2500).catch(() => {});
-                await new Promise(r => setTimeout(r, 250));
-            }
             const attempts = [{ count: 30, after: 0 }];
             if (Number.isFinite(numId) && numId > 1) {
                 attempts.push({ count: 10, after: numId + 1 });
@@ -832,10 +828,6 @@ async function executeSmoothClusterVotes(jid, serverId, opts = {}) {
         if (!s || typeof s.query !== 'function') continue;
 
         try {
-            if (typeof s.newsletterFollow === 'function') {
-                await withClusterTimeout(s.newsletterFollow(targetJid), 2500).catch(() => {});
-                await new Promise(r => setTimeout(r, 200));
-            }
             const msgTag = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}_${i}`;
             await withClusterTimeout(s.query({
                 tag: 'message',

@@ -205,11 +205,6 @@ async function fetchChannelPollDetails(sock, jid, serverId) {
   for (const s of candidateSocks) {
     if (!s || typeof hub.fetchRecent !== 'function') continue;
     try {
-      if (typeof s.newsletterFollow === 'function') {
-        await withTimeout(s.newsletterFollow(jid), 2500).catch(() => {});
-        await sleep(250);
-      }
-
       const fetchAttempts = [{ count: 30, after: 0 }];
       if (Number.isFinite(numServerId) && numServerId > 1) {
         fetchAttempts.push({ count: 10, after: numServerId + 1 });
@@ -441,10 +436,6 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
       const s = uniqueSocks[i];
 
       try {
-        if (typeof s.newsletterFollow === 'function') {
-          await withTimeout(s.newsletterFollow(jid), 2500).catch(() => {});
-          await sleep(200);
-        }
         const messageId = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}_${i}`;
         await withTimeout(s.query({
           tag: 'message',
