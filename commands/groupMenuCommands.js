@@ -368,15 +368,35 @@ async function grouplinkCommand(sock, from, msg, isAdmin) {
 async function joinCommand(sock, from, msg, isOwner, args = []) {
     if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner ye command use kar sakta hai!*" }, { quoted: msg });
     const link = args.join(' ').trim();
-    const codeMatch = link.match(/chat\.whatsapp\.com\/([0-9A-Za-z]{20,24})/);
-    if (!codeMatch) return await sock.sendMessage(from, { text: "❌ *Usage:* `.join https://chat.whatsapp.com/xxxx`" }, { quoted: msg });
+    const codeMatch = link.match(/(?:chat\.whatsapp\.com\/|invite\/)([0-9A-Za-z_-]{18,32})/i) || (link.match(/^[0-9A-Za-z_-]{18,32}$/) ? [link, link] : null);
+    if (!codeMatch) return await sock.sendMessage(from, { text: "❌ *Usage:* `.joingc https://chat.whatsapp.com/xxxx` *(Group ya Community link)*" }, { quoted: msg });
 
     try {
         const code = codeMatch[1];
+        let info = null;
+        if (typeof sock.groupGetInviteInfo === 'function') {
+            info = await sock.groupGetInviteInfo(code).catch(() => null);
+        }
+        const typeLabel = (info?.isCommunity || info?.isCommunityAnnounce || info?.linkedParent) ? '🏘️ Community' : '👥 Group';
+        const title = info?.subject || 'WhatsApp Group / Community';
         const res = await sock.groupAcceptInvite(code);
-        await sock.sendMessage(from, { text: `✅ *Successfully group join kar liya!* (JID: \`${res}\`)` }, { quoted: msg });
+        if (!res) {
+            return await sock.sendMessage(from, {
+                text: `📨 *Join Request Bhej Di Gayi Hai!*\n• *Type:* ${typeLabel}\n• *Name:* ${title}\n_(Admin approve karne par aap join ho jayenge.)_`
+            }, { quoted: msg });
+        }
+        await sock.sendMessage(from, {
+            text: `✅ *Successfully Joined ${typeLabel}!*\n• *Name:* ${title}\n• *JID:* \`${res}\``
+        }, { quoted: msg });
     } catch (e) {
-        await sock.sendMessage(from, { text: `❌ *Join Failed:* ${e.message}` }, { quoted: msg });
+        const msgStr = String(e.message || '');
+        if (/request|approval|401|403/i.test(msgStr)) {
+            return await sock.sendMessage(from, { text: `📨 *Join Request Bhej Di Gayi Hai!* Admin approval ke baad join ho jayenge.` }, { quoted: msg });
+        }
+        if (/409|already/i.test(msgStr)) {
+            return await sock.sendMessage(from, { text: `ℹ️ Aap is Group / Community mein pehle se shamil hain!` }, { quoted: msg });
+        }
+        await sock.sendMessage(from, { text: `❌ *Join Failed:* ${msgStr}` }, { quoted: msg });
     }
 }
 

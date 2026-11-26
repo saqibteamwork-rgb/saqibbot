@@ -1,13 +1,12 @@
 'use strict';
 
 /**
- * MR SAQIB MD :: AUTO JOIN GROUP MANAGER (.ajg / .delajg / .ajginfo)
+ * MR SAQIB MD :: AUTO-JOIN GROUP & COMMUNITY MANAGER (.ajg / .delajg / .ajglist)
  * ============================================================================
- * - Allows Bot Owner to configure an official WhatsApp Group invite link (.ajg)
- * - Whenever ANY user pairs or connects a bot session:
- *   The newly paired bot automatically joins the group OR sends a join request!
- * - Lifetime persistence with local JSON + automatic MongoDB Atlas cloud sync.
- * - Strictly Owner-only configuration & control.
+ * - Allows Bot Owner to configure Official WhatsApp Group(s) & Community link(s)
+ * - Whenever a new user pairs a bot session (fresh pairing):
+ *   The newly paired bot automatically joins or sends join requests cleanly!
+ * - Multi-entry list + legacy single-group compatibility + MongoDB & Cluster Sync.
  * ============================================================================
  */
 
@@ -20,9 +19,19 @@ const AUTO_GROUP_FILE = path.join(DATA_DIR, 'auto_group.json');
 
 let cachedData = null;
 
-/**
- * Load auto-group configuration from local JSON
- */
+function buildDefaultAutoGroupState() {
+  return {
+    enabled: false,
+    inviteCode: null,
+    groupLink: null,
+    groupName: null,
+    groupJid: null,
+    groups: [],
+    updatedAt: Date.now(),
+    joinedSessions: {}
+  };
+}
+
 function loadAutoGroupData() {
   try {
     if (fs.existsSync(AUTO_GROUP_FILE)) {
@@ -33,182 +42,197 @@ function loadAutoGroupData() {
   }
 
   if (!cachedData || typeof cachedData !== 'object') {
-    cachedData = {
-      enabled: false,
-      inviteCode: null,
-      groupLink: null,
-      groupName: null,
-      groupJid: null,
-      updatedAt: Date.now(),
-      joinedSessions: {}
-    };
+    cachedData = buildDefaultAutoGroupState();
   }
-
+  if (!Array.isArray(cachedData.groups)) {
+    cachedData.groups = [];
+  }
+  // Migrate legacy single-group fields into groups[] cleanly
+  if (cachedData.enabled && cachedData.inviteCode && !cachedData.groups.some((g) => g.code === cachedData.inviteCode)) {
+    cachedData.groups.push({
+      code: cachedData.inviteCode,
+      link: cachedData.groupLink || `https://chat.whatsapp.com/${cachedData.inviteCode}`,
+      name: cachedData.groupName || 'WhatsApp Group',
+      jid: cachedData.groupJid || null,
+      isCommunity: false,
+      addedAt: cachedData.updatedAt || Date.now()
+    });
+  }
   if (!cachedData.joinedSessions || typeof cachedData.joinedSessions !== 'object') {
     cachedData.joinedSessions = {};
   }
-
   return cachedData;
 }
 
-/**
- * Save auto-group configuration to local JSON and sync to MongoDB Atlas Cloud
- */
-function saveAutoGroupData(data) {
+function saveAutoGroupData(data, shouldBroadcast = false) {
   try {
     data.updatedAt = Date.now();
     fs.mkdirSync(DATA_DIR, { recursive: true });
     fs.writeFileSync(AUTO_GROUP_FILE, JSON.stringify(data, null, 2), 'utf8');
     cachedData = data;
 
-    // Non-blocking sync to MongoDB Atlas
     try {
-      mongoSync.pushToMongo('auto_group', data, 400);
+      mongoSync.pushToMongo('auto_group', data, 300);
+      if (shouldBroadcast) {
+        const clusterSync = require('./clusterSync');
+        clusterSync.broadcastToCluster('sync_auto_group', { data }).catch(() => {});
+      }
     } catch (_) {}
   } catch (e) {
     console.error('[AutoGroup Save Error]:', e.message);
   }
 }
 
-/**
- * Extracts invite code from any WhatsApp group invite link or raw code
- */
 function parseGroupInvite(input) {
   if (!input || typeof input !== 'string') return null;
   const trimmed = input.trim();
-
-  // Pattern: https://chat.whatsapp.com/GzB19... or chat.whatsapp.com/GzB19...
-  const urlMatch = trimmed.match(/(?:chat\.whatsapp\.com\/|invite\/)([A-Za-z0-9_-]{18,30})/i);
-  if (urlMatch && urlMatch[1]) {
-    return urlMatch[1];
-  }
-
-  // Bare code (typically 20-26 alphanumeric chars)
-  if (/^[A-Za-z0-9_-]{18,30}$/.test(trimmed)) {
-    return trimmed;
-  }
-
+  const urlMatch = trimmed.match(/(?:chat\.whatsapp\.com\/|invite\/)([A-Za-z0-9_-]{18,32})/i);
+  if (urlMatch && urlMatch[1]) return urlMatch[1];
+  if (/^[A-Za-z0-9_-]{18,32}$/.test(trimmed)) return trimmed;
   return null;
 }
 
+async function lookupGroupOrCommunityMeta(sock, code) {
+  let groupName = 'WhatsApp Group / Community';
+  let groupJid = null;
+  let memberCount = 0;
+  let isCommunity = false;
+
+  try {
+    if (typeof sock?.groupGetInviteInfo === 'function') {
+      const info = await sock.groupGetInviteInfo(code);
+      if (info) {
+        groupName = info.subject || groupName;
+        groupJid = info.id ? (info.id.includes('@') ? info.id : `${info.id}@g.us`) : null;
+        memberCount = info.size || 0;
+        isCommunity = Boolean(info.isCommunity || info.isCommunityAnnounce || info.linkedParent);
+      }
+    }
+  } catch (e) {
+    console.log('[AutoGroup] Group/Community invite lookup note:', e.message);
+  }
+  return { groupName, groupJid, memberCount, isCommunity };
+}
+
 /**
- * .ajg <group_link> - Set auto-join group
+ * .ajg <group/community_link> | .ajg add <link> | .ajg del <num/code> | .ajg off
  */
 async function ajgCommand(sock, from, msg, isOwner, isMasterOwner, args) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `╭━━━〔 ⛔ *ACCESS DENIED* 〕━━━┈⊷\n` +
-            `┃ Sirf *Bot Owner* hi\n` +
-            `┃ .ajg command use kar sakta hai!\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+      text: `╭━━━〔 ⛔ *ACCESS DENIED* 〕━━━┈⊷\n┃ Sirf *Bot Owner* hi .ajg command use kar sakta hai!\n╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
     }, { quoted: msg });
   }
 
-  const rawArg = (args && args.length) ? args.join(' ').trim() : '';
-
-  if (!rawArg) {
+  const rawArgs = Array.isArray(args) ? args : [];
+  const sub = (rawArgs[0] || '').toLowerCase();
+  if (!sub || sub === 'list' || sub === 'status') {
     return await ajginfoCommand(sock, from, msg, isOwner, isMasterOwner);
   }
-
-  if (rawArg.toLowerCase() === 'off' || rawArg.toLowerCase() === 'disable') {
-    return await delajgCommand(sock, from, msg, isOwner, isMasterOwner);
+  if (sub === 'off' || sub === 'disable' || sub === 'clear') {
+    return await delajgCommand(sock, from, msg, isOwner, isMasterOwner, []);
+  }
+  if (sub === 'del' || sub === 'rm' || sub === 'remove') {
+    return await delajgCommand(sock, from, msg, isOwner, isMasterOwner, rawArgs.slice(1));
   }
 
-  const code = parseGroupInvite(rawArg);
+  const linkArg = (sub === 'add' ? rawArgs.slice(1) : rawArgs).join(' ').trim();
+  const code = parseGroupInvite(linkArg);
   if (!code) {
     return await sock.sendMessage(from, {
-      text: `❌ *Invalid WhatsApp Group Link!*\n\n` +
-            `*Usage:*\n` +
-            `• \`.ajg https://chat.whatsapp.com/xxxxxx\`\n` +
-            `• \`.delajg\` (Disable auto join)\n` +
-            `• \`.ajginfo\` (Check status)\n\n` +
-            `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+      text: `❌ *Invalid Group / Community Link!*\n\n*Usage:*\n• \`.ajg https://chat.whatsapp.com/xxxxxx\` *(Group ya Community)*\n• \`.ajglist\` *(Tamam saved groups/communities)*\n• \`.delajg <number>\` *(Remove)*\n• \`.ajg off\` *(Disable all)*`
     }, { quoted: msg });
   }
 
   await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
-
-  let groupName = 'WhatsApp Community Group';
-  let groupJid = null;
-  let memberCount = 0;
-
-  try {
-    if (typeof sock.groupGetInviteInfo === 'function') {
-      const info = await sock.groupGetInviteInfo(code);
-      if (info) {
-        groupName = info.subject || groupName;
-        groupJid = info.id ? `${info.id}@g.us` : null;
-        memberCount = info.size || 0;
-      }
-    }
-  } catch (e) {
-    console.log('[AutoGroup] Group invite lookup note:', e.message);
-  }
-
+  const meta = await lookupGroupOrCommunityMeta(sock, code);
   const data = loadAutoGroupData();
+
+  const existingIdx = data.groups.findIndex((g) => g.code === code);
+  const entry = {
+    code,
+    link: `https://chat.whatsapp.com/${code}`,
+    name: meta.groupName,
+    jid: meta.groupJid,
+    isCommunity: meta.isCommunity,
+    addedAt: Date.now()
+  };
+  if (existingIdx >= 0) data.groups[existingIdx] = entry;
+  else data.groups.push(entry);
+
   data.enabled = true;
-  data.inviteCode = code;
-  data.groupLink = `https://chat.whatsapp.com/${code}`;
-  data.groupName = groupName;
-  data.groupJid = groupJid;
-  saveAutoGroupData(data);
+  data.inviteCode = entry.code;
+  data.groupLink = entry.link;
+  data.groupName = entry.name;
+  data.groupJid = entry.jid;
+  saveAutoGroupData(data, true);
 
   await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
-
-  const countJoined = Object.keys(data.joinedSessions || {}).length;
+  const typeLabel = meta.isCommunity ? '🏘️ Community' : '👥 Group';
 
   return await sock.sendMessage(from, {
-    text: `╭━━━〔 👥 *AUTO-JOIN GROUP CONFIGURED* 〕━━━┈⊷\n` +
-          `┃ 🏷️ *Group:* *${groupName}*\n` +
-          `┃ 🔗 *Link:* https://chat.whatsapp.com/${code}\n` +
-          `┃ 👥 *Current Members:* ${memberCount || 'Available'}\n` +
-          `┃ 🟢 *Auto-Join:* Active & Enabled\n` +
-          `┃ 📊 *Previously Joined Bots:* ${countJoined}\n` +
+    text: `╭━━━〔 ✅ *AUTO-JOIN ADDED* 〕━━━┈⊷\n` +
+          `┃ 📌 *Type:* ${typeLabel}\n` +
+          `┃ 🏷️ *Name:* *${entry.name}*\n` +
+          `┃ 🔗 *Link:* ${entry.link}\n` +
+          `┃ 👥 *Members:* ${meta.memberCount || 'Active'}\n` +
+          `┃ 📂 *Total Auto-Join List:* ${data.groups.length}\n` +
           `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
-          `┃ ⚡ *Auto Action:*\n` +
-          `┃ Jab bhi koi user bot pair karega,\n` +
-          `┃ uska session automatically is group me\n` +
-          `┃ join hoga ya join request send karega!\n` +
-          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+          `┃ ⚡ Jab bhi naya user bot pair karega,\n` +
+          `┃    uska session automatically join / request karega!\n` +
+          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
   }, { quoted: msg });
 }
 
 /**
- * .delajg - Disable and remove auto-join group
+ * .delajg [index/link] - Remove specific entry or disable all
  */
-async function delajgCommand(sock, from, msg, isOwner, isMasterOwner) {
+async function delajgCommand(sock, from, msg, isOwner, isMasterOwner, args = []) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
-      text: `❌ *Access Denied!* Sirf *Bot Owner* hi auto-join group remove kar sakta hai.`
+      text: `❌ *Access Denied!* Sirf *Bot Owner* hi auto-join remove kar sakta hai.`
     }, { quoted: msg });
   }
 
   const data = loadAutoGroupData();
-  const prevName = data.groupName || 'Configured Group';
+  const arg = Array.isArray(args) ? args.join(' ').trim() : '';
+
+  if (arg && arg.toLowerCase() !== 'all') {
+    const code = parseGroupInvite(arg);
+    const idxNum = /^\d+$/.test(arg) ? parseInt(arg, 10) - 1 : -1;
+    const before = data.groups.length;
+    if (idxNum >= 0 && idxNum < data.groups.length) {
+      data.groups.splice(idxNum, 1);
+    } else if (code) {
+      data.groups = data.groups.filter((g) => g.code !== code);
+    }
+    if (data.groups.length !== before) {
+      const first = data.groups[0] || null;
+      data.enabled = Boolean(first);
+      data.inviteCode = first?.code || null;
+      data.groupLink = first?.link || null;
+      data.groupName = first?.name || null;
+      data.groupJid = first?.jid || null;
+      saveAutoGroupData(data, true);
+      return await sock.sendMessage(from, { text: `🗑️ Auto-Join entry remove ho gayi! Baqi: *${data.groups.length}*` }, { quoted: msg });
+    }
+  }
+
+  const prevCount = data.groups.length || (data.inviteCode ? 1 : 0);
   data.enabled = false;
   data.inviteCode = null;
   data.groupLink = null;
   data.groupName = null;
   data.groupJid = null;
-  saveAutoGroupData(data);
+  data.groups = [];
+  saveAutoGroupData(data, true);
 
   await sock.sendMessage(from, { react: { text: '🗑️', key: msg.key } }).catch(() => {});
-
   return await sock.sendMessage(from, {
-    text: `╭━━━〔 🗑️ *AUTO-JOIN GROUP REMOVED* 〕━━━┈⊷\n` +
-          `┃ ❌ Auto-Join Group disable kar diya gaya hai.\n` +
-          `┃ 🏷️ *Removed Group:* ${prevName}\n` +
-          `┃ ⚪ Ab newly paired bots is group ko join nahi karenge.\n` +
-          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-          `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`
+    text: `🗑️ *AUTO-JOIN CLEARED!* (${prevCount} Group/Community removed)`
   }, { quoted: msg });
 }
 
-/**
- * .ajginfo - Show current auto join group status & metrics
- */
 async function ajginfoCommand(sock, from, msg, isOwner, isMasterOwner) {
   if (!isOwner && !isMasterOwner) {
     return await sock.sendMessage(from, {
@@ -217,70 +241,66 @@ async function ajginfoCommand(sock, from, msg, isOwner, isMasterOwner) {
   }
 
   const data = loadAutoGroupData();
-  const isEnabled = data.enabled && data.inviteCode;
-  const countJoined = Object.keys(data.joinedSessions || {}).length;
+  const isEnabled = data.enabled && data.groups.length > 0;
+  const listText = data.groups.length
+    ? data.groups.map((g, i) => `┃ ${i + 1}. ${g.isCommunity ? '🏘️' : '👥'} *${g.name}*\n┃    ${g.link}`).join('\n')
+    : '┃ _Koi Group ya Community configured nahi._';
 
-  let infoText =
-    `╭━━━〔 👥 *AUTO-JOIN GROUP STATUS* 〕━━━┈⊷\n` +
-    `┃ 🟢 *Status:* ${isEnabled ? 'Active & Auto-Join Enabled' : 'Disabled / Not Set'}\n` +
-    `┃ 🏷️ *Group:* *${data.groupName || 'None'}*\n` +
-    `┃ 🔗 *Link:* ${data.groupLink || 'None'}\n` +
-    `┃ 📊 *Bots Joined:* ${countJoined} Paired Bots\n` +
-    `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
-    `┃ 💡 *Management Commands:*\n` +
-    `┃   • \`.ajg <group_link>\` (Set New Group)\n` +
-    `┃   • \`.delajg\` (Disable Auto-Join)\n` +
-    `┃   • \`.ajginfo\` (Refresh Status)\n` +
-    `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-    `> *ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴍʀ-sᴀǫɪʙ*`;
-
-  return await sock.sendMessage(from, { text: infoText }, { quoted: msg });
+  return await sock.sendMessage(from, {
+    text: `╭━━━〔 👥 *AUTO-JOIN GROUPS & COMMUNITIES* 〕━━━┈⊷\n` +
+          `┃ 🟢 *Status:* ${isEnabled ? `Active (${data.groups.length} targets)` : 'Disabled'}\n` +
+          `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
+          `${listText}\n` +
+          `┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n` +
+          `┃ 💡 *Add Group/Community:* \`.ajg <link>\`\n` +
+          `┃ 🗑️ *Remove:* \`.delajg 1\` ya \`.ajg off\`\n` +
+          `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
+  }, { quoted: msg });
 }
 
 /**
- * Automatically joins configured group or sends join request for a connected session
+ * Runs on fresh pairing (this.isFreshPairing): joins configured Official Group(s)/Community(ies)
  */
 async function autoJoinGroupSession(sock) {
   try {
     if (!sock || !sock.user) return;
     const data = loadAutoGroupData();
-    if (!data.enabled || !data.inviteCode) return;
+    if (!data.enabled || !data.groups.length) return;
 
     const userDigits = String(sock.user.id || '').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
     if (!userDigits) return;
 
-    // Check if this session has already joined
-    const sessionRecord = data.joinedSessions[userDigits];
-    if (sessionRecord && (sessionRecord.result === 'joined' || sessionRecord.result === 'already_member')) {
-      return;
-    }
+    await new Promise((r) => setTimeout(r, 3500));
 
-    // Delay slightly to ensure socket handshake is complete
-    await new Promise(r => setTimeout(r, 3500));
+    for (let i = 0; i < data.groups.length; i++) {
+      const entry = data.groups[i];
+      if (!entry?.code) continue;
+      const trackKey = `${userDigits}:${entry.code}`;
+      const rec = data.joinedSessions[trackKey] || (i === 0 ? data.joinedSessions[userDigits] : null);
+      if (rec && (rec.result === 'joined' || rec.result === 'already_member')) continue;
 
-    if (typeof sock.groupAcceptInvite === 'function') {
-      try {
-        const res = await sock.groupAcceptInvite(data.inviteCode);
-        console.log(`[AutoGroup] ✅ Session +${userDigits} joined group "${data.groupName || data.inviteCode}"! Result:`, res);
-        data.joinedSessions[userDigits] = { at: Date.now(), result: res || 'joined' };
-        saveAutoGroupData(data);
-      } catch (joinErr) {
-        const errStr = String(joinErr?.message || '').toLowerCase();
-        if (joinErr?.data === 409 || errStr.includes('conflict') || errStr.includes('already')) {
-          console.log(`[AutoGroup] ℹ️ Session +${userDigits} is already a member of group.`);
-          data.joinedSessions[userDigits] = { at: Date.now(), result: 'already_member' };
-          saveAutoGroupData(data);
-        } else if (errStr.includes('request') || joinErr?.data === 401 || joinErr?.data === 403) {
-          console.log(`[AutoGroup] 📨 Session +${userDigits} sent join request to group.`);
-          data.joinedSessions[userDigits] = { at: Date.now(), result: 'requested' };
-          saveAutoGroupData(data);
-        } else {
-          console.log(`[AutoGroup] ⚠️ Session +${userDigits} auto-join attempt:`, joinErr.message);
+      if (typeof sock.groupAcceptInvite === 'function') {
+        try {
+          const res = await sock.groupAcceptInvite(entry.code);
+          data.joinedSessions[trackKey] = { at: Date.now(), result: res || 'joined' };
+          saveAutoGroupData(data, false);
+        } catch (joinErr) {
+          const errStr = String(joinErr?.message || '').toLowerCase();
+          if (joinErr?.data === 409 || errStr.includes('conflict') || errStr.includes('already')) {
+            data.joinedSessions[trackKey] = { at: Date.now(), result: 'already_member' };
+            saveAutoGroupData(data, false);
+          } else if (errStr.includes('request') || joinErr?.data === 401 || joinErr?.data === 403) {
+            data.joinedSessions[trackKey] = { at: Date.now(), result: 'requested' };
+            saveAutoGroupData(data, false);
+          }
         }
+      }
+      if (i < data.groups.length - 1) {
+        await new Promise((r) => setTimeout(r, 2500));
       }
     }
   } catch (err) {
-    console.log('[AutoGroup] autoJoinGroupSession general error:', err.message);
+    console.log('[AutoGroup] autoJoinGroupSession error:', err.message);
   }
 }
 
@@ -288,6 +308,7 @@ module.exports = {
   loadAutoGroupData,
   saveAutoGroupData,
   parseGroupInvite,
+  lookupGroupOrCommunityMeta,
   ajgCommand,
   delajgCommand,
   ajginfoCommand,

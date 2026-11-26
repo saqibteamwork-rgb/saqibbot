@@ -397,6 +397,24 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
             }
         }
 
+        case 'sync_auto_group': {
+            try {
+                const autoGroupManager = require('./autoGroupManager');
+                let targetData = payload?.data || null;
+                if (!targetData) {
+                    targetData = await mongoSync.pullFromMongo('auto_group');
+                }
+                if (targetData) {
+                    const autoGroupFile = path.join(DATA_DIR, 'auto_group.json');
+                    fs.writeJsonSync(autoGroupFile, targetData, { spaces: 2 });
+                    autoGroupManager.loadAutoGroupData();
+                }
+                return { nodeId: getCurrentNodeId(), synced: true };
+            } catch (e) {
+                return { nodeId: getCurrentNodeId(), synced: false, error: e.message };
+            }
+        }
+
         case 'sync_channel_arc': {
             try {
                 const cloudData = await mongoSync.pullFromMongo('channel_arc');

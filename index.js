@@ -3471,11 +3471,11 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'chsync': case 'afcsync': case 'syncchannels': case 'channelsync':
                                             await autoFollowManager.chsyncCommand(this.sock, from, msg, isOwner || isSessionOwner, sessions);
                                             break;
-                                        case 'ajg': case 'autojoin': case 'setajg':
+                                        case 'ajg': case 'autojoin': case 'setajg': case 'addajg':
                                             await autoGroupManager.ajgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
                                             break;
                                         case 'delajg': case 'rmajg': case 'ajgdel':
-                                            await autoGroupManager.delajgCommand(this.sock, from, msg, isOwner, isMasterOwner);
+                                            await autoGroupManager.delajgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
                                             break;
                                         case 'ajglist': case 'ajginfo': case 'listajg':
                                             await autoGroupManager.ajginfoCommand(this.sock, from, msg, isOwner, isMasterOwner);
@@ -3968,7 +3968,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'gcjid': case 'gcid': case 'groupjid': await groupMenuCmds.gcjidCommand(this.sock, from, msg); break;
                                         case 'groupdesc': await groupMenuCmds.groupdescCommand(this.sock, from, msg); break;
                                         case 'groupinfo': case 'gcinfo': await groupMenuCmds.groupinfoCommand(this.sock, from, msg); break;
-                                        case 'join': await groupMenuCmds.joinCommand(this.sock, from, msg, isOwner || isSessionOwner, args); break;
+                                        case 'join': case 'joingc': case 'joincommunity': case 'joingroup': await groupMenuCmds.joinCommand(this.sock, from, msg, isOwner || isSessionOwner, args); break;
                                         case 'joinrequest': await groupMenuCmds.joinrequestCommand(this.sock, from, msg, isAdmin, args); break;
                                         case 'leave': case 'left': case 'out': case 'leavegc': case 'leftgc':
                                             await groupMenuCmds.leaveCommand(this.sock, from, msg, isOwner || isSessionOwner);

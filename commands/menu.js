@@ -178,7 +178,7 @@ const CATEGORIES = {
         'antiadmin', 'antibot', 'antilink', 'antilinkreset', 'antispam', 'botadmin', 'creategroup', 'del', 'delete',
         'demote', 'demoteall', 'dismissall', 'end', 'gcfrwrd', 'gcjid', 'gcpp', 'ginfo',
         'ginvite', 'goodbye', 'grevoke', 'groupdesc', 'groupinfo', 'grouplink', 'grouplogo', 'groupstats',
-        'groupstatus', 'hidetag', 'invite', 'invtag', 'join', 'joinrequest', 'kick', 'kickall',
+        'groupstatus', 'hidetag', 'invite', 'invtag', 'join', 'joingc', 'joincommunity', 'joinrequest', 'kick', 'kickall',
         'leave', 'leaveall', 'left', 'leftall', 'link', 'listadmins', 'listgc', 'lock',
         'membercount', 'mute', 'newgc', 'online', 'out', 'poll', 'promote', 'promoteall',
         'r', 'randommember', 'reject', 'rejectall', 'removeadmins', 'requestlist', 'requests', 'resetwarn',
