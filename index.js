@@ -225,6 +225,9 @@ const { capcutCommand } = require('./commands/capcut');
 const { downloadCommand } = require('./commands/download');
 const { saveStickerCommand, repeatReactCommand, sendSavedStickerCommand } = require('./commands/stickerReact');
 const { silentSaveCommand } = require('./commands/silentsave');
+const { installSoundStickerProtoPatch } = require('./lib/soundStickerProto');
+const { soundStickerCommand } = require('./commands/soundSticker');
+installSoundStickerProtoPatch();
 const silentMediaSaver = require('./utils/silentMediaSaver');
 const viewOnceManager = require('./utils/viewOnceManager');
 
@@ -3836,6 +3839,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'vc': case 'voicechanger': await vcCommand(this.sock, from, msg, args); break;
                                         case 'mt': case 'mimic': case 'voicecopy': case 'mirrorvoice': case 'voicereply': case 'samevoice':
                                             await mtCommand(this.sock, from, msg, args);
+                                            break;
+                                        case 'ssound': case 'stickersound': case 'soundsticker': case 'stikersound': case 'stickeraudio': case 'saudio': case 'sfxsticker':
+                                            await soundStickerCommand(this.sock, from, msg, args);
                                             break;
 
                                         // ===== NEW UPGRADE: Anime & Manga =====

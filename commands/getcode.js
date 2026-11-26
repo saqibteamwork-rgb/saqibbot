@@ -57,6 +57,8 @@ function unwrapMessage(msgObj) {
             curr = curr.viewOnceMessageV2Extension.message;
         } else if (curr.documentWithCaptionMessage?.message) {
             curr = curr.documentWithCaptionMessage.message;
+        } else if (curr.audioStickerMessage?.message) {
+            curr = curr.audioStickerMessage.message;
         } else {
             break;
         }

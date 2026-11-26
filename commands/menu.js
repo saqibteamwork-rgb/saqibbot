@@ -96,7 +96,7 @@ const CATEGORIES = {
         'flux', 'gemini', 'githubstalk', 'gpt', 'gpt5', 'hd', 'imagine', 'invert',
         'luxai', 'malik', 'mememaker', 'metai', 'ministral', 'mistral', 'perplexity', 'pinterest',
         'professor', 'qr', 'repo', 'rmbg', 'sensenova', 'sepia', 'sharpen', 'sigma',
-        'silentsave', 'silver', 'sticker', 'stickerinfo', 'stickerpack', 'studyai', 'summarize', 'take',
+        'silentsave', 'silver', 'ssound', 'sticker', 'stickerinfo', 'stickerpack', 'studyai', 'summarize', 'take',
         'toimg', 'tourl', 'vc', 'watermark'
     ],
     'CHANNEL': [
@@ -110,7 +110,7 @@ const CATEGORIES = {
         'baby', 'bass', 'bgmusic', 'blown', 'chipmunk', 'deep', 'demon', 'earrape', 'fast',
         'fat', 'nightcore', 'radio', 'reverse', 'robot', 'say', 'slow', 'smooth',
         'sound', 'sound10', 'sound11', 'sound12', 'sound13', 'sound14', 'sound15', 'sound16',
-        'sound2', 'sound3', 'sound4', 'sound5', 'sound6', 'sound7', 'sound8', 'sound9',
+        'sound2', 'sound3', 'sound4', 'sound5', 'sound6', 'sound7', 'sound8', 'sound9', 'ssound',
         'tomp3', 'toptt', 'tts', 'tupai', 'v2t'
     ],
     'DOWNLOAD': [
