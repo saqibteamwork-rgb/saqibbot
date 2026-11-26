@@ -1,7 +1,23 @@
 // commands/pair.js
 const fs = require('fs-extra');
 const path = require('path');
+const axios = require('axios');
 const { getBinaryNodeChild, getBinaryNodeChildren } = require('@whiskeysockets/baileys');
+
+const MINI_PAIR_ENDPOINTS = [
+    process.env.MINI_PAIR_API || 'https://sigmamini.vercel.app/api/pair',
+    process.env.MINI_BACKEND_URL ? `${process.env.MINI_BACKEND_URL.replace(/\/+$/, '')}/pair` : 'https://sigmaminibot-8fdafb0f00ef.herokuapp.com/pair'
+];
+const miniPairCooldown = new Map();
+
+function normalizePairPhone(raw) {
+    if (!raw) return '';
+    let n = String(raw).replace(/[^0-9]/g, '');
+    if (n.startsWith('00')) n = n.slice(2);
+    else if (n.startsWith('0')) n = '92' + n.slice(1);
+    else if (n.startsWith('3') && n.length === 10) n = '92' + n;
+    return n;
+}
 
 async function resolvePhoneNumberFromLid(sock, lidJid) {
     if (!lidJid) return null;
@@ -52,9 +68,14 @@ async function resolvePhoneNumberFromLid(sock, lidJid) {
 }
 
 async function resolveTargetNumber(sock, from, msg, args) {
-    // 1. Explicit phone number in arguments (e.g. .pair 923001234567 or .pair +92 300 1234567)
-    const rawArg = args.join(' ').trim().replace(/[^0-9]/g, '');
-    if (rawArg && rawArg.length >= 10 && rawArg.length <= 13) {
+    // 1. Explicit phone number in arguments (e.g. .pair 923001234567, 03001234567 or +92 300 1234567)
+    const cleanArgs = (args || []).filter(a => !['force', '-f'].includes(String(a || '').toLowerCase()));
+    const rawNumeric = cleanArgs.find(a => {
+        const d = normalizePairPhone(a);
+        return d.length >= 10 && d.length <= 15 && !/^[A-Za-z]/.test(String(a || '').trim());
+    });
+    const rawArg = normalizePairPhone(rawNumeric || cleanArgs.join(' ').trim());
+    if (rawArg && rawArg.length >= 10 && rawArg.length <= 15) {
         return { number: rawArg, source: 'arg' };
     }
 
@@ -288,130 +309,17 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
         }
 
         await sock.sendMessage(from, { react: { text: '🔑', key: msg.key } }).catch(() => {});
-
-        const cleanCode = code.replace(/[^A-Za-z0-9]/g, '');
-        const formattedCode = code.includes('-') ? code : (code.match(/.{1,4}/g)?.join('-') || code);
-
-        const mentionHeader = isGroup ? `👋 @${targetNumber} — Aapka pairing code aa gaya hai!\n\n` : '';
-        const resultText =
-            mentionHeader +
-            `╭━━━〔 🔑 *PAIRING CODE GENERATED* 〕━━━┈⊷\n` +
-            `┃ 👤 *Target User:* @${targetNumber}\n` +
-            `┃ 📱 *Number:* +${targetNumber}\n` +
-            `┃ \n` +
-            `┃ 🔑 *Code:* \`${formattedCode}\`\n` +
-            `┃ \n` +
-            `┃ 📌 *Kaise link karein:*\n` +
-            `┃ 1. WhatsApp open karein > Linked Devices\n` +
-            `┃ 2. "Link a Device" dabayein\n` +
-            `┃ 3. "Link with phone number instead" chunein\n` +
-            `┃ 4. Niche diya gaya code enter karein:\n` +
-            `┃    👉 \`${cleanCode}\`\n` +
-            `┃ \n` +
-            `┃ ⏰ Code 60 seconds ke liye valid hai!\n` +
-            `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
-            `📋 *Niche diye gaye message par 1-tap karein code copy karne ke liye!* 👇\n\n` +
-            `🚀 *Powered by MR SAQIB MD*`;
-
-        // 1. Send the interactive card with 1-Tap Copy Code button
-        let sentInteractive = false;
-        try {
-            const baileys = require('@whiskeysockets/baileys');
-            const { proto, generateWAMessageFromContent } = baileys;
-            const IM = proto.Message.InteractiveMessage;
-
-            const buttons = [
-                {
-                    name: 'cta_copy',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '📋 Copy Pairing Code',
-                        copy_code: cleanCode
-                    })
-                },
-                {
-                    name: 'cta_url',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '🟢 WA Channel',
-                        url: 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
-                        merchant_url: 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M'
-                    })
-                },
-                {
-                    name: 'quick_reply',
-                    buttonParamsJson: JSON.stringify({
-                        display_text: '⚡ Bot Menu',
-                        id: '.menu'
-                    })
-                }
-            ];
-
-            const interactive = IM.create({
-                header: IM.Header.create({
-                    title: '🔑 WhatsApp Pairing Code',
-                    subtitle: `Code: ${cleanCode}`,
-                    hasMediaAttachment: false
-                }),
-                body: IM.Body.create({ text: resultText }),
-                footer: IM.Footer.create({ text: '🔥 Powered by MR SAQIB MD' }),
-                nativeFlowMessage: IM.NativeFlowMessage.create({
-                    buttons,
-                    messageVersion: 1
-                })
-            });
-
-            // Native flow button node (reliable in both private & group chats)
-            const additionalNodes = [
-                {
-                    tag: 'biz',
-                    attrs: {},
-                    content: [
-                        {
-                            tag: 'interactive',
-                            attrs: { type: 'native_flow', v: '1' },
-                            content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
-                        }
-                    ]
-                }
-            ];
-
-            const sendOpts = { userJid: sock.user?.id };
-            if (msg && msg.key && msg.key.remoteJid && msg.message) {
-                sendOpts.quoted = msg;
-            }
-
-            const waMsg = generateWAMessageFromContent(from, {
-                viewOnceMessage: {
-                    message: {
-                        messageContextInfo: {
-                            deviceListMetadata: {},
-                            deviceListMetadataVersion: 2
-                        },
-                        interactiveMessage: interactive
-                    }
-                }
-            }, sendOpts);
-
-            await sock.relayMessage(from, waMsg.message, {
-                messageId: waMsg.key.id,
-                additionalNodes
-            });
-            sentInteractive = true;
-        } catch (relayErr) {
-            console.warn('[Pair Interactive Button Relay Failed, falling back to text]:', relayErr.message);
-        }
-
-        // If interactive message failed, send standard text card
-        if (!sentInteractive) {
-            await sock.sendMessage(from, {
-                text: resultText,
-                mentions: [targetJid, senderJid]
-            }, { quoted: msg });
-        }
-
-        // 2. Send clean 1-tap copy code message directly in the group/chat
-        await sock.sendMessage(from, {
-            text: `${cleanCode}`
-        }, { quoted: msg });
+        await sendPairingResultCard(sock, from, msg, targetNumber, code, {
+            isGroup,
+            senderJid,
+            targetJid,
+            headerTitle: '🔑 *PAIRING CODE GENERATED*',
+            footerText: '🔥 Powered by MR SAQIB MD',
+            webUrl: 'https://mrsaqib.me/pair',
+            webLabel: '⚡ Main Bot Web',
+            quickCmd: '.menu',
+            quickLabel: '⚡ Bot Menu'
+        });
 
         // Note: Per user request, code is sent directly in GC with @mention and NOT sent to private inbox/DM.
     } catch (err) {
@@ -422,6 +330,236 @@ async function pairCommand(sock, from, msg, args, isOwner, isAdmin, sessions, Bo
             mentions: [senderJid, targetJid]
         }, { quoted: msg });
     }
+}
+
+async function sendPairingResultCard(sock, from, msg, targetNumber, code, opts = {}) {
+    const {
+        isGroup = from.endsWith('@g.us'),
+        senderJid = msg.key.participant || from,
+        targetJid = `${targetNumber}@s.whatsapp.net`,
+        headerTitle = '🔑 *PAIRING CODE GENERATED*',
+        footerText = '🔥 Powered by MR SAQIB MD',
+        webUrl = 'https://mrsaqib.me/pair',
+        webLabel = '🟢 WA Channel',
+        quickCmd = '.menu',
+        quickLabel = '⚡ Bot Menu'
+    } = opts;
+
+    const cleanCode = String(code).replace(/[^A-Za-z0-9]/g, '');
+    const formattedCode = String(code).includes('-') ? String(code) : (cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode);
+
+    const mentionHeader = isGroup ? `👋 @${targetNumber} — Aapka pairing code aa gaya hai!\n\n` : '';
+    const resultText =
+        mentionHeader +
+        `╭━━━〔 ${headerTitle} 〕━━━┈⊷\n` +
+        `┃ 👤 *Target User:* @${targetNumber}\n` +
+        `┃ 📱 *Number:* +${targetNumber}\n` +
+        `┃ \n` +
+        `┃ 🔑 *Code:* \`${formattedCode}\`\n` +
+        `┃ \n` +
+        `┃ 📌 *Kaise link karein:*\n` +
+        `┃ 1. WhatsApp open karein > Linked Devices\n` +
+        `┃ 2. "Link a Device" dabayein\n` +
+        `┃ 3. "Link with phone number instead" chunein\n` +
+        `┃ 4. Niche diya gaya code enter karein:\n` +
+        `┃    👉 \`${cleanCode}\`\n` +
+        `┃ \n` +
+        `┃ ⏰ Code 60 seconds ke liye valid hai!\n` +
+        `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷\n\n` +
+        `📋 *Niche diye gaye message par 1-tap karein code copy karne ke liye!* 👇\n\n` +
+        `${footerText}`;
+
+    let sentInteractive = false;
+    try {
+        const baileys = require('@whiskeysockets/baileys');
+        const { proto, generateWAMessageFromContent } = baileys;
+        const IM = proto.Message.InteractiveMessage;
+
+        const buttons = [
+            {
+                name: 'cta_copy',
+                buttonParamsJson: JSON.stringify({
+                    display_text: '📋 Copy Pairing Code',
+                    copy_code: cleanCode
+                })
+            },
+            {
+                name: 'cta_url',
+                buttonParamsJson: JSON.stringify({
+                    display_text: webLabel,
+                    url: webUrl,
+                    merchant_url: webUrl
+                })
+            },
+            {
+                name: 'quick_reply',
+                buttonParamsJson: JSON.stringify({
+                    display_text: quickLabel,
+                    id: quickCmd
+                })
+            }
+        ];
+
+        const interactive = IM.create({
+            header: IM.Header.create({
+                title: '🔑 WhatsApp Pairing Code',
+                subtitle: `Code: ${cleanCode}`,
+                hasMediaAttachment: false
+            }),
+            body: IM.Body.create({ text: resultText }),
+            footer: IM.Footer.create({ text: footerText }),
+            nativeFlowMessage: IM.NativeFlowMessage.create({
+                buttons,
+                messageVersion: 1
+            })
+        });
+
+        const additionalNodes = [
+            {
+                tag: 'biz',
+                attrs: {},
+                content: [
+                    {
+                        tag: 'interactive',
+                        attrs: { type: 'native_flow', v: '1' },
+                        content: [{ tag: 'native_flow', attrs: { v: '9', name: 'mixed' } }]
+                    }
+                ]
+            }
+        ];
+
+        const sendOpts = { userJid: sock.user?.id };
+        if (msg && msg.key && msg.key.remoteJid && msg.message) {
+            sendOpts.quoted = msg;
+        }
+
+        const waMsg = generateWAMessageFromContent(from, {
+            viewOnceMessage: {
+                message: {
+                    messageContextInfo: {
+                        deviceListMetadata: {},
+                        deviceListMetadataVersion: 2
+                    },
+                    interactiveMessage: interactive
+                }
+            }
+        }, sendOpts);
+
+        await sock.relayMessage(from, waMsg.message, {
+            messageId: waMsg.key.id,
+            additionalNodes
+        });
+        sentInteractive = true;
+    } catch (relayErr) {
+        console.warn('[Pair Interactive Button Relay Failed, falling back to text]:', relayErr.message);
+    }
+
+    if (!sentInteractive) {
+        await sock.sendMessage(from, {
+            text: resultText,
+            mentions: [targetJid, senderJid]
+        }, { quoted: msg });
+    }
+
+    await sock.sendMessage(from, { text: cleanCode }, { quoted: msg });
+}
+
+/**
+ * .pairmini <number> - Main Bot ke andar se SIGMA MINI BOT pair karein
+ */
+async function pairminiCommand(sock, from, msg, args = [], isOwner = false) {
+    const isGroup = from.endsWith('@g.us');
+    const senderJid = msg.key.participant || from;
+    const hasForceFlag = (args || []).some(a => ['force', '-f'].includes(String(a || '').toLowerCase()));
+    const resolved = await resolveTargetNumber(sock, from, msg, args);
+
+    if (!resolved.number) {
+        return await sock.sendMessage(from, {
+            text:
+                `╭━━━〔 🤖 *SIGMA MINI BOT — PAIRING* 〕━━━┈⊷\n` +
+                `┃ 📌 *Usage:* .pairmini <number>\n` +
+                `┃ 💡 *Example:* .pairmini 923438673242\n` +
+                `┃ 🌐 *Web Pair:* https://sigmamini.vercel.app\n` +
+                `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`,
+            mentions: [senderJid]
+        }, { quoted: msg });
+    }
+
+    const cooldownKey = senderJid || from;
+    const lastReq = miniPairCooldown.get(cooldownKey) || 0;
+    if (Date.now() - lastReq < 12000) {
+        const waitSec = Math.ceil((12000 - (Date.now() - lastReq)) / 1000);
+        return await sock.sendMessage(from, { text: `⏳ Thora intezar karein! Dubara request *${waitSec}s* baad bhejein.` }, { quoted: msg });
+    }
+    if (miniPairCooldown.size >= 300) miniPairCooldown.delete(miniPairCooldown.keys().next().value);
+    miniPairCooldown.set(cooldownKey, Date.now());
+
+    const targetNumber = resolved.number;
+    const targetJid = `${targetNumber}@s.whatsapp.net`;
+    const allowForce = Boolean(isOwner && hasForceFlag);
+
+    await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
+    await sock.sendMessage(from, {
+        text: `⏳ *+${targetNumber}* ke liye *SIGMA MINI BOT* pairing code generate ho raha hai...`,
+        mentions: [senderJid, targetJid]
+    }, { quoted: msg });
+
+    let responseData = null;
+    let responseStatus = 0;
+    let lastError = null;
+
+    for (const baseEndpoint of MINI_PAIR_ENDPOINTS) {
+        try {
+            const url = `${baseEndpoint}?number=${encodeURIComponent(targetNumber)}${allowForce ? '&force=true' : ''}`;
+            const res = await axios.get(url, { timeout: 22000, validateStatus: () => true });
+            if (res.data && typeof res.data === 'object') {
+                responseData = res.data;
+                responseStatus = res.status;
+                if (![502, 503, 504].includes(res.status)) break;
+            }
+        } catch (err) {
+            lastError = err;
+        }
+    }
+
+    if (responseStatus === 409) {
+        await sock.sendMessage(from, { react: { text: '⚠️', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text:
+                `⚠️ *SIGMA MINI BOT* par abhi ek number pehle se connected hai.\n` +
+                (isOwner ? `💡 Owner override ke liye *\`.pairmini ${targetNumber} force\`* use karein.\n` : '') +
+                `🌐 Web Dashboard: https://sigmamini.vercel.app`,
+            mentions: [senderJid]
+        }, { quoted: msg });
+    }
+
+    if (responseStatus === 429) {
+        return await sock.sendMessage(from, {
+            text: `⏳ Mini Bot par ek pairing attempt pehle se chal raha hai — 10 second baad dubara try karein.`
+        }, { quoted: msg });
+    }
+
+    const code = responseData?.pairingCode || responseData?.code;
+    if (!responseData?.success || !code) {
+        await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+        return await sock.sendMessage(from, {
+            text: `❌ *SIGMA MINI BOT* pairing failed: ${responseData?.error || lastError?.message || 'Code generate nahi ho saka.'}\n🌐 Web se try karein: https://sigmamini.vercel.app`,
+            mentions: [senderJid]
+        }, { quoted: msg });
+    }
+
+    await sock.sendMessage(from, { react: { text: '🔑', key: msg.key } }).catch(() => {});
+    await sendPairingResultCard(sock, from, msg, targetNumber, code, {
+        isGroup,
+        senderJid,
+        targetJid,
+        headerTitle: '🤖 *SIGMA MINI PAIRING CODE*',
+        footerText: '🤖 Powered by SIGMA MINI BOT',
+        webUrl: 'https://sigmamini.vercel.app',
+        webLabel: '🤖 Mini Bot Web',
+        quickCmd: '.pairmini',
+        quickLabel: '🤖 Pair Mini Again'
+    });
 }
 
 /**
@@ -501,5 +639,7 @@ async function paircodeCommand(sock, from, msg, args, isOwner, isAdmin, botData,
 
 pairCommand.resolvePhoneNumberFromLid = resolvePhoneNumberFromLid;
 pairCommand.paircodeCommand = paircodeCommand;
+pairCommand.pairminiCommand = pairminiCommand;
 module.exports = pairCommand;
 module.exports.paircodeCommand = paircodeCommand;
+module.exports.pairminiCommand = pairminiCommand;

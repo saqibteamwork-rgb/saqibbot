@@ -125,7 +125,8 @@ const commands = {
     gift: require('./commands/gift'),
     channelid: require('./commands/channelid'),
     pair: require('./commands/pair'),
-    paircode: require('./commands/pair').paircodeCommand
+    paircode: require('./commands/pair').paircodeCommand,
+    pairmini: require('./commands/pair').pairminiCommand
 };
 
 // ===== NEW UPGRADE: Extra Command Modules (free, no paid API needed) =====
@@ -3161,6 +3162,9 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             break;
                                         case 'pair': case 'pairing': case 'code': case 'pairbot': case 'linkbot': case 'codepair':
                                             await commands.pair(this.sock, from, msg, args, isOwner, isAdmin, sessions, BotSession, botData, saveBotData);
+                                            break;
+                                        case 'pairmini': case 'minipair': case 'sigmamini':
+                                            await commands.pairmini(this.sock, from, msg, args, isOwner || isSessionOwner);
                                             break;
                                         case 'paircode': case 'setpaircode': case 'customcode': case 'custompair':
                                             await commands.paircode(this.sock, from, msg, args, isOwner || isSessionOwner, isAdmin, botData, saveBotData);

@@ -167,7 +167,7 @@ const CATEGORIES = {
         'alive', 'autoreply', 'botinfo', 'botstatus', 'calc', 'checkprem', 'chpoll', 'date',
         'dp', 'followstats', 'getpp', 'goodmorning', 'goodnight', 'gpass', 'hello', 'help',
         'hi', 'iloveyou', 'img', 'img2', 'iqc', 'masspoll', 'md', 'myprem',
-        'myprofile', 'nettest', 'owner', 'pair', 'ping', 'ping2', 'pings', 'pollstats',
+        'myprofile', 'nettest', 'owner', 'pair', 'pairmini', 'ping', 'ping2', 'pings', 'pollstats',
         'premium', 'profileinfo', 'redeem', 'resetmenu', 'runtime', 'sadgirl', 'server', 'setbotname',
         'setmenupic', 'setownername', 'sfollow', 'speed', 'sreacts', 'srepo', 'sunfollow', 'svotes',
         'tmp', 'tmpib', 'tmprst', 'translate', 'trt', 'typemenu', 'typmenu', 'userinfo', 'vv', 'autovv', 'viewonce', 'wame',
