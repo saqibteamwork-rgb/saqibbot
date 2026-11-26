@@ -560,8 +560,8 @@ app.post('/api/cluster-action', async (req, res) => {
         return res.status(401).json({ ok: false, error: 'Unauthorized cluster secret' });
     }
 
-    // Synchronous cluster actions: Caller needs immediate response data (e.g. resolve_channel)
-    if (action === 'resolve_channel') {
+    // Synchronous cluster actions: Caller needs immediate response data (e.g. resolve_channel, resolve_poll)
+    if (action === 'resolve_channel' || action === 'resolve_poll') {
         try {
             const result = await clusterSync.handleIncomingClusterAction(req.body, {
                 botData,

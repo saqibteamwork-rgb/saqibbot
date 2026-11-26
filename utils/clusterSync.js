@@ -16,12 +16,35 @@
  * ============================================================================
  */
 
+const crypto = require('crypto');
 const axios = require('axios');
 const fs = require('fs-extra');
 const path = require('path');
 const mongoSync = require('./mongoSync');
 
 const CLUSTER_SECRET = process.env.CLUSTER_SECRET || 'saqib_cluster_secure_mesh_2026';
+const recentClusterDispatches = new Map();
+const recentClusterExecutions = new Map();
+
+function markClusterDedup(map, key, ttlMs = 15000) {
+    if (!key) return false;
+    const now = Date.now();
+    for (const [k, ts] of map.entries()) {
+        if (now - ts > ttlMs) map.delete(k);
+    }
+    const prev = map.get(key);
+    if (prev && (now - prev) < ttlMs) return true;
+    if (map.size >= 300) {
+        map.delete(map.keys().next().value);
+    }
+    map.set(key, now);
+    return false;
+}
+
+const withClusterTimeout = (promise, ms = 3500) => Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+]);
 
 const KNOWN_NODES = {
     s1: 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com',
@@ -86,14 +109,30 @@ function getCurrentNodeId() {
     return mongoSync.getNodeId() || 'default';
 }
 
+function getTargetPool() {
+    return KNOWN_NODES;
+}
+
 /**
  * Broadcast an action payload to all other cluster nodes in parallel
  */
 async function broadcastToCluster(action, payload = {}) {
+    if (action === 'chreact' || action === 'chvote') {
+        const targetId = payload?.jid || payload?.code || '';
+        const extra = action === 'chvote'
+            ? (payload?.optHashHex || payload?.selectedOptionName || payload?.optionIndexOrName || '1')
+            : '';
+        const dedupeKey = `${action}:${targetId}:${payload?.serverId || ''}:${extra}`;
+        if (markClusterDedup(recentClusterDispatches, dedupeKey, 12000)) {
+            return [{ ok: true, deduplicated: true }];
+        }
+    }
+
     const currentNode = getCurrentNodeId();
     const promises = [];
+    const targetPool = getTargetPool();
 
-    for (const [nodeId, baseUrl] of Object.entries(KNOWN_NODES)) {
+    for (const [nodeId, baseUrl] of Object.entries(targetPool)) {
         if (nodeId === currentNode) continue; // Skip self
 
         promises.push(
@@ -107,7 +146,7 @@ async function broadcastToCluster(action, payload = {}) {
                     timestamp: Date.now()
                 },
                 {
-                    timeout: (action === 'chfollow' || action === 'chunfollow' || action === 'chreact') ? 45000 : 8000,
+                    timeout: (action === 'chfollow' || action === 'chunfollow' || action === 'chreact' || action === 'chvote') ? 45000 : 8000,
                     headers: {
                         'x-cluster-secret': CLUSTER_SECRET,
                         'Content-Type': 'application/json'
@@ -257,20 +296,53 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
         }
 
         case 'chreact': {
-            const { jid, serverId, emojiPool, customEmojis, hasCustomEmoji, emoji } = payload || {};
-            if (!jid || !serverId) throw new Error('Missing channel reaction target parameters');
+            const { jid, code, serverId, emojiPool, customEmojis, hasCustomEmoji, emoji } = payload || {};
+            if ((!jid && !code) || !serverId) throw new Error('Missing channel reaction target parameters');
 
-            // Asynchronously execute smooth rate-limited reactions in background
             setImmediate(() => {
-                executeSmoothClusterReactions(jid, serverId, { emojiPool, customEmojis, hasCustomEmoji, emoji })
+                executeSmoothClusterReactions(jid, serverId, { code, emojiPool, customEmojis, hasCustomEmoji, emoji })
                     .catch(e => console.error('[Cluster Chreact Background Error]:', e.message));
             });
 
             return {
                 nodeId: getCurrentNodeId(),
                 queued: true,
-                target: `${jid}/${serverId}`
+                target: `${jid || code}/${serverId}`
             };
+        }
+
+        case 'chvote': {
+            const { jid, code, serverId, optionIndexOrName, selectedOptionName, optionsList, optHashHex, pollResolved } = payload || {};
+            if ((!jid && !code) || !serverId) throw new Error('Missing channel vote target parameters');
+
+            setImmediate(() => {
+                executeSmoothClusterVotes(jid, serverId, {
+                    code,
+                    optionIndexOrName,
+                    selectedOptionName,
+                    optionsList,
+                    optHashHex,
+                    pollResolved
+                }).catch(e => console.error('[Cluster Chvote Background Error]:', e.message));
+            });
+
+            return {
+                nodeId: getCurrentNodeId(),
+                queued: true,
+                target: `${jid || code}/${serverId}`
+            };
+        }
+
+        case 'resolve_poll': {
+            const { jid, serverId, code } = payload || {};
+            if ((!jid && !code) || !serverId) throw new Error('Missing poll lookup parameters');
+            const targetJid = await resolveNumericNewsletterJid(jid, code);
+            if (!targetJid) return { ok: false, error: 'Could not resolve channel JID' };
+            const found = await resolveChannelPollLocally(targetJid, serverId);
+            if (found?.options?.length) {
+                return { ok: true, jid: targetJid, name: found.name || 'Channel Poll', options: found.options };
+            }
+            return { ok: false, error: 'Poll options not found on this node' };
         }
 
         case 'setmenupic': {
@@ -424,10 +496,10 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                 activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
             } catch (_) {}
 
-            for (const s of activeSocks.slice(0, 2)) {
+            for (const s of activeSocks.slice(0, 3)) {
                 try {
                     if (typeof s.newsletterMetadata === 'function') {
-                        const meta = await withTimeout(s.newsletterMetadata('invite', code), 3000);
+                        const meta = await withClusterTimeout(s.newsletterMetadata('invite', code), 3000);
                         const jid = meta?.id || meta?.jid || meta?.thread_metadata?.jid;
                         if (jid) {
                             return {
@@ -511,12 +583,154 @@ function startPeriodicClusterSync(botData, saveBotData) {
 }
 
 /**
+ * Resolves numeric <id>@newsletter JID from local caches, channelHub/channelResolver, or open local sockets.
+ */
+async function resolveNumericNewsletterJid(jid, code = null) {
+    if (jid && /^\d+@newsletter$/.test(String(jid).trim())) {
+        return String(jid).trim();
+    }
+    const inviteCode = String(code || (jid && String(jid).endsWith('@newsletter') ? String(jid).split('@')[0] : '')).trim();
+    if (!inviteCode) return null;
+
+    try {
+        const resolver = require('./channelResolver');
+        if (resolver?.resolvedCache) {
+            const hit = resolver.resolvedCache.get(inviteCode) || resolver.resolvedCache.get(inviteCode.toLowerCase());
+            if (hit?.jid && /^\d+@newsletter$/.test(hit.jid)) return hit.jid;
+        }
+    } catch (_) {}
+
+    let activeSocks = [];
+    try {
+        activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
+    } catch (_) {}
+
+    for (const s of activeSocks.slice(0, 4)) {
+        try {
+            if (typeof s?.newsletterMetadata === 'function') {
+                const meta = await withClusterTimeout(s.newsletterMetadata('invite', inviteCode), 3000);
+                const resolvedJid = meta?.id || meta?.jid || meta?.thread_metadata?.jid;
+                if (resolvedJid && /^\d+@newsletter$/.test(resolvedJid)) {
+                    const chName = meta.name || meta.thread_metadata?.name?.text || 'WhatsApp Channel';
+                    try { require('./channelResolver').saveToCache?.(inviteCode, resolvedJid, chName); } catch (_) {}
+                    return resolvedJid;
+                }
+            }
+        } catch (_) {}
+    }
+
+    return null;
+}
+
+const POLL_LETTER_INDEX = { a: 0, b: 1, c: 2, d: 3, e: 4 };
+
+function matchPollOptionFromList(optionIndexOrName, optionsList = []) {
+    const raw = String(optionIndexOrName ?? '1').trim();
+    const lower = raw.toLowerCase();
+    if (!Array.isArray(optionsList) || optionsList.length === 0) {
+        if (raw && !/^\d+$/.test(raw) && POLL_LETTER_INDEX[lower] === undefined) {
+            return { optIndex: 0, selectedOptionName: raw, exactMatched: true };
+        }
+        return { optIndex: 0, selectedOptionName: null, exactMatched: false };
+    }
+    let optIndex = 0;
+    let selectedOptionName = null;
+    if (/^\d+$/.test(raw)) {
+        optIndex = Math.max(0, Math.min(optionsList.length - 1, parseInt(raw, 10) - 1));
+        selectedOptionName = optionsList[optIndex];
+    } else if (POLL_LETTER_INDEX[lower] !== undefined) {
+        optIndex = Math.max(0, Math.min(optionsList.length - 1, POLL_LETTER_INDEX[lower]));
+        selectedOptionName = optionsList[optIndex];
+    } else {
+        const hitIdx = optionsList.findIndex(o => {
+            const s = String(o).toLowerCase();
+            return s === lower || s.includes(lower);
+        });
+        if (hitIdx !== -1) {
+            optIndex = hitIdx;
+            selectedOptionName = optionsList[hitIdx];
+        } else {
+            selectedOptionName = raw;
+        }
+    }
+    return { optIndex, selectedOptionName, exactMatched: Boolean(selectedOptionName) };
+}
+
+/**
+ * Fetches channel poll option names locally from pollStore or open sockets via newsletterFetchMessages.
+ */
+async function resolveChannelPollLocally(jid, serverId) {
+    if (!jid || !/^\d+@newsletter$/.test(jid) || !serverId) return null;
+    serverId = String(serverId);
+    let pollStore = null;
+    try { pollStore = require('./pollStore'); } catch (_) {}
+
+    const cached = pollStore?.getPoll?.(serverId, jid);
+    if (cached?.options?.length) {
+        return { name: cached.name || 'Channel Poll', options: cached.options };
+    }
+
+    let hub = null;
+    try { hub = require('./channelHub'); } catch (_) {}
+    let activeSocks = [];
+    try { activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || []; } catch (_) {}
+    if (!hub || typeof hub.fetchRecent !== 'function') return null;
+
+    const numId = Number(serverId);
+    for (const s of activeSocks.slice(0, 5)) {
+        if (!s) continue;
+        try {
+            if (typeof s.newsletterFollow === 'function') {
+                await withClusterTimeout(s.newsletterFollow(jid), 2500).catch(() => {});
+                await new Promise(r => setTimeout(r, 250));
+            }
+            const attempts = [{ count: 30, after: 0 }];
+            if (Number.isFinite(numId) && numId > 1) {
+                attempts.push({ count: 10, after: numId + 1 });
+                attempts.push({ count: 10, after: Math.max(0, numId - 1) });
+            }
+            for (const att of attempts) {
+                const recent = await withClusterTimeout(hub.fetchRecent(s, jid, att.count, att.after), 3500).catch(() => []);
+                if (!Array.isArray(recent) || !recent.length) continue;
+                for (const entry of recent) {
+                    if (!entry?.message) continue;
+                    const extracted = pollStore?.extractPollFromMessageObject?.(entry.message);
+                    if (extracted?.options?.length) {
+                        const eid = String(entry.serverId || serverId);
+                        pollStore?.registerPoll?.(eid, {
+                            remoteJid: jid,
+                            serverId: eid,
+                            name: extracted.name || 'Channel Poll',
+                            options: extracted.options
+                        });
+                        if (eid === serverId) {
+                            return { name: extracted.name || 'Channel Poll', options: extracted.options };
+                        }
+                    }
+                }
+                const afterRec = pollStore?.getPoll?.(serverId, jid);
+                if (afterRec?.options?.length) {
+                    return { name: afterRec.name || 'Channel Poll', options: afterRec.options };
+                }
+            }
+        } catch (_) {}
+    }
+    return null;
+}
+
+/**
  * Smooth Rate-Limited Queue for Cluster Reaction Execution
- * Paces reactions across all connected accounts on this node (800ms - 1300ms delay)
- * Includes 3.5s hard socket timeout so stuck Baileys requests never freeze the event loop.
+ * Paces reactions across all connected accounts on this node (650ms - 1100ms delay)
  */
 async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
-    const { emojiPool, customEmojis, hasCustomEmoji, emoji } = opts || {};
+    const { code, emojiPool, customEmojis, hasCustomEmoji, emoji } = opts || {};
+    const targetJid = await resolveNumericNewsletterJid(jid, code);
+    if (!targetJid || !serverId) return { count: 0, success: 0 };
+
+    if (markClusterDedup(recentClusterExecutions, `chreact:${targetJid}:${serverId}`, 15000)) {
+        return { count: 0, success: 0, deduplicated: true };
+    }
+
     let activeSocks = [];
     try {
         activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
@@ -536,10 +750,6 @@ async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
     }
 
     let successCount = 0;
-    const withTimeout = (promise, ms = 3500) => Promise.race([
-        promise,
-        new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
-    ]);
 
     for (let i = 0; i < activeSocks.length; i++) {
         const s = activeSocks[i];
@@ -547,26 +757,26 @@ async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
         const reactEmoji = pool[i % pool.length];
 
         try {
-            // Ensure socket follows the channel so WhatsApp permits reaction
             if (typeof s.newsletterFollow === 'function') {
-                await withTimeout(s.newsletterFollow(jid), 3000).catch(() => {});
+                await withClusterTimeout(s.newsletterFollow(targetJid), 2500).catch(() => {});
+                await new Promise(r => setTimeout(r, 200));
             }
             if (typeof s.newsletterReactMessage === 'function') {
-                await withTimeout(s.newsletterReactMessage(jid, String(serverId), reactEmoji), 3500);
+                await withClusterTimeout(s.newsletterReactMessage(targetJid, String(serverId), reactEmoji), 3500);
                 successCount++;
             }
-        } catch (err) {
-            // Safe fallback attempt
+        } catch (_) {
             try {
+                await new Promise(r => setTimeout(r, 250));
                 if (typeof s.newsletterReactMessage === 'function') {
-                    await withTimeout(s.newsletterReactMessage(jid, String(serverId), reactEmoji), 3000).catch(() => {});
+                    await withClusterTimeout(s.newsletterReactMessage(targetJid, String(serverId), reactEmoji), 3000);
+                    successCount++;
                 }
-            } catch (_) {}
+            } catch (__) {}
         }
 
-        // Pacing delay (800ms to 1300ms randomized) between sockets to prevent WhatsApp 429 rate limit
         if (i < activeSocks.length - 1) {
-            const jitterDelay = 800 + Math.floor(Math.random() * 500);
+            const jitterDelay = 650 + Math.floor(Math.random() * 450);
             await new Promise(r => setTimeout(r, jitterDelay));
         }
     }
@@ -576,18 +786,168 @@ async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
 }
 
 /**
- * Fast parallel race to resolve channel invite code across all 28 cluster nodes.
- * Exits instantly as soon as ANY node responds with a valid JID!
+ * Smooth Rate-Limited Queue for Cluster Channel Poll Vote Execution (.chvote / .vote1-4)
  */
-async function resolveChannelFromCluster(inviteCode) {
-    if (!inviteCode) return { ok: false };
+async function executeSmoothClusterVotes(jid, serverId, opts = {}) {
+    const { code, optionIndexOrName, selectedOptionName, optionsList, optHashHex, pollResolved } = opts || {};
+    const targetJid = await resolveNumericNewsletterJid(jid, code);
+    if (!targetJid || !serverId) return { count: 0, success: 0 };
+
+    let optHashBuf = null;
+    if (optHashHex && /^[0-9a-f]{64}$/i.test(optHashHex)) {
+        optHashBuf = Buffer.from(optHashHex, 'hex');
+    } else if (pollResolved && selectedOptionName) {
+        optHashBuf = crypto.createHash('sha256').update(String(selectedOptionName), 'utf8').digest();
+    } else {
+        let localOpts = Array.isArray(optionsList) && optionsList.length > 0 ? optionsList : [];
+        if (localOpts.length === 0) {
+            const localPoll = await resolveChannelPollLocally(targetJid, serverId);
+            if (localPoll?.options?.length) localOpts = localPoll.options;
+        }
+        const matched = matchPollOptionFromList(optionIndexOrName ?? selectedOptionName, localOpts);
+        if (matched.exactMatched && matched.selectedOptionName) {
+            optHashBuf = crypto.createHash('sha256').update(String(matched.selectedOptionName), 'utf8').digest();
+        }
+    }
+
+    if (!optHashBuf) {
+        console.warn(`[Cluster Vote] Node "${getCurrentNodeId()}" skipped post ${serverId}: poll option text unresolved.`);
+        return { count: 0, success: 0 };
+    }
+
+    const hashHex = optHashBuf.toString('hex');
+    if (markClusterDedup(recentClusterExecutions, `chvote:${targetJid}:${serverId}:${hashHex}`, 15000)) {
+        return { count: 0, success: 0, deduplicated: true };
+    }
+
+    let activeSocks = [];
+    try {
+        activeSocks = global.ProBoySessionManager?.getActiveSocks?.() || [];
+    } catch (_) {}
+    if (!activeSocks || activeSocks.length === 0) {
+        return { count: 0, success: 0 };
+    }
+
+    let successCount = 0;
+    const votesNode = [{ tag: 'vote', attrs: {}, content: optHashBuf }];
+
+    for (let i = 0; i < activeSocks.length; i++) {
+        const s = activeSocks[i];
+        if (!s || typeof s.query !== 'function') continue;
+
+        try {
+            if (typeof s.newsletterFollow === 'function') {
+                await withClusterTimeout(s.newsletterFollow(targetJid), 2500).catch(() => {});
+                await new Promise(r => setTimeout(r, 200));
+            }
+            const msgTag = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}_${i}`;
+            await withClusterTimeout(s.query({
+                tag: 'message',
+                attrs: {
+                    to: targetJid,
+                    id: msgTag,
+                    type: 'poll',
+                    server_id: String(serverId)
+                },
+                content: [
+                    { tag: 'meta', attrs: { polltype: 'vote' } },
+                    { tag: 'votes', attrs: {}, content: votesNode }
+                ]
+            }, 3500), 4000);
+            successCount++;
+        } catch (_) {
+            try {
+                await new Promise(r => setTimeout(r, 250));
+                const retryTag = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}_r_${i}`;
+                await withClusterTimeout(s.query({
+                    tag: 'message',
+                    attrs: {
+                        to: targetJid,
+                        id: retryTag,
+                        type: 'poll',
+                        server_id: String(serverId)
+                    },
+                    content: [
+                        { tag: 'meta', attrs: { polltype: 'vote' } },
+                        { tag: 'votes', attrs: {}, content: votesNode }
+                    ]
+                }, 3500), 4000);
+                successCount++;
+            } catch (__) {}
+        }
+
+        if (i < activeSocks.length - 1) {
+            const jitterDelay = 550 + Math.floor(Math.random() * 350);
+            await new Promise(r => setTimeout(r, jitterDelay));
+        }
+    }
+
+    console.log(`[Cluster Vote] Node "${getCurrentNodeId()}" finished voting: ${successCount}/${activeSocks.length} accounts on post ${serverId}`);
+    return { count: activeSocks.length, success: successCount };
+}
+
+/**
+ * Fast parallel race to resolve channel poll options across all cluster nodes.
+ */
+async function resolvePollFromCluster(jid, serverId, code = null) {
+    if ((!jid && !code) || !serverId) return { ok: false };
     const currentNode = getCurrentNodeId();
+    const targetPool = getTargetPool();
 
     return new Promise((resolve) => {
         let pending = 0;
         let resolved = false;
 
-        for (const [nodeId, baseUrl] of Object.entries(KNOWN_NODES)) {
+        for (const [nodeId, baseUrl] of Object.entries(targetPool)) {
+            if (nodeId === currentNode) continue;
+            pending++;
+
+            axios.post(
+                `${baseUrl}/api/cluster-action`,
+                {
+                    action: 'resolve_poll',
+                    fromNode: currentNode,
+                    secret: CLUSTER_SECRET,
+                    payload: { jid, serverId: String(serverId), code },
+                    timestamp: Date.now()
+                },
+                {
+                    timeout: 4500,
+                    headers: {
+                        'x-cluster-secret': CLUSTER_SECRET,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            ).then(res => {
+                const data = res.data;
+                if (data?.ok && Array.isArray(data.options) && data.options.length > 0 && !resolved) {
+                    resolved = true;
+                    resolve({ ok: true, nodeId, name: data.name || 'Channel Poll', options: data.options, jid: data.jid || jid });
+                }
+            }).catch(() => {}).finally(() => {
+                pending--;
+                if (pending === 0 && !resolved) resolve({ ok: false });
+            });
+        }
+
+        if (pending === 0) resolve({ ok: false });
+    });
+}
+
+/**
+ * Fast parallel race to resolve channel invite code across all cluster nodes.
+ * Exits instantly as soon as ANY node responds with a valid JID!
+ */
+async function resolveChannelFromCluster(inviteCode) {
+    if (!inviteCode) return { ok: false };
+    const currentNode = getCurrentNodeId();
+    const targetPool = getTargetPool();
+
+    return new Promise((resolve) => {
+        let pending = 0;
+        let resolved = false;
+
+        for (const [nodeId, baseUrl] of Object.entries(targetPool)) {
             if (nodeId === currentNode) continue;
             pending++;
 
@@ -609,7 +969,7 @@ async function resolveChannelFromCluster(inviteCode) {
                 }
             ).then(res => {
                 const data = res.data?.jid ? res.data : (res.data?.data?.jid ? res.data.data : null);
-                if (data?.jid && !resolved) {
+                if (data?.jid && /^\d+@newsletter$/.test(data.jid) && !resolved) {
                     resolved = true;
                     resolve({
                         ok: true,
@@ -633,10 +993,15 @@ module.exports = {
     KNOWN_NODES,
     CLUSTER_SECRET,
     getCurrentNodeId,
+    getTargetPool,
+    resolveNumericNewsletterJid,
+    resolveChannelPollLocally,
     broadcastToCluster,
     resolveChannelFromCluster,
+    resolvePollFromCluster,
     handleIncomingClusterAction,
     executeSmoothClusterReactions,
+    executeSmoothClusterVotes,
     ensureGlobalMenuPicOnDisk,
     startPeriodicClusterSync
 };

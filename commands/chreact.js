@@ -31,10 +31,13 @@ const withTimeout = (promise, ms = 3500) => Promise.race([
 function getClusterServerCount() {
   try {
     const clusterSync = require('../utils/clusterSync');
-    const n = Object.keys(clusterSync.KNOWN_NODES || {}).length;
+    const pool = typeof clusterSync.getTargetPool === 'function'
+      ? clusterSync.getTargetPool()
+      : (clusterSync.KNOWN_NODES || {});
+    const n = Object.keys(pool).length;
     if (n > 0) return n;
   } catch {}
-  return 49;
+  return 50;
 }
 
 const VOTE_EMOJI_MAP = {
@@ -137,10 +140,19 @@ function extractQuotedPoll(msg) {
     if (stored?.secret) secret = stored.secret;
   }
 
-  // Check if this quoted poll is from a newsletter channel
-  let newsletterJid = ctx?.forwardedNewsletterMessageInfo?.newsletterJid || null;
-  let serverMessageId = ctx?.forwardedNewsletterMessageInfo?.serverMessageId || null;
-  let channelName = ctx?.forwardedNewsletterMessageInfo?.newsletterName || null;
+  // Check if this quoted poll is from a newsletter channel (reply context or inner quoted wrapper)
+  let fnmi = ctx?.forwardedNewsletterMessageInfo || null;
+  if (!fnmi && quoted && typeof quoted === 'object') {
+    for (const k of Object.keys(quoted)) {
+      if (quoted[k]?.contextInfo?.forwardedNewsletterMessageInfo) {
+        fnmi = quoted[k].contextInfo.forwardedNewsletterMessageInfo;
+        break;
+      }
+    }
+  }
+  const newsletterJid = fnmi?.newsletterJid || null;
+  const serverMessageId = fnmi?.serverMessageId || null;
+  const channelName = fnmi?.newsletterName || null;
 
   return {
     stanzaId,
@@ -174,21 +186,34 @@ async function fetchChannelPollDetails(sock, jid, serverId) {
     return null;
   }
 
-  // 2. Try fetching messages across active sockets with strict 3.5s timeouts
-  const candidateSocks = getActiveSockets(sock).slice(0, 3);
+  // 2. Ask cluster peers if any node already saw/cached this poll
+  try {
+    const clusterSync = require('../utils/clusterSync');
+    if (typeof clusterSync.resolvePollFromCluster === 'function') {
+      const cRes = await withTimeout(clusterSync.resolvePollFromCluster(jid, serverId), 4500).catch(() => null);
+      if (cRes?.ok && Array.isArray(cRes.options) && cRes.options.length > 0) {
+        pollStore.registerPoll(serverId, { remoteJid: jid, serverId, name: cRes.name || 'Channel Poll', options: cRes.options });
+        return { name: cRes.name || 'Channel Poll', options: cRes.options };
+      }
+    }
+  } catch {}
+
+  // 3. Try fetching messages across up to 5 open sockets with strict 3.5s timeouts
+  const candidateSocks = getActiveSockets(sock).slice(0, 5);
   const numServerId = Number(serverId);
 
   for (const s of candidateSocks) {
     if (!s || typeof hub.fetchRecent !== 'function') continue;
     try {
-      // Ensure socket follows the channel so WhatsApp permits newsletterFetchMessages
       if (typeof s.newsletterFollow === 'function') {
         await withTimeout(s.newsletterFollow(jid), 2500).catch(() => {});
+        await sleep(250);
       }
 
-      const fetchAttempts = [{ count: 25, after: 0 }];
+      const fetchAttempts = [{ count: 30, after: 0 }];
       if (Number.isFinite(numServerId) && numServerId > 1) {
-        fetchAttempts.unshift({ count: 8, after: Math.max(0, numServerId - 1) });
+        fetchAttempts.push({ count: 10, after: numServerId + 1 });
+        fetchAttempts.push({ count: 10, after: Math.max(0, numServerId - 1) });
       }
 
       for (const att of fetchAttempts) {
@@ -275,6 +300,7 @@ const LETTER_OPTION_MAP = { a: 0, b: 1, c: 2, d: 3, e: 4 };
 function resolvePollOptionChoice(optionIndexOrName, optionsList = []) {
   let optIndex = 0;
   let selectedOptionName = null;
+  let exactMatched = false;
 
   if (typeof optionIndexOrName === 'number') {
     optIndex = Math.max(0, optionIndexOrName);
@@ -292,32 +318,48 @@ function resolvePollOptionChoice(optionIndexOrName, optionsList = []) {
       if (foundIdx !== -1) {
         optIndex = foundIdx;
         selectedOptionName = optionsList[foundIdx];
+        exactMatched = true;
       } else {
         selectedOptionName = trimmed;
+        exactMatched = true;
       }
     }
   }
 
-  if (!selectedOptionName) {
-    if (optionsList.length > 0 && optIndex >= 0 && optIndex < optionsList.length) {
-      selectedOptionName = optionsList[optIndex];
-    } else {
-      const letter = ['A', 'B', 'C', 'D', 'E'][optIndex] || String(optIndex + 1);
-      selectedOptionName = `Option ${optIndex + 1} (${letter})`;
-    }
+  if (!selectedOptionName && optionsList.length > 0) {
+    const safeIdx = Math.max(0, Math.min(optionsList.length - 1, optIndex));
+    optIndex = safeIdx;
+    selectedOptionName = optionsList[safeIdx];
+    exactMatched = true;
   }
 
-  return { optIndex, selectedOptionName };
+  if (!selectedOptionName) {
+    const letter = ['A', 'B', 'C', 'D', 'E'][optIndex] || String(optIndex + 1);
+    selectedOptionName = `Option ${optIndex + 1} (${letter})`;
+  }
+
+  return { optIndex, selectedOptionName, exactMatched };
 }
 
 /**
- * Executes authentic WhatsApp Channel Poll vote across ALL connected bot sessions
+ * Executes authentic WhatsApp Channel Poll vote across ALL connected bot sessions AND ALL Cluster Servers!
  */
 async function executeMultiSessionChannelPollVote(sock, from, msg, target, optionIndexOrName = 0, relayOpt = null) {
-  const { jid, serverId, channelName } = target;
+  let { jid, code, serverId, channelName } = target;
+
+  // Resolve invite code -> numeric @newsletter JID if needed
+  if ((!jid || !/^\d+@newsletter$/.test(jid)) && code) {
+    try {
+      const clusterSync = require('../utils/clusterSync');
+      if (typeof clusterSync.resolveNumericNewsletterJid === 'function') {
+        const resolved = await withTimeout(clusterSync.resolveNumericNewsletterJid(jid, code), 4000).catch(() => null);
+        if (resolved) jid = resolved;
+      }
+    } catch {}
+  }
 
   // Deduplicate by message ID + post key so multiple sessions don't send duplicate replies in group/self-chat
-  const dedupeKey = msg?.key?.id ? `vote_msg:${msg.key.id}` : `vote_post:${jid}:${serverId}:${optionIndexOrName}`;
+  const dedupeKey = msg?.key?.id ? `vote_msg:${msg.key.id}:${jid || code}:${serverId}` : `vote_post:${jid || code}:${serverId}:${optionIndexOrName}`;
   if (processedChreactIds.has(dedupeKey)) return;
   processedChreactIds.add(dedupeKey);
   if (processedChreactIds.size > 1000) {
@@ -326,50 +368,73 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
 
   await sock.sendMessage(from, { react: { text: '⏳', key: msg.key } }).catch(() => {});
 
-  // Silently relay .chvote <link> <opt> into the .set arc Group/Chat so all other bots in that group also vote!
+  // Silently relay .chvote <link> <opt> into the .set arc Group/Chat if configured (1x deduped)
   try {
     const fwd = require('../utils/channelPostForwarder');
     if (typeof fwd.relayChvoteToArcTarget === 'function') {
       const optToSend = relayOpt !== null && relayOpt !== undefined
         ? String(relayOpt)
         : (typeof optionIndexOrName === 'number' ? String(optionIndexOrName + 1) : String(optionIndexOrName || '1'));
-      const relayedId = await fwd.relayChvoteToArcTarget(sock, from, target, optToSend);
+      const relayedId = await fwd.relayChvoteToArcTarget(sock, from, { ...target, jid, code }, optToSend);
       if (relayedId) {
-        processedChreactIds.add(`vote_msg:${relayedId}`);
-        processedChreactIds.add(`msg:${relayedId}`);
+        processedChreactIds.add(`vote_msg:${relayedId}:${jid || code}:${serverId}`);
+        processedChreactIds.add(`msg:${relayedId}:${jid || code}:${serverId}`);
       }
     }
   } catch {}
 
-  // Gather active connected bot sockets
   const uniqueSocks = getActiveSockets(sock);
 
-  // Resolve poll details (with strict timeouts so it never hangs)
   let pollName = 'Channel Poll';
   let optionsList = [];
 
   if (target.pollInfo && Array.isArray(target.pollInfo.options) && target.pollInfo.options.length > 0) {
     pollName = target.pollInfo.name || pollName;
     optionsList = target.pollInfo.options || [];
-  } else {
-    const details = await withTimeout(fetchChannelPollDetails(sock, jid, serverId), 5500).catch(() => null);
+  } else if (jid && /^\d+@newsletter$/.test(jid)) {
+    const details = await withTimeout(fetchChannelPollDetails(sock, jid, serverId), 6500).catch(() => null);
     if (details) {
       pollName = details.name || pollName;
       optionsList = details.options || [];
     }
   }
 
-  const { optIndex, selectedOptionName } = resolvePollOptionChoice(optionIndexOrName, optionsList);
+  const { optIndex, selectedOptionName, exactMatched } = resolvePollOptionChoice(optionIndexOrName, optionsList);
 
-  // Compute option hash Buffer
+  if (!exactMatched) {
+    await sock.sendMessage(from, { react: { text: '❌', key: msg.key } }).catch(() => {});
+    return await sock.sendMessage(from, {
+      text: `❌ *Channel Poll ke options fetch nahi ho sake!*\n\n` +
+            `WhatsApp ne is channel post ki poll options abhi return nahi kin (ya post ID galat hai).\n\n` +
+            `⚡ *Instant Solution:*\n` +
+            `1️⃣ Channel ke Poll post ko chat/group mein *Forward* karein aur us par reply kar ke \`.chvote ${optionIndexOrName || 1}\` likhein!\n` +
+            `2️⃣ Ya link ke saath **Option ka exact naam** likhein, jaise:\n` +
+            `👉 \`${config.prefix || '.'}chvote ${target.rawLink || '<link>'} Yes\``
+    }, { quoted: msg });
+  }
+
   const optHash = crypto.createHash('sha256').update(String(selectedOptionName), 'utf8').digest();
-  const votesNode = [
-    {
-      tag: 'vote',
-      attrs: {},
-      content: optHash
-    }
-  ];
+  const optHashHex = optHash.toString('hex');
+  const votesNode = [{ tag: 'vote', attrs: {}, content: optHash }];
+
+  // 🛰️ CLUSTER MESH DISPATCH: Broadcast real Channel Poll vote across ALL servers!
+  const totalClusterNodes = getClusterServerCount();
+  try {
+    const clusterSync = require('../utils/clusterSync');
+    clusterSync.broadcastToCluster('chvote', {
+      jid,
+      code: code || null,
+      serverId,
+      optionIndexOrName,
+      selectedOptionName,
+      optionsList,
+      optHashHex,
+      pollResolved: Boolean(optionsList.length > 0),
+      channelName: target.channelName
+    }).catch(e => console.error('[Cluster Chvote Broadcast Error]:', e.message));
+  } catch (err) {
+    console.error('[Cluster Chvote Init Error]:', err.message);
+  }
 
   if (jid && /^\d+@newsletter$/.test(jid)) {
     for (let i = 0; i < uniqueSocks.length; i++) {
@@ -377,7 +442,8 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
 
       try {
         if (typeof s.newsletterFollow === 'function') {
-          await withTimeout(s.newsletterFollow(jid), 3000).catch(() => {});
+          await withTimeout(s.newsletterFollow(jid), 2500).catch(() => {});
+          await sleep(200);
         }
         const messageId = typeof s.generateMessageTag === 'function' ? s.generateMessageTag() : `${Date.now()}_${i}`;
         await withTimeout(s.query({
@@ -406,7 +472,6 @@ async function executeMultiSessionChannelPollVote(sock, from, msg, target, optio
   const styledChannel = toSmallCaps(channelName || 'WhatsApp Channel');
   const styledOption = toSmallCaps(selectedOptionName || `Option ${optIndex + 1}`);
   const localCount = uniqueSocks.length;
-  const totalClusterNodes = getClusterServerCount();
 
   const summaryText =
     `✅ *ᴠᴏᴛᴇs sᴇɴᴛ sᴜᴄᴄᴇssғᴜʟʟʏ!*\n\n` +
@@ -754,29 +819,60 @@ async function resolveChannelPost(sock, parsed) {
     }
   }
 
-  // 2. Multi-socket fast 2.5s live fallback if not found in local caches (never hangs or blocks!)
+  // 2. Direct multi-socket newsletterMetadata lookup (fast 2.5s per socket, avoids circular slow scraper)
   if (code && !jid) {
-    const candidateSocks = getActiveSockets(sock).slice(0, 4);
+    const candidateSocks = getActiveSockets(sock).slice(0, 5);
     for (const s of candidateSocks) {
-      if (!s) continue;
+      if (!s || typeof s.newsletterMetadata !== 'function') continue;
       try {
-        const res = await withTimeout(hub.resolveInvite(s, code), 2500);
-        if (res && res.rec && res.rec.jid) {
-          jid = res.rec.jid;
-          channelName = res.rec.name || channelName;
+        const meta = await withTimeout(s.newsletterMetadata('invite', code), 2500);
+        const rJid = meta?.id || meta?.jid || meta?.thread_metadata?.jid;
+        if (rJid && /^\d+@newsletter$/.test(rJid)) {
+          jid = rJid;
+          channelName = meta.name || meta.thread_metadata?.name?.text || channelName;
+          try { require('../utils/channelResolver').saveToCache?.(code, jid, channelName); } catch {}
           break;
         }
       } catch {}
     }
 
-    // Guaranteed fallback so external channels never fail or block .set arc relay!
+    // 3. Parallel 50-server Cluster Race if not resolved locally
     if (!jid) {
-      jid = `${code}@newsletter`;
+      try {
+        const clusterSync = require('../utils/clusterSync');
+        if (typeof clusterSync.resolveChannelFromCluster === 'function') {
+          const cRes = await withTimeout(clusterSync.resolveChannelFromCluster(code), 4500).catch(() => null);
+          if (cRes?.ok && cRes.data?.jid && /^\d+@newsletter$/.test(cRes.data.jid)) {
+            jid = cRes.data.jid;
+            channelName = cRes.data.name || channelName;
+          }
+        }
+      } catch {}
+    }
+
+    // 4. Fallback hub.resolveInvite (mongo cache / web resolver)
+    if (!jid) {
+      try {
+        const res = await withTimeout(hub.resolveInvite(sock, code), 4500);
+        if (res?.rec?.jid && /^\d+@newsletter$/.test(res.rec.jid)) {
+          jid = res.rec.jid;
+          channelName = res.rec.name || channelName;
+        }
+      } catch {}
     }
   }
 
-  if (!jid) {
+  if (!jid && !code) {
     return { ok: false, error: 'Channel link ya JID nahi mila! Barah-e-karam channel post ka link dein ya Poll par reply karein.' };
+  }
+
+  if (code && (!jid || !/^\d+@newsletter$/.test(jid))) {
+    return {
+      ok: false,
+      error: `Channel invite link resolve nahi ho saka (WhatsApp temporary rate-limit).\n\n` +
+             `⚡ *Instant Solution:*\n` +
+             `Is channel ki koi post bot ko *Forward* karein aur us post par reply kar ke \`.chreact ❤️\` ya \`.chvote 1\` likhein!`
+    };
   }
 
   if (!serverId) {
@@ -827,10 +923,10 @@ function toSmallCaps(str) {
  * Executes emoji reaction across ALL connected bot sessions
  */
 async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHANNEL REACTION BOOST') {
-  const { jid, serverId, emoji, customEmojis, hasCustomEmoji, channelName } = target;
+  const { jid, code, serverId, emoji, customEmojis, hasCustomEmoji, channelName } = target;
 
-  // Deduplicate by message ID + post key so multiple sessions don't send duplicate replies in self-chat
-  const dedupeKey = msg?.key?.id ? `msg:${msg.key.id}` : `post:${jid}:${serverId}`;
+  // Deduplicate by message ID + target JID + post ID (allows .chreactall across multiple posts of the same channel!)
+  const dedupeKey = msg?.key?.id ? `msg:${msg.key.id}:${jid || code}:${serverId}` : `post:${jid || code}:${serverId}`;
   if (processedChreactIds.has(dedupeKey)) return;
   processedChreactIds.add(dedupeKey);
   if (processedChreactIds.size > 1000) {
@@ -846,7 +942,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     if (typeof fwd.relayChreactToArcTarget === 'function') {
       const relayedId = await fwd.relayChreactToArcTarget(sock, from, target);
       if (relayedId) {
-        processedChreactIds.add(`msg:${relayedId}`);
+        processedChreactIds.add(`msg:${relayedId}:${jid || code}:${serverId}`);
       }
     }
   } catch {}
@@ -888,6 +984,7 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     const clusterSync = require('../utils/clusterSync');
     clusterSync.broadcastToCluster('chreact', {
       jid,
+      code: code || null,
       serverId,
       emojiPool,
       customEmojis,
@@ -1052,7 +1149,7 @@ async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium
       if (typeof fwd.relayChreactToArcTarget === 'function') {
         const relayedId = await fwd.relayChreactToArcTarget(sock, from, parsed);
         if (relayedId) {
-          processedChreactIds.add(`msg:${relayedId}`);
+          processedChreactIds.add(`msg:${relayedId}:${parsed.jid || parsed.code}:${parsed.serverId}`);
         }
       }
     } catch {}
@@ -1127,8 +1224,8 @@ async function voteCommand(sock, from, msg, args, isOwner, isAdmin, optionNum = 
       if (typeof fwd.relayChvoteToArcTarget === 'function') {
         const relayedId = await fwd.relayChvoteToArcTarget(sock, from, parsed, parsed.customOptionText || relayOptStr);
         if (relayedId) {
-          processedChreactIds.add(`vote_msg:${relayedId}`);
-          processedChreactIds.add(`msg:${relayedId}`);
+          processedChreactIds.add(`vote_msg:${relayedId}:${parsed.jid || parsed.code}:${parsed.serverId}`);
+          processedChreactIds.add(`msg:${relayedId}:${parsed.jid || parsed.code}:${parsed.serverId}`);
         }
       }
     } catch {}
@@ -1203,8 +1300,8 @@ async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin, isPremium 
       if (typeof fwd.relayChvoteToArcTarget === 'function') {
         const relayedId = await fwd.relayChvoteToArcTarget(sock, from, parsed, optIndexOrName);
         if (relayedId) {
-          processedChreactIds.add(`vote_msg:${relayedId}`);
-          processedChreactIds.add(`msg:${relayedId}`);
+          processedChreactIds.add(`vote_msg:${relayedId}:${parsed.jid || parsed.code}:${parsed.serverId}`);
+          processedChreactIds.add(`msg:${relayedId}:${parsed.jid || parsed.code}:${parsed.serverId}`);
         }
       }
     } catch {}

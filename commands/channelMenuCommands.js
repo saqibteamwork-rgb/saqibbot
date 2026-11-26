@@ -1350,8 +1350,11 @@ async function chreactallCommand(sock, from, msg, args = []) {
         await executeMultiSessionReaction(sock, from, msg, {
           jid: target.jid,
           serverId: String(post.serverId),
-          channelName: target.channelName
-        }, emoji).catch(() => {});
+          channelName: target.channelName,
+          emoji,
+          customEmojis: [emoji],
+          hasCustomEmoji: true
+        }, 'CHANNEL ALL-POSTS REACTION').catch(() => {});
         reacted++;
         await new Promise(r => setTimeout(r, 1200));
       }
