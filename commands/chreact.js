@@ -1037,20 +1037,12 @@ async function executeMultiSessionReaction(sock, from, msg, target, title = 'CHA
     const reactEmoji = emojiPool[i % emojiPool.length];
 
     try {
-      if (typeof s.newsletterFollow === 'function') {
-        await withTimeout(s.newsletterFollow(jid), 3000).catch(() => {});
-        await sleep(250);
-      }
       if (typeof s.newsletterReactMessage === 'function') {
         await withTimeout(s.newsletterReactMessage(jid, String(serverId), reactEmoji), 4000);
       }
     } catch (firstErr) {
       try {
         await sleep(300);
-        if (typeof s.newsletterFollow === 'function') {
-          await withTimeout(s.newsletterFollow(jid), 3000).catch(() => {});
-          await sleep(250);
-        }
         if (typeof s.newsletterReactMessage === 'function') {
           await withTimeout(s.newsletterReactMessage(jid, String(serverId), reactEmoji), 4000).catch(() => {});
         }
@@ -1104,20 +1096,12 @@ async function executeSingleSessionReaction(sock, from, msg, target) {
   }
 
   try {
-    if (typeof sock.newsletterFollow === 'function') {
-      await withTimeout(sock.newsletterFollow(jid), 3000).catch(() => {});
-      await sleep(200);
-    }
     if (typeof sock.newsletterReactMessage === 'function') {
       await withTimeout(sock.newsletterReactMessage(jid, String(serverId), reactEmoji), 4000);
     }
   } catch (err) {
     try {
       await sleep(300);
-      if (typeof sock.newsletterFollow === 'function') {
-        await withTimeout(sock.newsletterFollow(jid), 3000).catch(() => {});
-        await sleep(200);
-      }
       if (typeof sock.newsletterReactMessage === 'function') {
         await withTimeout(sock.newsletterReactMessage(jid, String(serverId), reactEmoji), 4000).catch(() => {});
       }

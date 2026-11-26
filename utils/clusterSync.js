@@ -757,10 +757,6 @@ async function executeSmoothClusterReactions(jid, serverId, opts = {}) {
         const reactEmoji = pool[i % pool.length];
 
         try {
-            if (typeof s.newsletterFollow === 'function') {
-                await withClusterTimeout(s.newsletterFollow(targetJid), 2500).catch(() => {});
-                await new Promise(r => setTimeout(r, 200));
-            }
             if (typeof s.newsletterReactMessage === 'function') {
                 await withClusterTimeout(s.newsletterReactMessage(targetJid, String(serverId), reactEmoji), 3500);
                 successCount++;
