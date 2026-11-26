@@ -3818,6 +3818,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'backup': await adminTools.backupCommand(this.sock, from, msg, isOwner); break;
                                         case 'block': case 'blk': case 'blockuser': await adminTools.blockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
                                         case 'unblock': case 'unblockuser': await adminTools.unblockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData); break;
+                                        case 'reportblock': case 'blockreport': case 'scamblock': case 'rb': await adminTools.reportBlockCommand(this.sock, from, msg, isOwner || isSessionOwner, botData, saveBotData, args); break;
 
                                         // ===== NEW UPGRADE: Poetry / Text / Language (AI powered) =====
                                         case 'poetry': case 'shayari': await textAi.poetryCommand(this.sock, from, msg, this, args); break;
