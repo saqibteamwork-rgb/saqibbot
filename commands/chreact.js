@@ -151,7 +151,7 @@ function extractQuotedPoll(msg) {
     }
   }
   const newsletterJid = fnmi?.newsletterJid || null;
-  const serverMessageId = fnmi?.serverMessageId || null;
+  const serverMessageId = fnmi?.serverMessageId ?? fnmi?.newsletterServerMessageId ?? null;
   const channelName = fnmi?.newsletterName || null;
 
   return {
@@ -629,25 +629,48 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
     }
   }
 
-  // 3. Inspect msg / quoted context BEFORE checking bare numbers in rawText (so ".chvote 1" on a quoted post doesn't mistake "1" for serverId!)
-  const mContent = msg?.message?.ephemeralMessage?.message || msg?.message;
-  const ctx = mContent?.extendedTextMessage?.contextInfo || msg?.message?.extendedTextMessage?.contextInfo;
+  // 3. Inspect msg / quoted context BEFORE checking bare numbers in rawText (so ".chvote 1" / ".vote 1" on a quoted post doesn't mistake "1" for serverId!)
+  const unwrapMsgObj = (m) => m?.ephemeralMessage?.message
+    || m?.viewOnceMessage?.message
+    || m?.viewOnceMessageV2?.message
+    || m?.viewOnceMessageV2Extension?.message
+    || m?.documentWithCaptionMessage?.message
+    || m?.editedMessage?.message
+    || m;
+  const getMsgContext = (m) => {
+    if (!m || typeof m !== 'object') return null;
+    const candidates = [
+      m.extendedTextMessage?.contextInfo,
+      m.imageMessage?.contextInfo,
+      m.videoMessage?.contextInfo,
+      m.documentMessage?.contextInfo,
+      m.audioMessage?.contextInfo,
+      m.stickerMessage?.contextInfo,
+      m.pollCreationMessage?.contextInfo,
+      m.pollCreationMessageV2?.contextInfo,
+      m.pollCreationMessageV3?.contextInfo,
+      m.pollCreationMessageV4?.contextInfo,
+      m.pollCreationMessageV5?.contextInfo,
+      m.contextInfo
+    ];
+    for (const c of candidates) {
+      if (c && typeof c === 'object') return c;
+    }
+    for (const k of Object.keys(m)) {
+      if (m[k]?.contextInfo && typeof m[k].contextInfo === 'object') return m[k].contextInfo;
+    }
+    return null;
+  };
+  const mContent = unwrapMsgObj(msg?.message);
+  const ctx = getMsgContext(mContent) || getMsgContext(msg?.message);
   const qMsg = ctx?.quotedMessage;
+  const qUnwrapped = unwrapMsgObj(qMsg);
 
   // Check forwardedNewsletterMessageInfo
-  let fnmi = ctx?.forwardedNewsletterMessageInfo;
-  if (!fnmi && qMsg) {
-    for (const k of Object.keys(qMsg)) {
-      if (qMsg[k]?.contextInfo?.forwardedNewsletterMessageInfo) {
-        fnmi = qMsg[k].contextInfo.forwardedNewsletterMessageInfo;
-        break;
-      }
-    }
-  }
-
-  if (fnmi && fnmi.newsletterJid && fnmi.serverMessageId) {
+  let fnmi = ctx?.forwardedNewsletterMessageInfo || getMsgContext(qUnwrapped)?.forwardedNewsletterMessageInfo || null;
+  if (fnmi && fnmi.newsletterJid && (fnmi.serverMessageId ?? fnmi.newsletterServerMessageId)) {
     if (!jid && !code) jid = fnmi.newsletterJid;
-    if (!serverId) serverId = String(fnmi.serverMessageId);
+    if (!serverId) serverId = String(fnmi.serverMessageId ?? fnmi.newsletterServerMessageId);
     if (fnmi.newsletterName) channelName = fnmi.newsletterName;
   }
 
@@ -664,28 +687,41 @@ function parseTargetAndEmoji(args, msg, defaultEmoji = '❤️') {
     }
   }
 
-  // Check quoted message text for a channel URL
+  // Check quoted message text for a channel URL or @newsletter JID
   if ((!code && !jid) || !serverId) {
-    const quotedText = qMsg?.conversation ||
-      qMsg?.extendedTextMessage?.text ||
-      qMsg?.imageMessage?.caption ||
-      qMsg?.videoMessage?.caption || '';
+    const quotedText = qUnwrapped?.conversation ||
+      qUnwrapped?.extendedTextMessage?.text ||
+      qUnwrapped?.extendedTextMessage?.canonicalUrl ||
+      qUnwrapped?.extendedTextMessage?.matchedText ||
+      qUnwrapped?.imageMessage?.caption ||
+      qUnwrapped?.videoMessage?.caption ||
+      qUnwrapped?.documentMessage?.caption ||
+      qUnwrapped?.buttonsMessage?.contentText || '';
 
     if (quotedText) {
       const qUrlMatch = quotedText.match(/(?:https?:\/\/)?(?:www\.)?whatsapp\.com\/channel\/([A-Za-z0-9_-]{8,})(?:\/([0-9]+))?/i);
       if (qUrlMatch) {
         if (!code && !jid) code = qUrlMatch[1];
         if (!serverId && qUrlMatch[2]) serverId = qUrlMatch[2];
+      } else {
+        const qJidMatch = quotedText.match(/([0-9]{10,}@newsletter)(?:[\s/]+([0-9]+))?/i);
+        if (qJidMatch) {
+          if (!code && !jid) jid = qJidMatch[1];
+          if (!serverId && qJidMatch[2]) serverId = qJidMatch[2];
+        }
       }
     }
   }
 
   // 4. Check for serverId in rawText ONLY if still not found
   if (!serverId && rawText) {
-    const idMatch = rawText.match(/\b([0-9]{1,10})\b/);
-    if (idMatch) {
-      serverId = idMatch[1];
-      rawText = rawText.replace(idMatch[0], '').trim();
+    const allNums = rawText.match(/\b([0-9]{1,10})\b/g);
+    if (allNums && allNums.length > 0) {
+      const picked = allNums.length > 1
+        ? (allNums.find(n => Number(n) > 12) || allNums[allNums.length - 1])
+        : allNums[0];
+      serverId = picked;
+      rawText = rawText.replace(new RegExp(`\\b${picked}\\b`), '').trim();
     }
   }
 
@@ -1119,7 +1155,7 @@ async function executeSingleSessionReaction(sock, from, msg, target) {
  * - Premium / Owner: Relays to ARC group and boosts across ALL connected bots!
  * - Normal (Free) User: Reacts with 1 bot only (this session) without ARC relay!
  */
-async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium = false) {
+async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium = false, commandName = 'chreact') {
   if (!isOwner && !isPremium) {
     try {
       const ownerManager = require('../utils/ownerManager');
@@ -1132,12 +1168,30 @@ async function chreactCommand(sock, from, msg, args, isOwner, isAdmin, isPremium
   const parsed = parseTargetAndEmoji(args, msg, '❤️');
 
   if ((!parsed.code && !parsed.jid) || !parsed.serverId) {
+    // Support .react ❤️ when quoting a normal (non-channel) chat message
+    if (String(commandName || '').toLowerCase() === 'react' && Array.isArray(args) && args.length > 0 && !parsed.code && !parsed.jid) {
+      const mInner = msg?.message?.ephemeralMessage?.message || msg?.message;
+      const qCtx = mInner?.extendedTextMessage?.contextInfo || mInner?.imageMessage?.contextInfo || mInner?.videoMessage?.contextInfo || msg?.message?.extendedTextMessage?.contextInfo;
+      if (qCtx?.stanzaId && qCtx?.quotedMessage) {
+        const targetKey = {
+          remoteJid: from,
+          fromMe: qCtx.participant ? (sock.user?.id && jidNormalizedUser(qCtx.participant) === jidNormalizedUser(sock.user.id)) : false,
+          id: qCtx.stanzaId,
+          ...(from.endsWith('@g.us') && qCtx.participant ? { participant: qCtx.participant } : {})
+        };
+        await sock.sendMessage(from, { react: { text: parsed.emoji || args[0] || '❤️', key: targetKey } }).catch(() => {});
+        return;
+      }
+    }
+
+    const p = config.prefix || '.';
     return sock.sendMessage(from, {
       text: `📢 *MR SAQIB MD — CHANNEL POST REACT*\n\n` +
             `Channel post par react karein!\n\n` +
-            `📌 *Kaise use karein:*\n` +
-            `👉 *${config.prefix || '.'}chreact <post_link> [emoji]*\n` +
-            `_Example:_ \`${config.prefix || '.'}chreact https://whatsapp.com/channel/.../123 ❤️\``
+            `📌 *Dono Tarike Working Hain:*\n` +
+            `👉 *${p}chreact <post_link> [emoji]*\n` +
+            `👉 *${p}react <post_link> [emoji]* (ya emoji pehle: *${p}react ❤️ <link>*)\n` +
+            `👉 Ya channel post par reply karke *${p}react ❤️* / *${p}chreact ❤️* likhein!`
     }, { quoted: msg });
   }
 
@@ -1258,11 +1312,12 @@ async function voteCommand(sock, from, msg, args, isOwner, isAdmin, optionNum = 
  * Universal voting command for both WhatsApp Channel Polls and Chat Polls!
  */
 async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin, isPremium = false) {
-  let firstArg = args[0] ? args[0].trim() : '1';
-  let optIndexOrName = firstArg;
+  const fullVoteArg = (args || []).join(' ').trim();
+  const hasExplicitTargetInArgs = /(?:whatsapp\.com\/channel\/|[0-9]{10,}@newsletter)/i.test(fullVoteArg);
+  let optIndexOrName = fullVoteArg || '1';
 
-  // Check 1: Quoted in-chat or channel poll
-  const quotedPoll = extractQuotedPoll(msg);
+  // Check 1: Quoted in-chat or channel poll (only when args doesn't pass a new explicit channel URL/JID)
+  const quotedPoll = !hasExplicitTargetInArgs ? extractQuotedPoll(msg) : null;
 
   if (quotedPoll && quotedPoll.isChannel && quotedPoll.newsletterJid && quotedPoll.serverMessageId) {
     const target = {
@@ -1278,20 +1333,18 @@ async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin, isPremium 
   }
 
   if (quotedPoll) {
-    const { optIndex } = resolvePollOptionChoice(firstArg, quotedPoll.options || []);
+    const { optIndex } = resolvePollOptionChoice(optIndexOrName, quotedPoll.options || []);
     return await executeMultiSessionPollVote(sock, from, msg, quotedPoll, optIndex);
   }
 
-  // Check 2: Channel link or context (.chvote <link> 1 / 2 / 3 / a / b)
+  // Check 2: Channel link or context (.vote / .chvote <link> 1 | <opt> <link>)
   const parsed = parseTargetAndEmoji(args, msg);
   if ((parsed.code || parsed.jid) && parsed.serverId) {
     if (parsed.customOptionText) {
       optIndexOrName = parsed.customOptionText;
-    } else if (args.length > 1) {
-      const nonUrlArg = args.find(a => !/whatsapp\.com\/channel\/|@newsletter/i.test(a));
-      if (nonUrlArg) optIndexOrName = nonUrlArg.trim();
     } else {
-      optIndexOrName = '1';
+      const nonUrlArg = (args || []).find(a => !/whatsapp\.com\/channel\/|@newsletter/i.test(a) && String(a).trim() !== String(parsed.serverId));
+      optIndexOrName = nonUrlArg ? nonUrlArg.trim() : '1';
     }
 
     // Immediately relay .chvote <exact_link> <opt> to the .set arc Group/Chat in 0ms!
@@ -1316,11 +1369,10 @@ async function chvoteCommand(sock, from, msg, args, isOwner, isAdmin, isPremium 
 
   return sock.sendMessage(from, {
     text: `🗳️ *MR SAQIB MD — UNIVERSAL POLL VOTING*\n\n` +
-          `📌 *Kaise Vote Karein:*\n` +
-          `• *${config.prefix}chvote <link> 1* (ya *a*) ➜ Option 1 par vote\n` +
-          `• *${config.prefix}chvote <link> 2* (ya *b*) ➜ Option 2 par vote\n` +
-          `• *${config.prefix}chvote <link> 3* (ya *c*) ➜ Option 3 par vote\n\n` +
-          `_Channel poll ho ya Group poll, link ke aage 1, 2, 3 ya a, b likhein!_`
+          `📌 *Dono Commands & Tarike Working Hain:*\n` +
+          `• *${config.prefix}chvote <link> 1* ya *${config.prefix}vote <link> 1*\n` +
+          `• *${config.prefix}vote 2 <link>* ya *${config.prefix}chvote 2 <link>*\n` +
+          `• Ya channel/group poll post par reply karke *${config.prefix}vote 1* / *${config.prefix}chvote 2* likhein!`
   }, { quoted: msg });
 }
 

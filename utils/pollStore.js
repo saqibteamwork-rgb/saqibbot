@@ -206,9 +206,10 @@ function savePollMessage(msg) {
 
     pollMap.set(msgId, record);
     if (serverId) {
-        pollMap.set(String(serverId), record);
         if (record.remoteJid) {
             pollMap.set(`${record.remoteJid}/${serverId}`, record);
+        } else {
+            pollMap.set(String(serverId), record);
         }
     }
     persistPolls();
@@ -227,9 +228,10 @@ function registerPoll(id, data) {
         options: data.options || [],
         timestamp: Date.now()
     };
-    pollMap.set(String(id), record);
     if (record.remoteJid && record.serverId) {
         pollMap.set(`${record.remoteJid}/${record.serverId}`, record);
+    } else {
+        pollMap.set(String(id), record);
     }
     persistPolls();
     return record;
@@ -243,7 +245,10 @@ function getPoll(pollId, jid = null) {
         record = pollMap.get(`${jid}/${pollId}`);
     }
     if (!record) {
-        record = pollMap.get(String(pollId));
+        const fallback = pollMap.get(String(pollId));
+        if (fallback && (!jid || !fallback.remoteJid || fallback.remoteJid === jid)) {
+            record = fallback;
+        }
     }
     if (!record) return null;
 

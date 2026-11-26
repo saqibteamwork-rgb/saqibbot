@@ -71,10 +71,10 @@ const COMMAND_GUIDES = {
   },
   chreact: {
     name: 'chreact',
-    aliases: ['channelreact'],
+    aliases: ['react', 'reactch', 'channelreact'],
     category: 'CHANNEL',
     permission: 'Everyone 🌐',
-    usage: '.chreact <channel_post_link> [emoji]',
+    usage: '.chreact / .react <channel_post_link> [emoji]',
     desc: 'Kisi bhi WhatsApp channel post par tamam connected bot accounts se live emoji react karein.',
     params: [
       '<channel_post_link>: Post ka link (whatsapp.com/channel/xxx/post_id)',
@@ -82,7 +82,7 @@ const COMMAND_GUIDES = {
     ],
     examples: [
       '.chreact https://whatsapp.com/channel/0029Va.../123 🔥',
-      '.chreact https://whatsapp.com/channel/0029Va.../123 😂'
+      '.react 🔥 https://whatsapp.com/channel/0029Va.../123'
     ]
   },
   chreactall: {

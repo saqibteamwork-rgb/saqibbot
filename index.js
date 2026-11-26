@@ -2617,8 +2617,8 @@ class BotSession {
                             'del', 'delete', 'd', 'admincheck', 'admininform', 'botadmin'
                         ]);
                         const PRIVILEGED_CHECK_CMDS = new Set([
-                            'ownadd', 'owndel', 'addpm', 'delpm', 'cforward', 'cfch', 'chreact', 'chreactall',
-                            'chfollow', 'chunfollow', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
+                            'ownadd', 'owndel', 'addpm', 'delpm', 'cforward', 'cfch', 'react', 'chreact', 'chreactall',
+                            'chfollow', 'chunfollow', 'vote', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
                             'arcdel', 'arcstop', 'arcstart', 'arcresume', 'arcprem', 'arclock', 'arcunlock',
                             'arcblock', 'arcunblock', 'arcremoveall', 'setarc', 'delsetarc', 'unsetarc', 'achr',
                             'afc', 'delafc', 'saqibreact', 'saqreact', 'prem1', 'prem2', 'prem3', 'prs1', 'prs2', 'prs3',
@@ -2923,7 +2923,7 @@ class BotSession {
                                     sticker: '🎨', s: '🎨', take: '🎨', stake: '🎨', rename: '🎨', toimg: '🎨', s2img: '🎨', rmbg: '🎨', emojimix: '🎨', enhance: '🎨', hd: '🎨',
                                     ai: '🤖', gpt: '🤖', gpt5: '🤖', chatgpt: '🤖', gemini: '🤖', deepseek: '🤖', famai: '🤖', imagine: '🤖', flux: '🤖',
                                     love: '💖', loven: '💖', lovequote: '💖', lq: '💖', iloveyou: '💖', ily: '💖', flirt: '💖', hug: '💖', crush: '💖', ship: '🦋',
-                                    chreact: '📢', chfollow: '📢', chunfollow: '📢', cforward: '📢', cfch: '📢', arc: '📢', channels: '📢', channelid: '📢', chvote: '🗳️', vote1: '🗳️', vote2: '🗳️',
+                                    react: '📢', chreact: '📢', chfollow: '📢', chunfollow: '📢', cforward: '📢', cfch: '📢', arc: '📢', channels: '📢', channelid: '📢', vote: '🗳️', chvote: '🗳️', vote1: '🗳️', vote2: '🗳️',
                                     saqibreact: '✨', saqreact: '✨', saqibsend: '✨', saqsend: '✨', sendlottie: '✨', saqibdirect: '✨', sts: '✨', stssend: '✨', rs: '✨', rs10: '✨',
                                     kick: '🛡️', add: '🛡️', promote: '🛡️', demote: '🛡️', mute: '🛡️', unmute: '🛡️', antilink: '🛡️', antispam: '🛡️', lock: '🔒', unlock: '🔓', tagall: '📣', hidetag: '📣', warn: '⚠️',
                                     quran: '🕌', hadith: '🕌', prayertime: '🕌', praytime: '🕌', dua: '🕌',
@@ -3027,9 +3027,9 @@ class BotSession {
 ┃ .channels -a -s — Sabhi sessions ke channels & followers overview
 ┃ .chfollow <link> — Sab sessions se channel follow/boost karo
 ┃ .chunfollow <link> — Sab sessions se channel unfollow karo
-┃ .chreact <link> [emoji] — Sab sessions se post pe react karo
+┃ .react / .chreact <link> [emoji] — Sab servers se post pe react karo
 ┃ .vote1 / .vote2 <link> — Channel competition voting boost
-┃ .chvote <link> <opt> — Channel poll/contest voting boost
+┃ .vote / .chvote <link> <opt> — Channel poll/contest voting boost
 ┃ .cforward — Reply post apne sabhi channels mein post karo
 ┃ .cforward -a -s — Sab sessions ke channels mein post karo
 ┃ .channelid <link> — Channel JID aur info nikaalo
@@ -3489,8 +3489,8 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'chalert': case 'chforward':
                                             await channelPostForwarder.chalertCommand(this.sock, from, msg, isOwner, args);
                                             break;
-                                        case 'chreact': case 'chreaction': case 'channelreact':
-                                            await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium);
+                                        case 'react': case 'chreact': case 'chreaction': case 'channelreact':
+                                            await chreactCommand(this.sock, from, msg, args, isOwner, isAdmin, isPremium, commandName);
                                             break;
                                         case 'chautoreact': case 'autoreactch': case 'chreactauto': case 'afreact':
                                             await chautoreactCommand(this.sock, from, msg, args, isOwner, isMasterOwner, isSessionOwner, sessions);
