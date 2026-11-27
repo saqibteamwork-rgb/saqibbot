@@ -3228,9 +3228,19 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             }
                                             break;
                                         }
-                                        case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto':
-                                            await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
+                                        case 'autoreact': case 'autoreacts': case 'autoreaction': case 'reactauto': {
+                                            const joinedAutoReactArgs = (args || []).join(' ');
+                                            const hasChannelArg = /(?:whatsapp\.com\/channel\/|[0-9]{10,}@newsletter)/i.test(joinedAutoReactArgs);
+                                            const quotedFnmi = msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.extendedTextMessage?.contextInfo?.forwardedNewsletterMessageInfo ||
+                                                msg?.message?.extendedTextMessage?.contextInfo?.forwardedNewsletterMessageInfo;
+                                            const firstArgLow = String(args?.[0] || '').toLowerCase().trim();
+                                            if (hasChannelArg || (quotedFnmi?.newsletterJid && !['on', 'off', 'status'].includes(firstArgLow))) {
+                                                await channelMenuCmds.arcCommand(this.sock, from, msg, isOwner || isPremium, args, groupMetadata);
+                                            } else {
+                                                await commands.autoreacts(this.sock, from, msg, isAdmin, this, args, botData, saveBotData);
+                                            }
                                             break;
+                                        }
                                         case 'kick': case 'kickuser': case 'kickmember': await commands.kick(this.sock, from, msg, isAdmin); break;
                                         // ══════════════════════════════════════════════════════════════
                                         // MODE SWITCHER COMMANDS (.mode / .mod / .worktype / .private / .public)

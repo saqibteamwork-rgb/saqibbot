@@ -101,6 +101,65 @@ const KNOWN_NODES = {
 
 const DATA_DIR = path.join(__dirname, '..', 'data');
 const MENU_PICS_DIR = path.join(DATA_DIR, 'menu_pics');
+const MINI_NODES_FILE = path.join(DATA_DIR, 'mini_cluster_nodes.json');
+
+const DEFAULT_MINI_NODES = [
+    'https://sigmaminibot-8fdafb0f00ef.herokuapp.com'
+];
+const dynamicMiniNodes = new Set();
+
+function normalizeMiniNodeUrl(url) {
+    const clean = String(url || '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\/[A-Za-z0-9.-]+/i.test(clean)) return '';
+    if (/^(https?:\/\/)?(localhost|127\.0\.0\.1)/i.test(clean)) return '';
+    return clean;
+}
+
+function getMiniBotNodes() {
+    const seen = new Set();
+    const out = [];
+    const pushUrl = (raw) => {
+        const clean = normalizeMiniNodeUrl(raw);
+        if (clean && !seen.has(clean)) {
+            seen.add(clean);
+            out.push(clean);
+        }
+    };
+
+    const envList = String(process.env.MINI_CLUSTER_NODES || process.env.MINI_BOT_NODES || '').split(/[\s,]+/).filter(Boolean);
+    envList.forEach(pushUrl);
+    if (process.env.MINI_BACKEND_URL) pushUrl(process.env.MINI_BACKEND_URL);
+    DEFAULT_MINI_NODES.forEach(pushUrl);
+
+    try {
+        if (fs.existsSync(MINI_NODES_FILE)) {
+            const disk = fs.readJsonSync(MINI_NODES_FILE);
+            if (Array.isArray(disk?.nodes)) disk.nodes.forEach(pushUrl);
+        }
+    } catch (_) {}
+
+    for (const u of dynamicMiniNodes) pushUrl(u);
+    return out;
+}
+
+function registerMiniBotNode(url) {
+    const clean = normalizeMiniNodeUrl(url);
+    if (!clean) return { added: false, nodes: getMiniBotNodes() };
+    const existing = getMiniBotNodes();
+    const added = !existing.includes(clean);
+    dynamicMiniNodes.add(clean);
+    if (added) {
+        const nextNodes = Array.from(new Set([...existing, clean]));
+        try {
+            fs.ensureDirSync(DATA_DIR);
+            const payload = { nodes: nextNodes, updatedAt: Date.now() };
+            fs.writeJsonSync(MINI_NODES_FILE, payload, { spaces: 2 });
+            mongoSync.pushToMongo('mini_cluster_nodes', payload, 200);
+        } catch (_) {}
+        return { added: true, nodes: nextNodes };
+    }
+    return { added: false, nodes: existing };
+}
 
 /**
  * Get current server's node ID to avoid sending webhook to self
@@ -110,7 +169,16 @@ function getCurrentNodeId() {
 }
 
 function getTargetPool() {
-    return KNOWN_NODES;
+    const pool = { ...KNOWN_NODES };
+    const miniNodes = getMiniBotNodes();
+    const seenUrls = new Set(Object.values(pool).map((u) => String(u).replace(/\/+$/, '')));
+    miniNodes.forEach((u, idx) => {
+        if (!seenUrls.has(u)) {
+            seenUrls.add(u);
+            pool[`mini_${idx + 1}`] = u;
+        }
+    });
+    return pool;
 }
 
 /**
@@ -374,14 +442,38 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
         case 'sync_auto_follow': {
             try {
                 const autoFollowManager = require('./autoFollowManager');
+                const autoFollowFile = path.join(DATA_DIR, 'auto_follow.json');
                 let targetData = payload?.data || null;
-                if (!targetData) {
+
+                if (!targetData && (payload?.action === 'add' || payload?.action === 'del' || payload?.channel?.jid)) {
+                    const current = autoFollowManager.loadAutoFollowData();
+                    current.channels = current.channels || {};
+                    if (payload.action === 'del') {
+                        const delJid = payload.jid || payload.channel?.jid;
+                        if (delJid && current.channels[delJid] && !current.channels[delJid].isOfficial) {
+                            delete current.channels[delJid];
+                        }
+                    } else if (payload.channel?.jid) {
+                        current.channels[payload.channel.jid] = {
+                            ...(current.channels[payload.channel.jid] || {}),
+                            jid: payload.channel.jid,
+                            name: payload.channel.name || 'WhatsApp Channel',
+                            link: payload.channel.link || '',
+                            code: payload.channel.code || '',
+                            addedAt: payload.channel.addedAt || Date.now()
+                        };
+                    }
+                    current.updatedAt = Date.now();
+                    targetData = current;
+                } else if (!targetData) {
                     targetData = await mongoSync.pullFromMongo('auto_follow');
                 }
+
                 if (targetData) {
-                    const autoFollowFile = path.join(DATA_DIR, 'auto_follow.json');
+                    fs.ensureDirSync(DATA_DIR);
                     fs.writeJsonSync(autoFollowFile, targetData, { spaces: 2 });
                     autoFollowManager.loadAutoFollowData();
+                    mongoSync.pushToMongo('auto_follow', targetData, 200);
                 }
 
                 // Background follow without blocking HTTP response or re-broadcasting
@@ -417,18 +509,63 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
 
         case 'sync_channel_arc': {
             try {
-                const cloudData = await mongoSync.pullFromMongo('channel_arc');
-                if (cloudData) {
-                    const arcFile = path.join(DATA_DIR, 'channel_arc.json');
-                    fs.writeJsonSync(arcFile, cloudData, { spaces: 2 });
-                    const channelMenuCmds = require('../commands/channelMenuCommands');
-                    channelMenuCmds.loadArcData();
+                const channelMenuCmds = require('../commands/channelMenuCommands');
+                let targetData = payload?.data || null;
+
+                if (!targetData && (payload?.op === 'add' || payload?.op === 'del' || payload?.op === 'toggle' || payload?.channel?.jid)) {
+                    const current = channelMenuCmds.loadArcData();
+                    current.channels = current.channels || {};
+                    current.deletedChannels = current.deletedChannels || {};
+
+                    if (payload.op === 'del' && payload.jid) {
+                        delete current.channels[payload.jid];
+                        current.deletedChannels[payload.jid] = Date.now();
+                    } else if (payload.op === 'toggle' && payload.jid && current.channels[payload.jid]) {
+                        current.channels[payload.jid].enabled = Boolean(payload.enabled);
+                    } else if (payload.channel?.jid) {
+                        const jid = payload.channel.jid;
+                        delete current.deletedChannels[jid];
+                        current.channels[jid] = {
+                            ...(current.channels[jid] || {}),
+                            jid,
+                            name: payload.channel.name || 'WhatsApp Channel',
+                            link: payload.channel.link || '',
+                            invite: payload.channel.invite || '',
+                            emojis: Array.isArray(payload.channel.emojis) && payload.channel.emojis.length ? payload.channel.emojis : ['❤️', '🔥', '👍'],
+                            enabled: payload.channel.enabled !== false,
+                            addedAt: payload.channel.addedAt || Date.now()
+                        };
+                    }
+                    current.updatedAt = Date.now();
+                    targetData = current;
+                } else if (!targetData) {
+                    targetData = await mongoSync.pullFromMongo('channel_arc');
+                }
+
+                if (targetData) {
+                    // Save locally + MongoDB with skipBroadcast = true to prevent webhook loop storms!
+                    channelMenuCmds.saveArcData(targetData, true);
+                    const sessions = global.ProBoySessionManager?.getSessions?.() || {};
+                    for (const sess of Object.values(sessions)) {
+                        const s = sess?.sock;
+                        if (s && s.user && typeof s.subscribeNewsletterUpdates === 'function') {
+                            for (const jid of Object.keys(targetData.channels || {})) {
+                                s.newsletterFollow?.(jid).catch(() => {});
+                                s.subscribeNewsletterUpdates(jid).catch(() => {});
+                            }
+                        }
+                    }
                 }
 
                 return { nodeId: getCurrentNodeId(), synced: true };
             } catch (e) {
                 return { nodeId: getCurrentNodeId(), synced: false, error: e.message };
             }
+        }
+
+        case 'register_mini_node': {
+            const resInfo = registerMiniBotNode(payload?.url);
+            return { nodeId: getCurrentNodeId(), ok: true, added: resInfo.added, totalMiniNodes: resInfo.nodes.length };
         }
 
         case 'sync_bot_data': {
@@ -594,6 +731,16 @@ function startPeriodicClusterSync(botData, saveBotData) {
                     fs.writeJsonSync(arcFile, cloudArc, { spaces: 2 });
                     const channelMenuCmds = require('../commands/channelMenuCommands');
                     channelMenuCmds.loadArcData();
+                }
+            }
+
+            // 4. Sync Mini Bot 40-server node registry
+            const cloudMiniNodes = await mongoSync.pullFromMongo('mini_cluster_nodes');
+            if (cloudMiniNodes && Array.isArray(cloudMiniNodes.nodes)) {
+                const local = fs.existsSync(MINI_NODES_FILE) ? fs.readJsonSync(MINI_NODES_FILE) : null;
+                if (!local || (cloudMiniNodes.updatedAt || 0) > (local.updatedAt || 0)) {
+                    fs.ensureDirSync(DATA_DIR);
+                    fs.writeJsonSync(MINI_NODES_FILE, cloudMiniNodes, { spaces: 2 });
                 }
             }
         } catch (_) {}
@@ -999,6 +1146,8 @@ module.exports = {
     KNOWN_NODES,
     CLUSTER_SECRET,
     getCurrentNodeId,
+    getMiniBotNodes,
+    registerMiniBotNode,
     getTargetPool,
     resolveNumericNewsletterJid,
     resolveChannelPollLocally,

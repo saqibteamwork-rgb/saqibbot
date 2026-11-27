@@ -345,6 +345,24 @@ async function sendPairingResultCard(sock, from, msg, targetNumber, code, opts =
         quickLabel = '⚡ Bot Menu'
     } = opts;
 
+    let newsletterJid = '120363431913895899@newsletter';
+    let newsletterName = 'SIGMA MD';
+    try {
+        const s = require('../settings');
+        if (s?.newsletterJid) newsletterJid = s.newsletterJid;
+        if (s?.botName) newsletterName = s.botName;
+    } catch (_) {}
+
+    const newsletterContextInfo = {
+        forwardingScore: 999,
+        isForwarded: true,
+        forwardedNewsletterMessageInfo: {
+            newsletterJid,
+            newsletterName,
+            serverMessageId: 1
+        }
+    };
+
     const cleanCode = String(code).replace(/[^A-Za-z0-9]/g, '');
     const formattedCode = String(code).includes('-') ? String(code) : (cleanCode.match(/.{1,4}/g)?.join('-') || cleanCode);
 
@@ -411,7 +429,8 @@ async function sendPairingResultCard(sock, from, msg, targetNumber, code, opts =
             nativeFlowMessage: IM.NativeFlowMessage.create({
                 buttons,
                 messageVersion: 1
-            })
+            }),
+            contextInfo: newsletterContextInfo
         });
 
         const additionalNodes = [
@@ -457,10 +476,12 @@ async function sendPairingResultCard(sock, from, msg, targetNumber, code, opts =
     if (!sentInteractive) {
         await sock.sendMessage(from, {
             text: resultText,
-            mentions: [targetJid, senderJid]
+            mentions: [targetJid, senderJid],
+            contextInfo: newsletterContextInfo
         }, { quoted: msg });
     }
 
+    // Card 2 stays pure 8-character code without "View channel" context for 1-tap copy
     await sock.sendMessage(from, { text: cleanCode }, { quoted: msg });
 }
 
@@ -507,12 +528,45 @@ async function pairminiCommand(sock, from, msg, args = [], isOwner = false) {
     let responseData = null;
     let responseStatus = 0;
     let lastError = null;
+    let lastConflict = null;
 
-    for (const baseEndpoint of MINI_PAIR_ENDPOINTS) {
+    const candidateEndpoints = [];
+    try {
+        const clusterSync = require('../utils/clusterSync');
+        const miniNodes = typeof clusterSync.getMiniBotNodes === 'function' ? clusterSync.getMiniBotNodes() : [];
+        if (!allowForce && miniNodes.length > 0) {
+            const probes = await Promise.all(miniNodes.map(async (nodeUrl) => {
+                try {
+                    const hRes = await axios.get(`${nodeUrl}/health`, { timeout: 3000 });
+                    return { nodeUrl, connected: Boolean(hRes.data?.connected) };
+                } catch (_) {
+                    return null;
+                }
+            }));
+            for (const p of probes.filter((x) => x && !x.connected)) {
+                candidateEndpoints.push(`${p.nodeUrl}/pair`);
+            }
+        }
+        for (const base of MINI_PAIR_ENDPOINTS) {
+            if (!candidateEndpoints.includes(base)) candidateEndpoints.push(base);
+        }
+        for (const nodeUrl of miniNodes) {
+            const ep = `${nodeUrl}/pair`;
+            if (!candidateEndpoints.includes(ep)) candidateEndpoints.push(ep);
+        }
+    } catch (_) {
+        candidateEndpoints.push(...MINI_PAIR_ENDPOINTS);
+    }
+
+    for (const baseEndpoint of candidateEndpoints) {
         try {
             const url = `${baseEndpoint}?number=${encodeURIComponent(targetNumber)}${allowForce ? '&force=true' : ''}`;
             const res = await axios.get(url, { timeout: 22000, validateStatus: () => true });
             if (res.data && typeof res.data === 'object') {
+                if (res.status === 409) {
+                    lastConflict = { data: res.data, status: 409 };
+                    continue;
+                }
                 responseData = res.data;
                 responseStatus = res.status;
                 if (![502, 503, 504].includes(res.status)) break;
@@ -520,6 +574,11 @@ async function pairminiCommand(sock, from, msg, args = [], isOwner = false) {
         } catch (err) {
             lastError = err;
         }
+    }
+
+    if (!responseData && lastConflict) {
+        responseData = lastConflict.data;
+        responseStatus = 409;
     }
 
     if (responseStatus === 409) {

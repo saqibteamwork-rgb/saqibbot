@@ -124,11 +124,12 @@ function loadArcData() {
   return cachedArcData;
 }
 
-function saveArcData(data) {
+function saveArcData(data, skipBroadcast = false) {
   if (!data || typeof data !== 'object') return;
   if (!data.channels) data.channels = {};
   if (!data.blocked) data.blocked = {};
   if (!data.deletedChannels) data.deletedChannels = {};
+  data.updatedAt = Date.now();
 
   // Memory Leak Prevention: prune deletedChannels older than 7 days
   const now = Date.now();
@@ -153,8 +154,10 @@ function saveArcData(data) {
   try {
     const mongoSync = require('../utils/mongoSync');
     mongoSync.pushToMongo('channel_arc', data);
-    const clusterSync = require('../utils/clusterSync');
-    clusterSync.broadcastToCluster('sync_channel_arc', {}).catch(() => {});
+    if (!skipBroadcast) {
+      const clusterSync = require('../utils/clusterSync');
+      clusterSync.broadcastToCluster('sync_channel_arc', { data }).catch(() => {});
+    }
   } catch (_) {}
 }
 
