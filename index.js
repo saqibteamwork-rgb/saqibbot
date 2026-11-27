@@ -2362,7 +2362,7 @@ class BotSession {
                                         if (serverId) {
                                             if (!conf.lastPostId || Number(serverId) > Number(conf.lastPostId)) {
                                                 conf.lastPostId = String(serverId);
-                                                channelMenuCmds.saveArcData(arcData);
+                                                channelMenuCmds.saveArcData(arcData, true);
                                             }
                                             // Send ".chreact <post_link>" to target group/chat AND execute our bot's ARC multi-session auto-reaction
                                             channelPostForwarder.handleNewsletterPost(this.sock, msg, conf).catch(err => {

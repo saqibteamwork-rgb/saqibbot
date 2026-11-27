@@ -466,7 +466,7 @@ function ensureArcKeepAlive(primarySock) {
       }
 
       if (dirty) {
-        saveArcData(data);
+        saveArcData(data, true);
       }
     } catch {}
   }, 25 * 60 * 1000);

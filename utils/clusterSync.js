@@ -250,7 +250,7 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
 
     switch (action) {
         case 'chfollow': {
-            const { jid } = payload || {};
+            const jid = await resolveNumericNewsletterJid(payload?.jid, payload?.code || payload?.input);
             if (!jid) throw new Error('Missing channel JID');
 
             let activeSocks = [];
@@ -318,7 +318,7 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
         }
 
         case 'chunfollow': {
-            const { jid } = payload || {};
+            const jid = await resolveNumericNewsletterJid(payload?.jid, payload?.code || payload?.input);
             if (!jid) throw new Error('Missing channel JID');
 
             let activeSocks = [];
@@ -754,14 +754,17 @@ async function resolveNumericNewsletterJid(jid, code = null) {
     if (jid && /^\d+@newsletter$/.test(String(jid).trim())) {
         return String(jid).trim();
     }
-    const inviteCode = String(code || (jid && String(jid).endsWith('@newsletter') ? String(jid).split('@')[0] : '')).trim();
+    let inviteCode = String(code || (jid && String(jid).endsWith('@newsletter') ? String(jid).split('@')[0] : '')).trim();
+    const urlMatch = inviteCode.match(/whatsapp\.com\/channel\/([A-Za-z0-9_-]{8,})/i);
+    if (urlMatch) inviteCode = urlMatch[1];
     if (!inviteCode) return null;
 
     try {
         const resolver = require('./channelResolver');
         if (resolver?.resolvedCache) {
             const hit = resolver.resolvedCache.get(inviteCode) || resolver.resolvedCache.get(inviteCode.toLowerCase());
-            if (hit?.jid && /^\d+@newsletter$/.test(hit.jid)) return hit.jid;
+            const hitJid = typeof hit === 'string' ? hit : hit?.jid;
+            if (hitJid && /^\d+@newsletter$/.test(hitJid)) return hitJid;
         }
     } catch (_) {}
 
