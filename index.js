@@ -2629,7 +2629,7 @@ class BotSession {
                         ]);
                         const PRIVILEGED_CHECK_CMDS = new Set([
                             'ownadd', 'owndel', 'ownlist', 'ownerlist', 'ownerslist', 'addpm', 'delpm', 'pmlist', 'premiumlist', 'pmusers',
-                            'cforward', 'cfch', 'react', 'chreact', 'creact', 'reactch', 'rch', 'chreactall',
+                            'cforward', 'cf', 'cfrored', 'cforwared', 'chfwd', 'cfch', 'react', 'chreact', 'creact', 'reactch', 'rch', 'chreactall',
                             'chfollow', 'chf', 'followch', 'chunfollow', 'chunf', 'unfollowch',
                             'vote', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
                             'arcdel', 'arcstop', 'arcstart', 'arcresume', 'arcprem', 'arclock', 'arcunlock',
@@ -3462,7 +3462,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'channels': case 'mychannels': case 'chlist':
                                             await channelsCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
-                                        case 'cforward': case 'cforwared': case 'chforward': case 'chforwared': case 'cforwrd': case 'cfall': case 'cforwardall':
+                                        case 'cforward': case 'cf': case 'cfrored': case 'cforwared': case 'chforward': case 'chforwared': case 'cforwrd': case 'chfwd': case 'cfall': case 'cforwardall':
                                             await cforwardCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
                                         case 'cfch': case 'cpost': case 'chpost': case 'postch': case 'forwardch': case 'fwdch':

@@ -33,7 +33,7 @@ const fmtMin = (ms) => { const m = Math.round(ms / 60000); return m < 1 ? '<1 mi
 
 module.exports = {
   name: 'cforward',
-  aliases: ['chforward', 'cforwared', 'chforwared', 'cforwrd', 'chfwd', 'cfall', 'cforwardall'],
+  aliases: ['chforward', 'cforwared', 'chforwared', 'cforwrd', 'cfrored', 'cf', 'chfwd', 'cfall', 'cforwardall'],
   category: 'dev',
   description: 'Forward a replied post (or direct text / channel link) to channels this session owns/admins or specific target channels',
   usage: `${config.prefix}cforward [<channel link | JID>] [-a -s] [--force] [--sync] [--plain] [--fwd]   (reply to a post or provide text)`,
@@ -440,7 +440,7 @@ module.exports = {
 
         const ago = listInfo?.syncedAt ? Math.max(0, Math.round((Date.now() - listInfo.syncedAt) / 60000)) : null;
         const src2 = !listInfo?.source ? 'verified with WhatsApp' : listInfo.source === 'live' ? 'live WhatsApp scan' : listInfo.source === 'saved' ? `saved list (${ago}m ago)` : `database fallback (${ago}m ago)`;
-        await reply(`📢 Session +${listInfo?.account || hub.accountOf(sock)} is owner/admin of ${dests.length} channel(s) (${src2}).\nPosting to all of them${force ? ' (--force)' : ''}...`);
+        await reply(`📢 Aap *${dests.length}* WhatsApp channel(s) mein Admin/Owner hain (+${listInfo?.account || hub.accountOf(sock)} · ${src2}) — sab par post ho rahi hai${force ? ' (--force)' : ''}...`);
       }
 
       console.log(`[CFORWARD] session=${hub.accountOf(sock)} type=${post.type} size=${post.size || 0} media=${tmpFile?.path ? 'yes' : 'no'} dests=${dests.length} fwd=${fwd ? (fwd.jid ? 'channel' : 'generic') : 'no'}`);
