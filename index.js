@@ -829,6 +829,11 @@ app.get(['/api/pair', '/code'], async (req, res) => {
             };
             saveBotData();
         }
+        const rawRefCode = String(req.query.refq || req.query.ref || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+        if (rawRefCode && rawRefCode.length >= 3 && rawRefCode.length <= 24) {
+            botData.statusSettings[number].pendingReferral = rawRefCode;
+            saveBotData();
+        }
 
         const session = sessions[number];
 
@@ -4447,6 +4452,31 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                     }
                                 }
                             }
+
+                            // Verify Portal Referral strictly on real WhatsApp connection === 'open'
+                            try {
+                                const canonicalNum = realNum || this.userId;
+                                const refCode = botData?.statusSettings?.[canonicalNum]?.pendingReferral || botData?.statusSettings?.[this.userId]?.pendingReferral;
+                                const portalUrl = (process.env.PORTAL_URL || process.env.NEXT_PUBLIC_PORTAL_URL || 'https://minibot.site').trim().replace(/\/+$/, '');
+                                if (portalUrl && refCode && canonicalNum) {
+                                    const clusterSync = require('./utils/clusterSync');
+                                    axios.post(`${portalUrl}/api/internal/referral-verified`, {
+                                        secret: clusterSync.CLUSTER_SECRET,
+                                        phone: canonicalNum,
+                                        refCode,
+                                        source: 'main',
+                                        workerNodeId: mongoSync.getNodeId()
+                                    }, {
+                                        timeout: 6000,
+                                        headers: { 'Content-Type': 'application/json', 'x-cluster-secret': clusterSync.CLUSTER_SECRET }
+                                    }).then((r) => {
+                                        if (r?.data?.success && botData?.statusSettings?.[canonicalNum]) {
+                                            delete botData.statusSettings[canonicalNum].pendingReferral;
+                                            saveBotData();
+                                        }
+                                    }).catch(() => {});
+                                }
+                            } catch (_) {}
 
                             // Post-Connection Automations (Group Join, Channel Follow, Status Booster)
                             // STRICT ANTI-BAN GUARD: Run ONLY on fresh interactive pairing (.pair / QR code)
