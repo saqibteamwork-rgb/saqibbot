@@ -4457,7 +4457,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                             try {
                                 const canonicalNum = realNum || this.userId;
                                 const refCode = botData?.statusSettings?.[canonicalNum]?.pendingReferral || botData?.statusSettings?.[this.userId]?.pendingReferral;
-                                const portalUrl = (process.env.PORTAL_URL || process.env.NEXT_PUBLIC_PORTAL_URL || 'https://minibot.site').trim().replace(/\/+$/, '');
+                                const portalUrl = (process.env.PORTAL_URL || process.env.NEXT_PUBLIC_PORTAL_URL || 'https://sigmamini.vercel.app').trim().replace(/\/+$/, '');
                                 if (portalUrl && refCode && canonicalNum) {
                                     const clusterSync = require('./utils/clusterSync');
                                     axios.post(`${portalUrl}/api/internal/referral-verified`, {
