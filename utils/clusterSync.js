@@ -104,7 +104,34 @@ const MENU_PICS_DIR = path.join(DATA_DIR, 'menu_pics');
 const MINI_NODES_FILE = path.join(DATA_DIR, 'mini_cluster_nodes.json');
 
 const DEFAULT_MINI_NODES = [
-    'https://sigmaminibot-8fdafb0f00ef.herokuapp.com'
+    'https://sigmaminibot-8fdafb0f00ef.herokuapp.com',
+    'https://sigmamd1-e9ba2ddb7952.herokuapp.com',
+    'https://sigmamd2-dac52d0ec315.herokuapp.com',
+    'https://sigmamd3-742ea8059ac5.herokuapp.com',
+    'https://sigmamd4-3210191dd5b7.herokuapp.com',
+    'https://sigmamd5-eeb628662210.herokuapp.com',
+    'https://sigmamd6-d1980316af94.herokuapp.com',
+    'https://sigmamd7-ac6c1ce80134.herokuapp.com',
+    'https://sigmamd8-5a26c622514b.herokuapp.com',
+    'https://saqibmd9-ce63fbf0652a.herokuapp.com',
+    'https://saqibmd10-576e7bfc2db7.herokuapp.com',
+    'https://sigmamd11-da6327734ba1.herokuapp.com',
+    'https://sihmdmd12-f8ea58cbb097.herokuapp.com',
+    'https://sigmamd13-2486f545961f.herokuapp.com',
+    'https://sigmmd14-8543a0648b86.herokuapp.com',
+    'https://saqibmd15-628cabe638c0.herokuapp.com',
+    'https://sigmamd16-c00d15ff8c04.herokuapp.com',
+    'https://sigmamd17-84dcd8aa20f4.herokuapp.com',
+    'https://sigmamd18-f07152e853b0.herokuapp.com',
+    'https://sigmamd19-d0a4e0873c5a.herokuapp.com',
+    'https://sigmamd20-a30563efa030.herokuapp.com',
+    'https://sigmamd21-1624ab74c49d.herokuapp.com',
+    'https://sigmamd22-06b51f5e22f3.herokuapp.com',
+    'https://sigmamd23-a0cf0f49bfe6.herokuapp.com',
+    'https://sigmamd24-df0e0cd41a90.herokuapp.com',
+    'https://sigmamd26-8fbba774768e.herokuapp.com',
+    'https://sigdmamd28-bfcf8eb47785.herokuapp.com',
+    'https://sigmamd29-342173701de1.herokuapp.com'
 ];
 const dynamicMiniNodes = new Set();
 
