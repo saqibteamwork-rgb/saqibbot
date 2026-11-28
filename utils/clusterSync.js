@@ -170,8 +170,19 @@ function getCurrentNodeId() {
 
 function getTargetPool() {
     const pool = { ...KNOWN_NODES };
-    const miniNodes = getMiniBotNodes();
     const seenUrls = new Set(Object.values(pool).map((u) => String(u).replace(/\/+$/, '')));
+
+    const envMain = String(process.env.MAIN_CLUSTER_NODES || process.env.CLUSTER_NODES || '').split(/[\s,]+/).filter(Boolean);
+    envMain.forEach((rawUrl, idx) => {
+        const clean = normalizeMiniNodeUrl(rawUrl);
+        if (clean && !seenUrls.has(clean)) {
+            seenUrls.add(clean);
+            const slug = clean.replace(/^https?:\/\//i, '').split('/')[0].split('.')[0].replace(/[^a-z0-9_-]/gi, '').toLowerCase() || `main_${idx + 1}`;
+            pool[slug] = clean;
+        }
+    });
+
+    const miniNodes = getMiniBotNodes();
     miniNodes.forEach((u, idx) => {
         if (!seenUrls.has(u)) {
             seenUrls.add(u);
@@ -182,7 +193,7 @@ function getTargetPool() {
 }
 
 /**
- * Broadcast an action payload to all other cluster nodes in parallel
+ * Broadcast an action payload to all other cluster nodes in clean concurrency batches (scales to 120–200+ servers)
  */
 async function broadcastToCluster(action, payload = {}) {
     if (action === 'chreact' || action === 'chvote') {
@@ -197,43 +208,49 @@ async function broadcastToCluster(action, payload = {}) {
     }
 
     const currentNode = getCurrentNodeId();
-    const promises = [];
     const targetPool = getTargetPool();
+    const targets = Object.entries(targetPool).filter(([nodeId]) => nodeId !== currentNode);
+    const timeoutMs = (action === 'chfollow' || action === 'chunfollow' || action === 'chreact' || action === 'chvote') ? 45000 : 8000;
+    const BATCH_SIZE = 25;
+    const flatResults = [];
 
-    for (const [nodeId, baseUrl] of Object.entries(targetPool)) {
-        if (nodeId === currentNode) continue; // Skip self
-
-        promises.push(
-            axios.post(
-                `${baseUrl}/api/cluster-action`,
-                {
-                    action,
-                    fromNode: currentNode,
-                    secret: CLUSTER_SECRET,
-                    payload,
-                    timestamp: Date.now()
-                },
-                {
-                    timeout: (action === 'chfollow' || action === 'chunfollow' || action === 'chreact' || action === 'chvote') ? 45000 : 8000,
-                    headers: {
-                        'x-cluster-secret': CLUSTER_SECRET,
-                        'Content-Type': 'application/json'
+    for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+        const batch = targets.slice(i, i + BATCH_SIZE);
+        const batchRes = await Promise.allSettled(
+            batch.map(([nodeId, baseUrl]) =>
+                axios.post(
+                    `${baseUrl}/api/cluster-action`,
+                    {
+                        action,
+                        fromNode: currentNode,
+                        secret: CLUSTER_SECRET,
+                        payload,
+                        timestamp: Date.now()
+                    },
+                    {
+                        timeout: timeoutMs,
+                        headers: {
+                            'x-cluster-secret': CLUSTER_SECRET,
+                            'Content-Type': 'application/json'
+                        }
                     }
-                }
-            ).then(res => ({
-                nodeId,
-                ok: true,
-                data: res.data
-            })).catch(err => ({
-                nodeId,
-                ok: false,
-                error: err.response?.data?.error || err.message
-            }))
+                ).then(res => ({
+                    nodeId,
+                    ok: true,
+                    data: res.data
+                })).catch(err => ({
+                    nodeId,
+                    ok: false,
+                    error: err.response?.data?.error || err.message
+                }))
+            )
         );
+        for (const r of batchRes) {
+            flatResults.push(r.value || { ok: false, error: 'Unknown' });
+        }
     }
 
-    const results = await Promise.allSettled(promises);
-    return results.map(r => r.value || { ok: false, error: 'Unknown' });
+    return flatResults;
 }
 
 /**

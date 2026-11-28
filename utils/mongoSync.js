@@ -133,7 +133,8 @@ async function initMongo() {
             connectTimeoutMS: 10000,
             maxIdleTimeMS: 30000,
             socketTimeoutMS: 45000,
-            maxPoolSize: 20
+            maxPoolSize: Math.max(2, parseInt(process.env.MONGO_MAX_POOL || '3', 10) || 3),
+            minPoolSize: 0
         });
 
         await client.connect();
@@ -430,38 +431,69 @@ function getStatus() {
     };
 }
 
+function deriveHostNodeSlug(rawHostOrUrl) {
+    const s = String(rawHostOrUrl || '').trim().toLowerCase();
+    if (!s || s.includes('localhost') || s.includes('127.0.0.1')) return '';
+    return s
+        .replace(/^https?:\/\//i, '')
+        .split('/')[0]
+        .split(':')[0]
+        .split('.')[0]
+        .replace(/[^a-z0-9_-]/g, '')
+        .slice(0, 48);
+}
+
+function matchesKnownNode(hostOrUrl, key, url) {
+    const clean = String(hostOrUrl || '').toLowerCase().trim();
+    const domain = url.replace('https://', '').replace('http://', '').toLowerCase();
+    if (clean === key || clean.includes(domain)) return true;
+    // Exact boundary token check so 's1' never collides with 's10' or 'sigmamad-s120'
+    return new RegExp(`(^|[^a-z0-9])${key}([^a-z0-9]|$)`).test(clean);
+}
+
 /**
  * Update current server host / cluster node ID from incoming requests
  */
 function setDetectedHost(host) {
     if (!host || typeof host !== 'string') return;
+    if (process.env.SERVER_ID || process.env.NODE_ID) return currentServerNodeId;
     const cleanHost = host.toLowerCase();
+    let matchedKey = null;
+
     for (const [key, url] of Object.entries(KNOWN_NODES)) {
-        const domain = url.replace('https://', '').replace('http://', '').toLowerCase();
-        if (cleanHost.includes(domain) || cleanHost.includes(key)) {
-            if (currentServerNodeId !== key) {
-                const wasUnknown = !currentServerNodeId || currentServerNodeId === 'default';
-                currentServerNodeId = key;
-                console.log(`🎯 [Cluster Node] Host detected: "${host}" ➜ Identified as Node "${key}"`);
-                if (wasUnknown && global.ProBoySessionManager) {
-                    const sessCount = Object.keys(global.ProBoySessionManager.getSessions?.() || {}).length;
-                    if (sessCount === 0 && typeof restoreAllSessionsFromMongo === 'function') {
-                        restoreAllSessionsFromMongo(path.join(__dirname, '..', 'auth_info'))
-                            .then(() => global.ProBoySessionManager?.loadExistingSessions?.())
-                            .catch(() => {});
-                    }
+        if (matchesKnownNode(cleanHost, key, url)) {
+            matchedKey = key;
+            break;
+        }
+    }
+
+    if (!matchedKey) {
+        matchedKey = deriveHostNodeSlug(cleanHost);
+    }
+
+    if (matchedKey) {
+        if (currentServerNodeId !== matchedKey) {
+            const wasUnknown = !currentServerNodeId || currentServerNodeId === 'default';
+            currentServerNodeId = matchedKey;
+            console.log(`🎯 [Cluster Node] Host detected: "${host}" ➜ Identified as Node "${matchedKey}"`);
+            if (wasUnknown && global.ProBoySessionManager) {
+                const sessCount = Object.keys(global.ProBoySessionManager.getSessions?.() || {}).length;
+                if (sessCount === 0 && typeof restoreAllSessionsFromMongo === 'function') {
+                    restoreAllSessionsFromMongo(path.join(__dirname, '..', 'auth_info'))
+                        .then(() => global.ProBoySessionManager?.loadExistingSessions?.())
+                        .catch(() => {});
                 }
             }
-            return key;
         }
+        return matchedKey;
     }
 }
 
 /**
- * Auto-detect node identity in the 7-node cluster
+ * Auto-detect node identity in the multi-node cluster
  */
 async function determineServerNodeId(bootToken) {
-    if (currentServerNodeId) return currentServerNodeId;
+    if (currentServerNodeId && currentServerNodeId !== 'default') return currentServerNodeId;
 
     if (process.env.SERVER_ID) {
         currentServerNodeId = process.env.SERVER_ID.trim().toLowerCase();
@@ -478,11 +510,10 @@ async function determineServerNodeId(bootToken) {
         return currentServerNodeId;
     }
 
-    // APP_URL / HEROKU_APP_NAME detection
+    // APP_URL / HEROKU_APP_NAME detection against KNOWN_NODES first
     const appUrl = (process.env.APP_URL || process.env.HEROKU_APP_NAME || '').toLowerCase();
     for (const [key, url] of Object.entries(KNOWN_NODES)) {
-        const domain = url.replace('https://', '').replace('http://', '').toLowerCase();
-        if (appUrl.includes(domain) || appUrl.includes(key)) {
+        if (matchesKnownNode(appUrl, key, url)) {
             currentServerNodeId = key;
             return currentServerNodeId;
         }
@@ -507,6 +538,13 @@ async function determineServerNodeId(bootToken) {
                 return currentServerNodeId;
             }
         } catch (_) {}
+    }
+
+    // For new scale dynos (#51..#200+) not listed in KNOWN_NODES, use unique HEROKU_APP_NAME / APP_URL slug instead of 'default'
+    const dynamicSlug = deriveHostNodeSlug(process.env.HEROKU_APP_NAME || process.env.APP_URL || '');
+    if (dynamicSlug) {
+        currentServerNodeId = dynamicSlug;
+        return currentServerNodeId;
     }
 
     currentServerNodeId = currentServerNodeId || 'default';
