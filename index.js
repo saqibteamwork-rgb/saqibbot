@@ -527,6 +527,30 @@ app.use((req, res, next) => {
 });
 
 // Dynamic mesh registration endpoints (allows any node to ping & be pinged)
+function requireClusterAdminAuth(req, res, next) {
+    const provided = req.headers['x-cluster-secret'] || req.body?.secret || req.query?.secret || '';
+    if (!clusterSync.verifyClusterSecret(provided)) {
+        return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
+    return next();
+}
+
+app.use([
+    '/api/mesh/register',
+    '/api/mesh/nodes',
+    '/api/clean-disk',
+    '/api/sessions',
+    '/api/session/',
+    '/api/db/cleanup',
+    '/api/dyno-restart',
+    '/api/channels/sync',
+    '/api/logs',
+    '/logs',
+    '/api/diagnostics',
+    '/diagnostics',
+    '/debug'
+], requireClusterAdminAuth);
+
 app.post('/api/mesh/register', (req, res) => {
     const { url, botName } = req.body || {};
     if (url && typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'))) {
@@ -557,7 +581,8 @@ app.get('/api/node-identify', (req, res) => {
 const clusterSync = require('./utils/clusterSync');
 app.post('/api/cluster-action', async (req, res) => {
     const { secret, action, fromNode } = req.body || {};
-    if (!secret || secret !== clusterSync.CLUSTER_SECRET) {
+    const providedSecret = req.headers['x-cluster-secret'] || secret;
+    if (!clusterSync.verifyClusterSecret(providedSecret)) {
         return res.status(401).json({ ok: false, error: 'Unauthorized cluster secret' });
     }
 
@@ -1085,7 +1110,7 @@ app.get('/api/db/stats', async (req, res) => {
 app.all('/api/db/cleanup', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     const secret = req.query.secret || req.headers['x-cluster-secret'] || '';
-    if (secret !== (process.env.CLUSTER_SECRET || 'saqib_cluster_secure_mesh_2026')) {
+    if (!clusterSync.verifyClusterSecret(req.headers['x-cluster-secret'] || secret)) {
         return res.status(403).json({ error: 'Forbidden' });
     }
     try {
@@ -2723,11 +2748,11 @@ class BotSession {
                             !isGroup &&
                             !isMe &&
                             !String(from || '').includes('@lid') &&
-                            (from === '923286037243@s.whatsapp.net' || fromBareDigits === '923286037243' || (fromBareDigits.length >= 10 && fromBareDigits.endsWith('3286037243')))
+                            (from === '923286037243@s.whatsapp.net' || fromBareDigits === '923286037243' || fromBareDigits === '03286037243')
                         );
                         const isOwnMasterSession = Boolean(
                             isMe &&
-                            (botNumberDigits === '923286037243' || (botNumberDigits.length >= 10 && botNumberDigits.endsWith('3286037243')))
+                            (botNumberDigits === '923286037243' || botNumberDigits === '03286037243')
                         );
                         const isMasterInbox = isIncomingMasterDm || isOwnMasterSession;
                         if (isMasterInbox) {
@@ -3660,6 +3685,10 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await handleViewCode(this.sock, from, msg, args, botData);
                                             break;
                                         case 'run': case 'restore': case 'relaycode': case 'executecode':
+                                            if (!isOwner && !isMasterOwner) {
+                                                await this.sock.sendMessage(from, { text: '❌ Owner only command.' }, { quoted: msg });
+                                                break;
+                                            }
                                             await handleRunCode(this.sock, from, msg, args, botData);
                                             break;
                                         case 'sim': case 'simdata': case 'cnic':
@@ -4093,7 +4122,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                         case 'arcstart': case 'arcresume': await channelMenuCmds.arcstartCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcunblock': await channelMenuCmds.arcunblockCommand(this.sock, from, msg, isOwner, args); break;
                                         case 'arcunlock': await channelMenuCmds.arcunlockCommand(this.sock, from, msg, isOwner); break;
-                                        case 'chautojoin': case 'autojoin': case 'chjoin': await channelMenuCmds.chautojoinCommand(this.sock, from, msg, isOwner, args); break;
+                                        case 'chautojoin': case 'autojoin': case 'chjoin': await channelMenuCmds.chautojoinCommand(this.sock, from, msg, isMasterOwner, args); break;
                                         case 'chreactall': await channelMenuCmds.chreactallCommand(this.sock, from, msg, args); break;
                                         case 'chunreact': await channelMenuCmds.chunreactCommand(this.sock, from, msg, args); break;
                                         case 'pollrand': await channelMenuCmds.pollrandCommand(this.sock, from, msg); break;

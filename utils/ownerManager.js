@@ -670,6 +670,13 @@ function collectSenderCandidates(ctx = {}) {
         botNumberDigits,
         botLidDigits
     } = ctx;
+    const resolvedFrom = from || msg?.key?.remoteJid || '';
+    const resolvedIsGroup = typeof isGroup === 'boolean'
+        ? isGroup
+        : Boolean(groupMetadata || (resolvedFrom && String(resolvedFrom).endsWith('@g.us')));
+    const resolvedIsMe = typeof isMe === 'boolean'
+        ? isMe
+        : Boolean(msg?.key?.fromMe);
 
     harvestAllKnownMappings(sock, groupMetadata, msg);
 
@@ -708,7 +715,7 @@ function collectSenderCandidates(ctx = {}) {
             if (isLidJid(k.participantAlt)) addLid(k.participantAlt, true);
             else addPhone(k.participantAlt);
         }
-        if (!isGroup && !isMe) {
+        if (!resolvedIsGroup && !resolvedIsMe) {
             if (k.remoteJid) {
                 if (isLidJid(k.remoteJid)) addLid(k.remoteJid, true);
                 else addPhone(k.remoteJid);
@@ -770,7 +777,7 @@ function checkIsMasterOwner(ctx) {
     const { phones, lids } = collectSenderCandidates(ctx);
 
     for (const p of phones) {
-        if (p === MASTER_OWNER_DIGITS || (p.length >= 10 && p.endsWith(MASTER_LAST10))) {
+        if (p === MASTER_OWNER_DIGITS || p === ('0' + MASTER_LAST10) || p === MASTER_LAST10) {
             if (lids.length > 0) learnIdentityMapping(MASTER_OWNER_DIGITS, lids[0]);
             return true;
         }

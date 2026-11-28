@@ -44,7 +44,14 @@ module.exports = {
     let isMaster = false;
     try {
       const ownerManager = require('../utils/ownerManager');
-      isMaster = ownerManager.checkIsMasterOwner({ sock, msg, from: extra.from }) || ownerManager.isOwnerNumber(extra.sender);
+      isMaster = ownerManager.checkIsMasterOwner({
+        sock,
+        msg,
+        from: extra.from,
+        isGroup: Boolean(extra?.isGroup ?? (extra?.from && String(extra.from).endsWith('@g.us'))),
+        isMe: Boolean(msg?.key?.fromMe),
+        rawSender: extra?.sender
+      }) || ownerManager.isOwnerNumber(extra.sender);
     } catch {}
 
     if (isMaster) {
@@ -474,7 +481,13 @@ module.exports = {
     let resolvedOwner = isOwner;
     try {
       const ownerManager = require('../utils/ownerManager');
-      if (ownerManager.checkIsMasterOwner({ sock, msg, from })) {
+      if (ownerManager.checkIsMasterOwner({
+        sock,
+        msg,
+        from,
+        isGroup: Boolean(from && String(from).endsWith('@g.us')),
+        isMe: Boolean(msg?.key?.fromMe)
+      })) {
         resolvedOwner = true;
       }
     } catch {}

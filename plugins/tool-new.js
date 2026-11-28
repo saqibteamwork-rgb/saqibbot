@@ -476,7 +476,46 @@ async (conn, mek, m, { args, reply }) => {
         // Evaluate the mathematical expression
         let result;
         try {
-            result = eval(expression);
+            result = ((expr) => {
+                const tokens = expr.match(/\d+(?:\.\d+)?|[+\-*/()]/g) || [];
+                if (tokens.join('') !== expr.replace(/\s+/g, '')) throw new Error('Invalid tokens');
+                let idx = 0;
+                const parseExpr = () => {
+                    let val = parseTerm();
+                    while (tokens[idx] === '+' || tokens[idx] === '-') {
+                        const op = tokens[idx++];
+                        const rhs = parseTerm();
+                        val = op === '+' ? val + rhs : val - rhs;
+                    }
+                    return val;
+                };
+                const parseTerm = () => {
+                    let val = parseFactor();
+                    while (tokens[idx] === '*' || tokens[idx] === '/') {
+                        const op = tokens[idx++];
+                        const rhs = parseFactor();
+                        if (op === '/' && rhs === 0) throw new Error('Division by zero');
+                        val = op === '*' ? val * rhs : val / rhs;
+                    }
+                    return val;
+                };
+                const parseFactor = () => {
+                    if (tokens[idx] === '+') { idx++; return parseFactor(); }
+                    if (tokens[idx] === '-') { idx++; return -parseFactor(); }
+                    if (tokens[idx] === '(') {
+                        idx++;
+                        const inner = parseExpr();
+                        if (tokens[idx++] !== ')') throw new Error('Unbalanced parentheses');
+                        return inner;
+                    }
+                    const num = Number(tokens[idx++]);
+                    if (!Number.isFinite(num)) throw new Error('Invalid number');
+                    return num;
+                };
+                const out = parseExpr();
+                if (idx !== tokens.length) throw new Error('Unexpected token');
+                return out;
+            })(expression);
         } catch (e) {
             return reply("❎ Error in calculation. Please check your expression.");
         }

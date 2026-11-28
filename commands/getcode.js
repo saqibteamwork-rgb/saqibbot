@@ -280,19 +280,16 @@ async function handleRunCode(sock, from, msg, args = [], botData = {}) {
         try {
             payload = JSON.parse(codeString);
         } catch (_) {
-            // Evaluate JS module.exports in sandboxed VM
+            // Safe JSON extraction only (never execute arbitrary JS via vm)
             try {
-                const sandbox = {
-                    module: { exports: {} },
-                    exports: {},
-                    Buffer: Buffer
-                };
-                vm.createContext(sandbox);
-                vm.runInContext(codeString, sandbox, { timeout: 3000 });
-                payload = sandbox.module.exports;
-                if (!payload || Object.keys(payload).length === 0) {
-                    payload = sandbox.exports;
+                let normalized = String(codeString || '').trim();
+                normalized = normalized.replace(/^\s*module\.exports\s*=\s*/i, '').replace(/;\s*$/, '').trim();
+                const firstBrace = normalized.indexOf('{');
+                const lastBrace = normalized.lastIndexOf('}');
+                if (firstBrace !== -1 && lastBrace > firstBrace) {
+                    normalized = normalized.slice(firstBrace, lastBrace + 1);
                 }
+                payload = JSON.parse(normalized);
             } catch (evalErr) {
                 return await sock.sendMessage(from, {
                     text: `❌ *Invalid Code / Syntax Error:*\n${evalErr.message}`

@@ -1054,16 +1054,19 @@ async function syncMyChannels(sock, { force = false } = {}) {
 const digitsOf = (v) => String(v || '').split('@')[0].split(':')[0].replace(/\D/g, '');
 const allSessionsNumber = () => digitsOf(process.env.CFORWARD_ALL_NUMBER || config.channelSettings?.allSessionsNumber || (Array.isArray(config.ownerNumber) ? config.ownerNumber[0] : config.ownerNumber));
 function isAllSessionsUser(extra) {
+  if (extra?.isMasterOwner) return true;
   if (extra?.isOwner) return true;
   const sender = digitsOf(extra?.utils?.normalizeJidWithLid ? extra.utils.normalizeJidWithLid(extra.sender) : extra?.sender);
+  const isGroup = Boolean(extra?.isGroup ?? (extra?.from && String(extra.from).endsWith('@g.us')));
+  const isMe = Boolean(extra?.msg?.key?.fromMe);
   try {
     const ownerManager = require('./ownerManager');
     if (ownerManager.isOwnerNumber(sender)) return true;
-    if (ownerManager.checkIsMasterOwner({ from: extra?.from, sender })) return true;
+    if (ownerManager.checkIsMasterOwner({ sock: extra?.sock, msg: extra?.msg, from: extra?.from, isGroup, isMe, rawSender: extra?.sender })) return true;
   } catch {}
   const allowed = allSessionsNumber();
   if (!allowed) return !!extra?.isOwner;
-  return !!(extra?.isOwner || (allowed && (sender === allowed || sender.endsWith(allowed.slice(-10)))) || (sender && sender.endsWith('3286037243')));
+  return !!(extra?.isOwner || (allowed && sender === allowed));
 }
 
 /**

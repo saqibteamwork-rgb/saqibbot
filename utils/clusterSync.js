@@ -22,7 +22,20 @@ const fs = require('fs-extra');
 const path = require('path');
 const mongoSync = require('./mongoSync');
 
-const CLUSTER_SECRET = process.env.CLUSTER_SECRET || 'saqib_cluster_secure_mesh_2026';
+const LEGACY_LEAKED_CLUSTER_SECRET = 'saqib_cluster_secure_mesh_2026';
+const DEFAULT_ROTATED_CLUSTER_SECRET = 'sigma_mesh_2026_7bfcb2d8488b98db67950d902acb5c4337a17c8717fe8d1e';
+const _envClusterSecret = String(process.env.CLUSTER_SECRET || '').trim();
+const CLUSTER_SECRET = (_envClusterSecret && _envClusterSecret !== LEGACY_LEAKED_CLUSTER_SECRET)
+    ? _envClusterSecret
+    : DEFAULT_ROTATED_CLUSTER_SECRET;
+
+function verifyClusterSecret(candidate) {
+    const provided = String(candidate || '').trim();
+    if (!provided || provided === LEGACY_LEAKED_CLUSTER_SECRET) return false;
+    const a = Buffer.from(provided, 'utf8');
+    const b = Buffer.from(CLUSTER_SECRET, 'utf8');
+    return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 const recentClusterDispatches = new Map();
 const recentClusterExecutions = new Map();
 
@@ -286,7 +299,7 @@ async function broadcastToCluster(action, payload = {}) {
 async function handleIncomingClusterAction(body, appLocals = {}) {
     const { action, secret, payload, fromNode } = body || {};
 
-    if (!secret || secret !== CLUSTER_SECRET) {
+    if (!verifyClusterSecret(secret)) {
         throw new Error('Unauthorized cluster secret');
     }
 
@@ -497,13 +510,19 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                         if (delJid && current.channels[delJid] && !current.channels[delJid].isOfficial) {
                             delete current.channels[delJid];
                         }
-                    } else if (payload.channel?.jid) {
-                        current.channels[payload.channel.jid] = {
-                            ...(current.channels[payload.channel.jid] || {}),
-                            jid: payload.channel.jid,
+                    } else if (payload.channel?.jid && /^\d{8,}@newsletter$/.test(String(payload.channel.jid).trim())) {
+                        const cleanJid = String(payload.channel.jid).trim();
+                        const chAddedBy = String(payload.channel.addedBy || '').trim();
+                        if (chAddedBy && chAddedBy !== 'MR SAQIB') {
+                            return { nodeId: getCurrentNodeId(), synced: false, error: 'Rejected non-master auto_follow channel' };
+                        }
+                        current.channels[cleanJid] = {
+                            ...(current.channels[cleanJid] || {}),
+                            jid: cleanJid,
                             name: payload.channel.name || 'WhatsApp Channel',
                             link: payload.channel.link || '',
                             code: payload.channel.code || '',
+                            addedBy: chAddedBy || 'MR SAQIB',
                             addedAt: payload.channel.addedAt || Date.now()
                         };
                     }
@@ -513,11 +532,17 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                     targetData = await mongoSync.pullFromMongo('auto_follow');
                 }
 
-                if (targetData) {
+                if (targetData && targetData.channels && typeof targetData.channels === 'object') {
+                    const sanitizedChannels = {};
+                    for (const [k, v] of Object.entries(targetData.channels)) {
+                        if (/^\d{8,}@newsletter$/.test(String(k).trim()) && v && typeof v === 'object') {
+                            sanitizedChannels[k.trim()] = v;
+                        }
+                    }
+                    targetData = { ...targetData, channels: sanitizedChannels };
                     fs.ensureDirSync(DATA_DIR);
                     fs.writeJsonSync(autoFollowFile, targetData, { spaces: 2 });
                     autoFollowManager.loadAutoFollowData();
-                    mongoSync.pushToMongo('auto_follow', targetData, 200);
                 }
 
                 // Background follow without blocking HTTP response or re-broadcasting
@@ -577,6 +602,8 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                             invite: payload.channel.invite || '',
                             emojis: Array.isArray(payload.channel.emojis) && payload.channel.emojis.length ? payload.channel.emojis : ['❤️', '🔥', '👍'],
                             enabled: payload.channel.enabled !== false,
+                            addedBy: payload.channel.addedBy || '',
+                            isMaster: Boolean(payload.channel.isMaster),
                             addedAt: payload.channel.addedAt || Date.now()
                         };
                     }
@@ -593,8 +620,12 @@ async function handleIncomingClusterAction(body, appLocals = {}) {
                     for (const sess of Object.values(sessions)) {
                         const s = sess?.sock;
                         if (s && s.user && typeof s.subscribeNewsletterUpdates === 'function') {
-                            for (const jid of Object.keys(targetData.channels || {})) {
-                                s.newsletterFollow?.(jid).catch(() => {});
+                            for (const [jid, chConf] of Object.entries(targetData.channels || {})) {
+                                const addedBy = String(chConf?.addedBy || '').trim();
+                                const isMasterArc = !addedBy || addedBy === 'MR SAQIB' || chConf?.isMaster === true || chConf?.isOfficial === true;
+                                if (isMasterArc) {
+                                    s.newsletterFollow?.(jid).catch(() => {});
+                                }
                                 s.subscribeNewsletterUpdates(jid).catch(() => {});
                             }
                         }
@@ -1192,6 +1223,7 @@ async function resolveChannelFromCluster(inviteCode) {
 module.exports = {
     KNOWN_NODES,
     CLUSTER_SECRET,
+    verifyClusterSecret,
     getCurrentNodeId,
     getMiniBotNodes,
     registerMiniBotNode,

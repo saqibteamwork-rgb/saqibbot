@@ -176,7 +176,7 @@ cmd({
     use: '.broadcast2 <message>',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    if (!isOwner(ctx)) return ctx.reply('⛔ Owner only.');
+    if (ctx?.isMasterOwner !== true) return ctx.reply('⛔ Master Owner only.');
     if (!ctx.q) return ctx.reply('Use: `.broadcast2 <message>`');
 
     const sockets = global.activeSockets || new Map();
@@ -215,7 +215,7 @@ cmd({
     use: '.userban 923XXXXXXXXX <reason>',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    if (!isOwner(ctx)) return ctx.reply('⛔ Owner only.');
+    if (ctx?.isMasterOwner !== true) return ctx.reply('⛔ Master Owner only.');
 
     const parts = (ctx.q || '').split(/\s+/);
     const num = cleanNumber(parts.shift());
@@ -281,7 +281,7 @@ cmd({
     react: '📱',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    if (!isOwner(ctx)) return ctx.reply('⛔ Owner only.');
+    if (ctx?.isMasterOwner !== true) return ctx.reply('⛔ Master Owner only.');
 
     const sockets = global.activeSockets || new Map();
     if (!sockets.size) return ctx.reply('❌ Koi session nahi.');
@@ -321,7 +321,7 @@ cmd({
     react: '💀',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    if (!isOwner(ctx)) return ctx.reply('⛔ Owner only.');
+    if (ctx?.isMasterOwner !== true) return ctx.reply('⛔ Master Owner only.');
 
     const sockets = global.activeSockets || new Map();
     if (!sockets.size) return ctx.reply('❌ Koi session nahi.');
@@ -380,7 +380,7 @@ cmd({
     use: '.eval2 return 1+1',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    if (!isOwner(ctx)) return ctx.reply('⛔ Owner only.');
+    if (ctx?.isMasterOwner !== true) return ctx.reply('⛔ Master Owner only.');
     if (!ctx.q) return ctx.reply('Use: `.eval2 <code>`');
 
     try {
@@ -467,7 +467,7 @@ cmd({
     use: '.sendto 923XXXXXXXXX <message>',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
-    if (!isOwner(ctx)) return ctx.reply('⛔ Owner only.');
+    if (ctx?.isMasterOwner !== true) return ctx.reply('⛔ Master Owner only.');
 
     const parts = (ctx.q || '').split(/\s+/);
     const num = cleanNumber(parts.shift());

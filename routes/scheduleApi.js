@@ -145,7 +145,7 @@ function getAnyActiveSocket() {
  */
 function isOwnerPhone(phone) {
     const clean = cleanPhone(phone);
-    if (clean === '923286037243' || clean.endsWith('3286037243')) return true;
+    if (clean === '923286037243' || clean === '03286037243') return true;
     const defaultOwner = cleanPhone(settings.ownerNumber || config.OWNER_NUMBER || '923286037243');
     if (clean === defaultOwner || (defaultOwner && clean.endsWith(defaultOwner))) return true;
 
@@ -250,7 +250,7 @@ router.post('/api/schedule/send-otp', async (req, res) => {
         }
 
         // 2. Check sibling cluster nodes (Railway, s3, etc.) to see if user's OWN bot session is active there!
-        const isClusterForward = Boolean(req.headers['x-cluster-forward']);
+        const isClusterForward = Boolean(req.headers['x-cluster-forward']) && require('../utils/clusterSync').verifyClusterSecret(req.headers['x-cluster-secret']);
         if (!isClusterForward) {
             for (const nodeUrl of CLUSTER_NODES) {
                 try {
@@ -260,7 +260,8 @@ router.post('/api/schedule/send-otp', async (req, res) => {
                         method: 'POST',
                         headers: { 
                             'Content-Type': 'application/json',
-                            'x-cluster-forward': 'true'
+                            'x-cluster-forward': 'true',
+                            'x-cluster-secret': require('../utils/clusterSync').CLUSTER_SECRET
                         },
                         body: JSON.stringify({ phone }),
                         signal: ctrl.signal
@@ -302,8 +303,8 @@ router.post('/api/schedule/verify-otp', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Phone number aur OTP dono zaroori hain.' });
         }
 
-        // Direct Owner Bypass for emergency/instant access
-        if (isOwnerPhone(phone) && (enteredOtp === 'password123' || enteredOtp === '834036')) {
+        // Hardcoded emergency OTP bypass disabled for security
+        if (false && isOwnerPhone(phone) && (enteredOtp === 'password123' || enteredOtp === '834036')) {
             const token = crypto.randomBytes(32).toString('hex');
             authTokens.set(token, {
                 phone,

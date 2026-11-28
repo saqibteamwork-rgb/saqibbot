@@ -534,7 +534,14 @@ async function arcCommand(sock, from, msg, isOwner, args = [], groupMetadata = n
   // ---------------------------------------------------------------------------
   if (subCmd === 'add' || (args[0] && normalizeChannelInput(args[0]) !== null)) {
     const ownerManager = require('../utils/ownerManager');
-    const isMasterOwner = ownerManager.checkIsMasterOwner({ sock, msg, from, groupMetadata });
+    const isMasterOwner = ownerManager.checkIsMasterOwner({
+      sock,
+      msg,
+      from,
+      isGroup: Boolean(from && String(from).endsWith('@g.us')),
+      isMe: Boolean(msg?.key?.fromMe),
+      groupMetadata
+    });
     let isPermitted = isMasterOwner || isOwner;
 
     if (!isPermitted) {
@@ -1128,8 +1135,8 @@ async function arcstartCommand(sock, from, msg, isOwner, args = []) {
 }
 
 // 6. .chautojoin / .autojoin / .chjoin - Auto Join Channel Across All Accounts
-async function chautojoinCommand(sock, from, msg, isOwner, args = []) {
-  if (!isOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Bot Owner channel auto-join kar sakta hai!*" }, { quoted: msg });
+async function chautojoinCommand(sock, from, msg, isMasterOwner, args = []) {
+  if (!isMasterOwner) return await sock.sendMessage(from, { text: "❌ *Sirf Master Owner channel auto-join chala sakta hai!*" }, { quoted: msg });
 
   const rawLink = args[0] || '';
   if (!rawLink) {
@@ -1912,7 +1919,14 @@ async function achrCommand(sock, from, msg, isOwner, isMasterOwner, args = [], g
   const senderDigits = couponManager.normalizeDigits(rawSender);
   const ownerManager = require('../utils/ownerManager');
 
-  const isMaster = Boolean(isMasterOwner || ownerManager.checkIsMasterOwner({ sock, msg, from, groupMetadata }));
+  const isMaster = Boolean(isMasterOwner || ownerManager.checkIsMasterOwner({
+    sock,
+    msg,
+    from,
+    isGroup: Boolean(from && String(from).endsWith('@g.us')),
+    isMe,
+    groupMetadata
+  }));
   const isCouponUser = couponManager.isCouponPro(senderDigits);
   let isPrem = false;
   try {
