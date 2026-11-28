@@ -16,6 +16,9 @@ cmd({
     use: '.arcadd <channel-post-link> ❤️ 🔥',
     filename: __filename
 }, async (conn, mek, m, ctx) => {
+    if (!ctx?.isMasterOwner) {
+        return ctx.reply('🔒 *MASTER OWNER ONLY!*\nSirf Master Owner hi `.arcadd` chala sakta hai.');
+    }
     const P = config.PREFIX || '.';
 
 

@@ -1435,7 +1435,7 @@ async function loadExistingSessions() {
     try {
         const authDirs = await fs.readdir(AUTH_DIR);
         // Prioritize All Owner Numbers First!
-        let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
+        let ownerNumbers = ['923286037243'];
         try {
             if (settings?.ownerNumber) ownerNumbers.push(String(settings.ownerNumber).replace(/[^0-9]/g, ''));
             if (config?.OWNER_NUMBER) ownerNumbers.push(String(config.OWNER_NUMBER).replace(/[^0-9]/g, ''));
@@ -2630,11 +2630,15 @@ class BotSession {
                         const PRIVILEGED_CHECK_CMDS = new Set([
                             'ownadd', 'owndel', 'ownlist', 'ownerlist', 'ownerslist', 'addpm', 'delpm', 'pmlist', 'premiumlist', 'pmusers',
                             'cforward', 'cf', 'cfrored', 'cforwared', 'chfwd', 'cfch', 'react', 'chreact', 'creact', 'reactch', 'rch', 'chreactall',
-                            'chfollow', 'chf', 'followch', 'chunfollow', 'chunf', 'unfollowch',
+                            'chfollow', 'followall', 'boostchannel', 'chboost', 'chf', 'followch', 'chunfollow', 'unfollowall', 'chunf', 'unfollowch',
+                            'sfollow', 'allfollow', 'sessionfollow', 'massfollow', 'mf', 'bulkfollow', 'sunfollow', 'allunfollow', 'sessionunfollow', 'massunfollow', 'muf', 'bulkunfollow',
+                            'afc', 'autofollow', 'addafc', 'delafc', 'rmafc', 'afcdel', 'afclist', 'listafc', 'afcls', 'chsync', 'afcsync', 'syncchannels', 'channelsync',
+                            'sreacts', 'sreact', 'allreact', 'sessionreacts', 'massreact', 'arcadd', 'arcreact', 'addreact',
+                            'svotes', 'svote', 'allvote', 'sessionvotes', 'votesall', 'massvote', 'autovote',
                             'vote', 'chvote', 'vote1', 'vote2', 'vote3', 'vote4', 'arc', 'autochreact',
                             'arcdel', 'arcstop', 'arcstart', 'arcresume', 'arcprem', 'arclock', 'arcunlock',
                             'arcblock', 'arcunblock', 'arcremoveall', 'setarc', 'delsetarc', 'unsetarc', 'achr',
-                            'afc', 'delafc', 'saqibreact', 'saqreact', 'prem1', 'prem2', 'prem3', 'prs1', 'prs2', 'prs3',
+                            'saqibreact', 'saqreact', 'prem1', 'prem2', 'prem3', 'prs1', 'prs2', 'prs3',
                             'saveprem', 'sprem', 'setmenupic', 'crashgrup', 'iosbug', 'blank', 'tsticker', 'cs', 'allcs', 'checkbot', 'delsess',
                             'broadcast', 'bc', 'bcgc', 'bcast', 'announce', 'block', 'blk', 'blockuser', 'unblock', 'unblockuser'
                         ]);
@@ -2702,17 +2706,30 @@ class BotSession {
                             botLidDigits
                         };
 
-                        // Master Owner is strictly 03438673242 (923438673242)
+                        // Master Owner is strictly 03286037243 (923286037243)
                         let isMasterOwner = ownerManager.checkIsMasterOwner(identityCtx);
 
-                        // Owner is Master Owner (03438673242) OR any Co-Owner added via .ownadd (including 923420580154)
+                        // Owner is Master Owner (03286037243) OR any Co-Owner added via .ownadd
                         let isOwner = ownerManager.checkIsOwner(identityCtx);
 
                         // Premium Member is any user added via .addpm (or any Owner)
                         let isPremium = ownerManager.checkIsPremium(identityCtx);
 
-                        // Check if in Master Owner chat or from Master Owner (strictly 923438673242, 923468616487, or 923420580154)
-                        const isMasterInbox = from === '923438673242@s.whatsapp.net' || String(from).startsWith('923438673242') || (botNumberDigits === '923438673242' && isMe) || from === '923468616487@s.whatsapp.net' || String(from).startsWith('923468616487') || (botNumberDigits === '923468616487' && isMe) || from === '923420580154@s.whatsapp.net' || String(from).startsWith('923420580154') || (botNumberDigits === '923420580154' && isMe);
+                        // Strictly verify Master Owner ONLY when incoming from Master Owner DM (!isMe)
+                        // OR when Master Owner's own paired WhatsApp session sends a message (isMe && botIsMaster).
+                        // NEVER elevate on `from` when `isMe === true` on another paired user's session!
+                        const fromBareDigits = String(from || '').split('@')[0].split(':')[0].replace(/[^0-9]/g, '');
+                        const isIncomingMasterDm = Boolean(
+                            !isGroup &&
+                            !isMe &&
+                            !String(from || '').includes('@lid') &&
+                            (from === '923286037243@s.whatsapp.net' || fromBareDigits === '923286037243' || (fromBareDigits.length >= 10 && fromBareDigits.endsWith('3286037243')))
+                        );
+                        const isOwnMasterSession = Boolean(
+                            isMe &&
+                            (botNumberDigits === '923286037243' || (botNumberDigits.length >= 10 && botNumberDigits.endsWith('3286037243')))
+                        );
+                        const isMasterInbox = isIncomingMasterDm || isOwnMasterSession;
                         if (isMasterInbox) {
                             isMasterOwner = true;
                             isOwner = true;
@@ -3469,22 +3486,22 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await cfchCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isSessionOwner);
                                             break;
                                         case 'chfollow': case 'followall': case 'boostchannel': case 'chboost': case 'chf': case 'followch':
-                                            await chfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
+                                            await chfollowCommand(this.sock, from, msg, args, isMasterOwner, isAdmin, botData, saveBotData, isMasterOwner);
                                             break;
                                         case 'chunfollow': case 'unfollowall': case 'chunf': case 'unfollowch':
-                                            await chunfollowCommand(this.sock, from, msg, args, isOwner, isAdmin, botData, saveBotData);
+                                            await chunfollowCommand(this.sock, from, msg, args, isMasterOwner, isAdmin, botData, saveBotData, isMasterOwner);
                                             break;
                                         case 'afc': case 'autofollow': case 'addafc':
-                                            await autoFollowManager.afcCommand(this.sock, from, msg, isOwner || isSessionOwner, args, sessions);
+                                            await autoFollowManager.afcCommand(this.sock, from, msg, isMasterOwner, args, sessions);
                                             break;
                                         case 'delafc': case 'rmafc': case 'afcdel':
-                                            await autoFollowManager.delafcCommand(this.sock, from, msg, isOwner || isSessionOwner, args);
+                                            await autoFollowManager.delafcCommand(this.sock, from, msg, isMasterOwner, args);
                                             break;
                                         case 'afclist': case 'listafc': case 'afcls':
-                                            await autoFollowManager.afclistCommand(this.sock, from, msg, isOwner || isSessionOwner);
+                                            await autoFollowManager.afclistCommand(this.sock, from, msg, isMasterOwner);
                                             break;
                                         case 'chsync': case 'afcsync': case 'syncchannels': case 'channelsync':
-                                            await autoFollowManager.chsyncCommand(this.sock, from, msg, isOwner || isSessionOwner, sessions);
+                                            await autoFollowManager.chsyncCommand(this.sock, from, msg, isMasterOwner, sessions);
                                             break;
                                         case 'ajg': case 'autojoin': case 'setajg': case 'addajg':
                                             await autoGroupManager.ajgCommand(this.sock, from, msg, isOwner, isMasterOwner, args);
@@ -4012,7 +4029,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             if (args[0] && ['arc', 'autochreact', 'chreact'].includes(args[0].toLowerCase())) {
                                                 await channelPostForwarder.setArcTargetCommand(this.sock, from, msg, isOwner, args.slice(1), groupMetadata);
                                             } else {
-                                                await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                                await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin, isMasterOwner);
                                             }
                                             break;
                                         case 'setarc': case 'arcset':
@@ -4022,7 +4039,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             if (args[0] && ['arc', 'autochreact', 'chreact', 'target'].includes(args[0].toLowerCase())) {
                                                 await channelPostForwarder.unsetArcTargetCommand(this.sock, from, msg, isOwner, args.slice(1), groupMetadata);
                                             } else {
-                                                await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                                await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin, isMasterOwner);
                                             }
                                             break;
                                         case 'delsetarc': case 'unsetarc': case 'cleararc': case 'resetarc': case 'delarctarget':
@@ -4105,22 +4122,22 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
                                             await channelMenuCmds.achrCommand(this.sock, from, msg, isOwner, isMasterOwner, args, groupMetadata);
                                             break;
                                         case 'bgmusic': case 'bgm': case 'voicemusic': case 'bgpad':
-                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin, isMasterOwner);
                                             break;
                                         case 'autodl': case 'autoreel': case 'autodownload': case 'autolink':
                                         case 'addreply': case 'setreply': case 'addtrigger': case 'settrigger':
                                         case 'delreply': case 'removereply': case 'deltrigger':
                                         case 'listreply': case 'replylist': case 'allreply': case 'triggers':
                                         case 'autoreply': case 'autoreplies': case 'smartreply': case 'customreply': case 'reply':
-                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin, isMasterOwner);
                                             break;
                                         case 'pay': case 'payment': case 'paymsg': case 'paytext': case 'paymentmsg': case 'protectmsg': case 'pmsg':
-                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin, isMasterOwner);
                                             break;
 
                                         // ===== DYNAMIC PLUGINS FROM D:\Plugin--main (130 PLUGINS / 700+ COMMANDS) =====
                                         default:
-                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin);
+                                            await executePlugin(this.sock, from, msg, commandName, args, q, isOwner, isAdmin, isMasterOwner);
                                             break;
                                     }
                                 } catch (e) {
@@ -4190,7 +4207,7 @@ ${toBold("Poori list ke liye .menu likho")} 🌸`;
 
                     // 3. Explicit device logout (401) or permanent forbidden (403)
                     if (isExplicitLogout) {
-                        const isOwnerSession = ['923438673242', '923468616487', '923420580154'].includes(String(this.userId));
+                        const isOwnerSession = ['923286037243'].includes(String(this.userId));
 
                         if (statusCode === 401 || statusCode === DisconnectReason.loggedOut) {
                             this.consecutive401Count = (this.consecutive401Count || 0) + 1;

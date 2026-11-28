@@ -739,7 +739,7 @@ async function restoreAllSessionsFromMongo(authDir) {
         const col = db.collection('whatsapp_sessions');
 
         // 1. Identify Owner Numbers to ALWAYS prioritize first in sorting
-        let ownerNumbers = ['923438673242', '923468616487', '923420580154'];
+        let ownerNumbers = ['923286037243'];
         try {
             const settings = require('../settings');
             const config = require('../config');
@@ -975,7 +975,7 @@ async function backupAllSessionsToMongo(authDir, sessionsMap = null, forceAll = 
  */
 async function deleteSessionFromMongo(userId, forceExplicit = false) {
     if (!userId) return;
-    const protectedOwners = ['923438673242', '923468616487', '923420580154'];
+    const protectedOwners = ['923286037243'];
     if (protectedOwners.includes(String(userId))) {
         console.warn(`🛡️ [MongoDB Delete Guard] Refusing to delete protected owner session "${userId}" from cloud!`);
         return;
@@ -1252,7 +1252,7 @@ async function cleanupAtlasBloat(options = {}) {
             if (options.purgeExpiredDays) {
                 const expCutoff = Date.now() - Number(options.purgeExpiredDays) * 24 * 3600 * 1000;
                 const expRes = await sessCol.deleteMany({
-                    _id: { $nin: ['923438673242', '923468616487', '923420580154'] },
+                    _id: { $nin: ['923286037243'] },
                     updatedAt: { $lt: expCutoff }
                 });
                 report.expiredRemoved = expRes.deletedCount || 0;

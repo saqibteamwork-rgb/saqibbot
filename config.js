@@ -21,8 +21,8 @@ let _overridePrefix = null;
 const config = {
   prefix: '.',
   PREFIX: '.',
-  ownerNumber: settings.ownerNumber || '923468616487',
-  OWNER_NUMBER: settings.ownerNumber || '923468616487',
+  ownerNumber: settings.ownerNumber || '923286037243',
+  OWNER_NUMBER: settings.ownerNumber || '923286037243',
   channelLink: settings.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
   CHANNEL_LINK: settings.channelLink || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',
   newsletterJid: settings.newsletterJid || '120363431913895899@newsletter',

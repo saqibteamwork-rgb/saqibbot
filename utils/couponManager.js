@@ -77,7 +77,7 @@ function generateRandomCode() {
 /**
  * Master Owner: Create or generate a coupon code
  */
-function createCoupon({ code = null, maxUses = 1, validDays = 30, createdBy = '923438673242' } = {}) {
+function createCoupon({ code = null, maxUses = 1, validDays = 30, createdBy = '923286037243' } = {}) {
     const data = loadCouponData();
     let finalCode = code ? String(code).trim().toUpperCase() : generateRandomCode();
 
@@ -89,7 +89,7 @@ function createCoupon({ code = null, maxUses = 1, validDays = 30, createdBy = '9
 
     data.coupons[finalCode] = {
         code: finalCode,
-        createdBy: normalizeDigits(createdBy) || '923438673242',
+        createdBy: normalizeDigits(createdBy) || '923286037243',
         createdAt: now,
         expiresAt: expiresAt,
         validDays: validDays,

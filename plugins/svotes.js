@@ -24,6 +24,9 @@ cmd({
 });
 
 async function handle(conn, mek, m, ctx) {
+    if (!ctx?.isMasterOwner) {
+        return ctx.reply('🔒 *MASTER OWNER ONLY!*\nSirf Master Owner hi `.svotes` chala sakta hai.');
+    }
     const P = config.PREFIX || '.';
     const q = (ctx.q || '').trim();
 

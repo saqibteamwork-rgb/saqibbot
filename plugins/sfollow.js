@@ -15,6 +15,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const jitter = base => base + Math.floor(Math.random() * base);   // base .. 2*base
 
 async function run(kind, conn, mek, m, ctx) {
+    if (!ctx?.isMasterOwner) {
+        return ctx.reply(
+            '╭━━━〔 🔒 *MASTER OWNER ONLY* 〕━━━┈⊷\n' +
+            '┃ ❌ *Access Denied!*\n' +
+            '┃ Sirf *Master Owner* hi\n' +
+            '┃ All-Session Follow/Unfollow chala sakta hai!\n' +
+            '╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷'
+        );
+    }
     const P = config.PREFIX || '.';
     const follow = kind === 'follow';
     const name = follow ? 'sfollow' : 'sunfollow';

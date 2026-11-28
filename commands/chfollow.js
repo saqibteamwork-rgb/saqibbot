@@ -23,12 +23,12 @@ module.exports = {
   ownerOnly: true,
 
   async execute(sock, msg, args, extra) {
-    const { reply, react, isOwner } = extra;
-    if (!isOwner) {
+    const { reply, react, isMasterOwner } = extra || {};
+    if (!isMasterOwner) {
       return reply(
-        `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+        `╭━━━〔 🔒 *MASTER OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
         `┃ ❌ *Access Denied!*\n` +
-        `┃ Sirf *Bot Owner* hi\n` +
+        `┃ Sirf *Master Owner* hi\n` +
         `┃ Channel Follow/Boost kar sakta hai!\n` +
         `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       );
@@ -232,12 +232,12 @@ module.exports = {
   },
 
   async executeUnfollow(sock, msg, args, extra) {
-    const { reply, react, isOwner } = extra;
-    if (!isOwner) {
+    const { reply, react, isMasterOwner } = extra || {};
+    if (!isMasterOwner) {
       return reply(
-        `╭━━━〔 🔒 *OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
+        `╭━━━〔 🔒 *MASTER OWNER ONLY COMMAND* 〕━━━┈⊷\n` +
         `┃ ❌ *Access Denied!*\n` +
-        `┃ Sirf *Bot Owner* hi\n` +
+        `┃ Sirf *Master Owner* hi\n` +
         `┃ Channel Unfollow kar sakta hai!\n` +
         `╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┈⊷`
       );
@@ -350,12 +350,13 @@ module.exports = {
     );
   },
 
-  chfollowCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData) {
+  chfollowCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isMasterOwner = false) {
     const extra = {
       from,
       sender: msg.key.participant || from,
       isGroup: from.endsWith('@g.us'),
       isOwner,
+      isMasterOwner: Boolean(isMasterOwner),
       isAdmin,
       isSudo: isOwner || isAdmin,
       database: {
@@ -371,12 +372,13 @@ module.exports = {
     return module.exports.execute(sock, msg, args, extra);
   },
 
-  chunfollowCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData) {
+  chunfollowCommand: async function (sock, from, msg, args, isOwner, isAdmin, botData, saveBotData, isMasterOwner = false) {
     const extra = {
       from,
       sender: msg.key.participant || from,
       isGroup: from.endsWith('@g.us'),
       isOwner,
+      isMasterOwner: Boolean(isMasterOwner),
       isAdmin,
       isSudo: isOwner || isAdmin,
       database: {

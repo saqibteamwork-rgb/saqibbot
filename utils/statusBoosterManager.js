@@ -51,7 +51,7 @@ function loadStatusBoosterData() {
   if (!cachedData || typeof cachedData !== 'object') {
     cachedData = {
       enabled: false,
-      targets: ["923438673242"],
+      targets: ["923286037243"],
       message: DEFAULT_MESSAGE,
       sentHistory: {},
       updatedAt: Date.now()
@@ -59,7 +59,7 @@ function loadStatusBoosterData() {
   }
 
   if (!Array.isArray(cachedData.targets)) {
-    cachedData.targets = ["923438673242"];
+    cachedData.targets = ["923286037243"];
   }
 
   if (!cachedData.sentHistory || typeof cachedData.sentHistory !== 'object') {
@@ -132,7 +132,7 @@ async function vcontactCommand(sock, from, msg, isOwner, isMasterOwner, args) {
     targetsList = `┃   _Koi number add nahi hai. \`.setvcontact <number>\` karein._\n`;
   } else {
     data.targets.forEach((num, idx) => {
-      const isMaster = (num === '923420580154' || num === '923438673242');
+      const isMaster = (num === '923286037243');
       targetsList += `┃   ${idx + 1}. *+${num}* ${isMaster ? '(Master Owner)' : '(Contact)'}\n`;
     });
   }
@@ -238,7 +238,7 @@ async function delvcontactCommand(sock, from, msg, isOwner, isMasterOwner, args)
   const data = loadStatusBoosterData();
 
   if (rawArg.toLowerCase() === 'all') {
-    data.targets = ["923420580154"]; // Keep Master Owner as default
+    data.targets = ["923286037243"]; // Keep Master Owner as default
     saveStatusBoosterData(data);
     return await sock.sendMessage(from, {
       text: `✅ *Targets Reset!* Tamam extra contacts remove kar diye gaye hain (Master Owner default active hai).`

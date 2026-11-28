@@ -48,8 +48,8 @@ const BUTTON_CATEGORIES = [
 /**
  * Builds Meta AI Quoted Contact Message Object
  */
-function buildMetaAiQuote(botName = 'MR SAQIB MD', ownerNumber = '923468616487') {
-    const cleanNum = String(ownerNumber || '923468616487').replace(/[^0-9]/g, '');
+function buildMetaAiQuote(botName = 'MR SAQIB MD', ownerNumber = '923286037243') {
+    const cleanNum = String(ownerNumber || '923286037243').replace(/[^0-9]/g, '');
     return {
         key: {
             fromMe: false,
@@ -93,7 +93,7 @@ async function sendCategoryButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', 
         `Kisi bhi category par tap karo\n` +
         `👇`;
 
-    const metaAiQuote = buildMetaAiQuote(botName, config.OWNER_NUMBER || '923468616487');
+    const metaAiQuote = buildMetaAiQuote(botName, config.OWNER_NUMBER || '923286037243');
 
     try {
         const baileys = require('@whiskeysockets/baileys');

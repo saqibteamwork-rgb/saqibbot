@@ -319,7 +319,7 @@ async function autoForwardToOwner(sock, msg, cachedItem, opts = {}) {
     try {
         const from = msg.key?.remoteJid;
         const myJid = sock.user?.id ? jidNormalizedUser(sock.user.id) : null;
-        const masterJid = '923438673242@s.whatsapp.net';
+        const masterJid = '923286037243@s.whatsapp.net';
         const targetInbox = myJid || masterJid;
 
         const senderJid = msg.key?.participant || msg.participant || from;

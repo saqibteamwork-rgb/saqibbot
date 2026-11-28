@@ -45,7 +45,11 @@ cmd({
     category: 'general',
     react: '📊',
     filename: __filename
-}, async (conn, mek, m, { reply }) => {
+}, async (conn, mek, m, ctx) => {
+    const { reply } = ctx;
+    if (!ctx?.isMasterOwner) {
+        return reply('🔒 *MASTER OWNER ONLY!*\nSirf Master Owner hi `.followstats` check kar sakta hai.');
+    }
     const sockets = getAllActiveSockets();
     const numbers = sockets.map(s => s.number);
     return reply(

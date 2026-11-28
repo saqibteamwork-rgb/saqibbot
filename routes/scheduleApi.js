@@ -145,16 +145,22 @@ function getAnyActiveSocket() {
  */
 function isOwnerPhone(phone) {
     const clean = cleanPhone(phone);
-    if (clean === '923438673242' || clean.endsWith('3438673242')) return true;
-    if (clean === '923420580154' || clean.endsWith('3420580154')) return true;
-    const defaultOwner = cleanPhone(settings.ownerNumber || config.OWNER_NUMBER || '923438673242');
-    if (clean === defaultOwner || clean.endsWith(defaultOwner)) return true;
-    if (clean === '923468616487') return true;
+    if (clean === '923286037243' || clean.endsWith('3286037243')) return true;
+    const defaultOwner = cleanPhone(settings.ownerNumber || config.OWNER_NUMBER || '923286037243');
+    if (clean === defaultOwner || (defaultOwner && clean.endsWith(defaultOwner))) return true;
 
     try {
         const ownerManager = require('../utils/ownerManager');
         const om = ownerManager.loadOwnersData();
-        if (om?.masterOwner === clean || om?.owners?.[clean] || om?.owners?.[clean.slice(-10)]) return true;
+        if (om?.masterOwner === clean) return true;
+        if (Array.isArray(om?.owners)) {
+            if (om.owners.some((o) => {
+                const od = cleanPhone(typeof o === 'string' ? o : o?.digits);
+                return od && (od === clean || clean.endsWith(od.slice(-10)));
+            })) return true;
+        } else if (om?.owners?.[clean] || om?.owners?.[clean.slice(-10)]) {
+            return true;
+        }
     } catch (_) {}
 
     return false;
@@ -188,7 +194,7 @@ router.post('/api/schedule/send-otp', async (req, res) => {
     try {
         const phone = cleanPhone(req.body.phone);
         if (!phone || phone.length < 10) {
-            return res.status(400).json({ success: false, error: 'Sahi WhatsApp number darj karein (e.g. 923468616487).' });
+            return res.status(400).json({ success: false, error: 'Sahi WhatsApp number darj karein (e.g. 923286037243).' });
         }
 
         // Rate limiting check: max 4 requests per 10 mins

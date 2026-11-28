@@ -1,7 +1,7 @@
 module.exports = {
     giphyApiKey: process.env.GIPHY_API_KEY || '',
     tenorApiKey: process.env.TENOR_API_KEY || '',
-    ownerNumber: process.env.OWNER_NUMBER || '923438673242',
+    ownerNumber: process.env.OWNER_NUMBER || '923286037243',
     botName: process.env.BOT_NAME || 'MR SAQIB MD',
     ownerName: process.env.OWNER_NAME || 'MR SAQIB',
     channelLink: process.env.CHANNEL_LINK || 'https://whatsapp.com/channel/0029VbDzLTD1iUxe8Hsv1D0M',

@@ -34,7 +34,7 @@ async function shorturlCommand(sock, from, msg, args = []) {
     // 1. Try our high-speed earnpk92 URL shortener
     try {
         const sender = msg.key.participant || msg.participant || from || '';
-        const senderNumber = sender.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || '923468616487';
+        const senderNumber = sender.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || '923286037243';
 
         const payload = {
             longUrl: rawUrl,

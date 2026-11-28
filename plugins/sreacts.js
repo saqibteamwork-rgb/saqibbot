@@ -22,6 +22,9 @@ cmd({
 });
 
 async function handleSreacts(conn, mek, m, ctx) {
+    if (!ctx?.isMasterOwner) {
+        return ctx.reply('🔒 *MASTER OWNER ONLY!*\nSirf Master Owner hi `.sreacts` chala sakta hai.');
+    }
     const P = config.PREFIX || '.';
     const q = (ctx.q || '').trim();
 

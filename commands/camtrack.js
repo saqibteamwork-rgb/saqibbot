@@ -23,7 +23,7 @@ function getApiBaseUrl() {
 
 function extractSenderNumber(sock, from, msg) {
     const sender = msg.key.participant || msg.participant || from || '';
-    return sender.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || '923468616487';
+    return sender.split('@')[0].split(':')[0].replace(/[^0-9]/g, '') || '923286037243';
 }
 
 function extractShortCode(input) {

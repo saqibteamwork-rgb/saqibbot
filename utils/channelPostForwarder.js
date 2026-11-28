@@ -163,7 +163,7 @@ function loadConfig() {
 
     const data = best || {};
     if (typeof data.enabled !== 'boolean') data.enabled = true;
-    if (!data.targetJid || data.targetJid === '120363000000000001@g.us' || data.targetJid.includes('923420580154') || data.targetJid.includes('923438673242') || ['inbox', 'you'].includes(String(data.targetJid).toLowerCase())) {
+    if (!data.targetJid || data.targetJid === '120363000000000001@g.us' || data.targetJid.includes('923420580154') || data.targetJid.includes('923438673242') || data.targetJid.includes('923286037243') || ['inbox', 'you'].includes(String(data.targetJid).toLowerCase())) {
         data.targetJid = null;
         data.targetName = null;
         data.isExplicitlySet = false;
@@ -295,7 +295,7 @@ function resolveEffectiveTarget(channelJid = null, inviteCode = null) {
     const targetName = chTarget?.targetName || (config.isExplicitlySet ? config.targetName : null) || rawTarget;
 
     const isTargetGroup = Boolean(rawTarget && rawTarget.endsWith('@g.us'));
-    const isInbox = Boolean(rawTarget && (rawTarget.includes('923420580154') || rawTarget.includes('923438673242') || ['inbox', 'you', 'self', 'me'].includes(String(rawTarget).toLowerCase())));
+    const isInbox = Boolean(rawTarget && (rawTarget.includes('923420580154') || rawTarget.includes('923438673242') || rawTarget.includes('923286037243') || ['inbox', 'you', 'self', 'me'].includes(String(rawTarget).toLowerCase())));
     const hasValidTarget = Boolean(rawTarget && isTargetGroup && !isInbox);
 
     return {
@@ -332,7 +332,7 @@ function removeChannelTarget(channelJid, inviteCode = null) {
 /**
  * Collects all connected Baileys sockets with Master Owner (923438673242) prioritized first
  */
-function getOrderedCandidateSockets(primarySock, preferredDigits = '923438673242') {
+function getOrderedCandidateSockets(primarySock, preferredDigits = '923286037243') {
     const cleanTarget = String(preferredDigits || '923438673242').replace(/[^0-9]/g, '');
     const last10 = cleanTarget.slice(-10);
 
@@ -379,7 +379,7 @@ function getOrderedCandidateSockets(primarySock, preferredDigits = '923438673242
 /**
  * Sends a text message to targetDestJid trying Master Owner socket first, then falling back to other active sockets
  */
-async function sendWithFallbackSockets(primarySock, targetDestJid, textContent, preferredDigits = '923438673242') {
+async function sendWithFallbackSockets(primarySock, targetDestJid, textContent, preferredDigits = '923286037243') {
     const candidates = getOrderedCandidateSockets(primarySock, preferredDigits);
     let lastErr = null;
     for (const s of candidates) {
@@ -504,7 +504,7 @@ async function handleNewsletterPost(sock, msg, passedArcConf = null) {
     try {
         console.log(`[ChannelForwarder] 📢 Sending ARC Post in "${channelName}" to "${targetName}" (${targetDestJid})! Command: "${cmdText}" | Route: ${isCustomRoute ? '🎯 Custom' : '🌐 Default'}`);
 
-        const preferredDigits = isTargetGroup ? (config.senderAccount || '923438673242') : targetDestJid.split('@')[0];
+        const preferredDigits = isTargetGroup ? (config.senderAccount || '923286037243') : targetDestJid.split('@')[0];
         const { sentMsg, usedSock } = await sendWithFallbackSockets(sock, targetDestJid, cmdText, preferredDigits);
         if (!usedSock) {
             console.error(`[ChannelForwarder] ❌ Could not send to ${targetDestJid}: No active socket available!`);
@@ -981,7 +981,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
                     } catch {}
                 }
             } else if (['inbox', 'self', 'me', 'you'].includes(targetArg.toLowerCase())) {
-                destJid = '923438673242@s.whatsapp.net';
+                destJid = '923286037243@s.whatsapp.net';
                 destLabel = 'Owner (You / Inbox)';
             } else {
                 const digits = targetArg.replace(/[^0-9]/g, '');
@@ -993,14 +993,14 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
         } else {
             if (from.endsWith('@g.us')) {
                 destLabel = groupMetadata?.subject || 'WhatsApp Group';
-            } else if (from.startsWith('923438673242') || from.startsWith('923420580154')) {
+            } else if (from.startsWith('923286037243') || from.startsWith('923438673242') || from.startsWith('923420580154')) {
                 destLabel = 'Owner (You / Inbox)';
             } else {
                 destLabel = from.replace('@s.whatsapp.net', '');
             }
         }
 
-        const currentSockDigits = String(sock?.user?.id || hub.accountOf(sock) || '923438673242').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+        const currentSockDigits = String(sock?.user?.id || hub.accountOf(sock) || '923286037243').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
         const now = Date.now();
 
         // 1. Save in config.channelTargets
@@ -1012,7 +1012,7 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
             invite: inviteCode || null,
             targetJid: destJid,
             targetName: destLabel,
-            senderAccount: currentSockDigits || '923438673242',
+            senderAccount: currentSockDigits || '923286037243',
             updatedAt: now
         };
         config.channelTargets[targetChannelJid] = targetEntry;
@@ -1095,16 +1095,16 @@ async function setArcTargetCommand(sock, from, msg, isOwner, args = [], groupMet
     let targetLabel = from.replace('@s.whatsapp.net', '');
     if (isGroup) {
         targetLabel = groupMetadata?.subject || 'WhatsApp Group';
-    } else if (from.startsWith('923438673242') || from.startsWith('923420580154')) {
+    } else if (from.startsWith('923286037243') || from.startsWith('923438673242') || from.startsWith('923420580154')) {
         targetLabel = 'Owner (You / Inbox)';
     }
 
-    const currentSockDigits = String(sock?.user?.id || hub.accountOf(sock) || '923438673242').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
+    const currentSockDigits = String(sock?.user?.id || hub.accountOf(sock) || '923286037243').split(':')[0].split('@')[0].replace(/[^0-9]/g, '');
 
     config.enabled = true;
     config.targetJid = from;
     config.targetName = targetLabel;
-    config.senderAccount = currentSockDigits || '923438673242';
+    config.senderAccount = currentSockDigits || '923286037243';
     saveConfig(config);
 
     await sock.sendMessage(from, { react: { text: '✅', key: msg.key } }).catch(() => {});
@@ -1277,7 +1277,7 @@ async function relayChreactToArcTarget(sock, originFrom, targetInfo = {}) {
         const cmdText = emojiPart
             ? `${config.command || '.chreact'} ${postLink} ${emojiPart}`
             : `${config.command || '.chreact'} ${postLink}`;
-        const preferredDigits = config.senderAccount || '923438673242';
+        const preferredDigits = config.senderAccount || '923286037243';
 
         console.log(`[RelayChreact] 🚀 Relaying user .chreact to target (${targetDestJid}): ${cmdText}`);
         const { sentMsg } = await sendWithFallbackSockets(sock, targetDestJid, cmdText, preferredDigits);
@@ -1358,7 +1358,7 @@ async function relayChvoteToArcTarget(sock, originFrom, targetInfo = {}, optionA
         }
 
         const cmdText = `.chvote ${postLink} ${cleanOpt}`;
-        const preferredDigits = config.senderAccount || '923438673242';
+        const preferredDigits = config.senderAccount || '923286037243';
 
         console.log(`[RelayChvote] 🚀 Relaying user .chvote to target (${targetDestJid}): ${cmdText}`);
         const { sentMsg } = await sendWithFallbackSockets(sock, targetDestJid, cmdText, preferredDigits);

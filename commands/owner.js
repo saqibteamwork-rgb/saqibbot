@@ -7,7 +7,7 @@ const settings = require('../settings');
 async function ownerCommand(sock, from, msg) {
     const rawNumber = settings.ownerNumber && !settings.ownerNumber.includes('nmbr') && !settings.ownerNumber.includes('HERE')
         ? settings.ownerNumber.replace(/[^0-9]/g, '')
-        : '923468616487';
+        : '923286037243';
 
     const formattedNumber = rawNumber.length >= 10 
         ? `+${rawNumber.slice(0, 2)} ${rawNumber.slice(2, 5)} ${rawNumber.slice(5)}`

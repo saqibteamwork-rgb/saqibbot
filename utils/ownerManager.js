@@ -3,8 +3,8 @@
 /**
  * MR SAQIB MD :: Master Owner, Co-Owner & Premium Member Engine
  * ========================================================================================
- * - Master Owner is strictly 03438673242 (923438673242).
- * - Only Master Owner (03438673242) can add or remove owners via .ownadd / .owndel.
+ * - Master Owner is strictly 03286037243 (923286037243).
+ * - Only Master Owner (03286037243) can add or remove owners via .ownadd / .owndel.
  * - Owners can add/remove Premium Members via .addpm / .delpm.
  * - Full Baileys v7 LID <-> Phone Number bidirectional resolution across:
  *     1. msg.key (participant, participantAlt, remoteJid, remoteJidAlt)
@@ -21,8 +21,8 @@ const { jidNormalizedUser } = require('@whiskeysockets/baileys');
 const OWNERS_FILE = path.join(__dirname, '..', 'data', 'owners.json');
 const AUTH_DIR = path.join(__dirname, '..', 'auth_info');
 const OWNERS_AUTH_BACKUP = path.join(AUTH_DIR, '_owners_store.json');
-const MASTER_OWNER_DIGITS = '923438673242';
-const MASTER_LAST10 = '3438673242';
+const MASTER_OWNER_DIGITS = '923286037243';
+const MASTER_LAST10 = '3286037243';
 
 const CLUSTER_MONITOR_NODES = [
     { id: 's1', name: 'Heroku-1', url: 'https://saqib-bot-v1-d3ecc6f0292e.herokuapp.com' },
@@ -178,6 +178,23 @@ function loadOwnersData() {
             if (!Array.isArray(data.masterLids)) data.masterLids = [];
             if (!data.lidMap || typeof data.lidMap !== 'object') data.lidMap = {};
 
+            let masterMigrated = false;
+            if (data.masterOwner !== MASTER_OWNER_DIGITS) {
+                const legacyMasterDigits = new Set(['923438673242', '923468616487', '923420580154']);
+                data.masterOwner = MASTER_OWNER_DIGITS;
+                data.masterLids = [];
+                data.owners = data.owners.filter((o) => {
+                    const od = normalizePhoneDigits(typeof o === 'string' ? o : o?.digits);
+                    return od && !legacyMasterDigits.has(od);
+                });
+                if (!data.owners.some((o) => normalizePhoneDigits(typeof o === 'string' ? o : o?.digits) === MASTER_OWNER_DIGITS)) {
+                    data.owners.unshift(MASTER_OWNER_DIGITS);
+                }
+                delete data.lidMap['pn:923438673242'];
+                delete data.lidMap['lid:31800575439102'];
+                masterMigrated = true;
+            }
+
             const wasPruned = pruneOwnersLidMap(data);
 
             // Hydrate in-memory map from persisted data (bounded to 5000 entries)
@@ -200,7 +217,7 @@ function loadOwnersData() {
 
             cachedOwnersData = data;
             cachedOwnersMtime = stat.mtimeMs;
-            if (wasPruned) {
+            if (wasPruned || masterMigrated) {
                 try { saveOwnersData(data); } catch (_) {}
             }
             return data;

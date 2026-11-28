@@ -103,8 +103,8 @@ async function getUploadedHeaderMedia(sock, prepareWAMessageMedia) {
  * Builds Meta AI Quoted Contact Message Object
  * When quoted in WhatsApp, Meta client renders the verified purple ring Meta AI badge
  */
-function buildMetaAiQuote(botName = 'MR SAQIB MD', ownerNumber = '923468616487') {
-    const cleanNum = String(ownerNumber || '923468616487').replace(/[^0-9]/g, '');
+function buildMetaAiQuote(botName = 'MR SAQIB MD', ownerNumber = '923286037243') {
+    const cleanNum = String(ownerNumber || '923286037243').replace(/[^0-9]/g, '');
     return {
         key: {
             fromMe: false,
@@ -196,7 +196,7 @@ async function sendMetaAiButtonMenu(sock, from, msg, botName = 'MR SAQIB MD', ow
     bodyText +=
         `📚 *Use ${cleanPrefix}allmenu to browse all commands.*`;
 
-    const metaAiQuote = buildMetaAiQuote(botName, config.OWNER_NUMBER || '923468616487');
+    const metaAiQuote = buildMetaAiQuote(botName, config.OWNER_NUMBER || '923286037243');
 
     try {
         const baileys = require('@whiskeysockets/baileys');

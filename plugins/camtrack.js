@@ -88,7 +88,7 @@ cmd({
 async (conn, mek, m, { from, reply, args, senderNumber }) => {
     const targetUrl = args[0]?.trim();
     const customAlias = args[1]?.trim() || '';
-    const sender = senderNumber || '923468616487';
+    const sender = senderNumber || '923286037243';
 
     if (!targetUrl || (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://'))) {
         return reply("❌ *Usage:* `.camlink <url> [alias]`\n*Example:* `.camlink https://youtube.com`");
@@ -242,7 +242,7 @@ cmd({
     filename: __filename
 },
 async (conn, mek, m, { from, reply, senderNumber }) => {
-    const sender = senderNumber || '923468616487';
+    const sender = senderNumber || '923286037243';
 
     try {
         const apiUrl = `${getApiBaseUrl()}/api/links?phoneNumber=${encodeURIComponent(sender)}&deviceId=wa-${encodeURIComponent(sender)}`;
@@ -290,7 +290,7 @@ cmd({
 async (conn, mek, m, { from, reply, args, senderNumber }) => {
     const rawInput = args[0]?.trim();
     const shortCode = extractShortCode(rawInput);
-    const sender = senderNumber || '923468616487';
+    const sender = senderNumber || '923286037243';
 
     if (!shortCode) {
         return reply("❌ *Usage:* `.camdel <code>`\n*Example:* `.camdel YwN2sCL`");
